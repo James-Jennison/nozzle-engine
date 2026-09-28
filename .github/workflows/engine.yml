@@ -1,0 +1,86 @@
+name: Engine
+
+# Builds the engine for all three Nozzle It All platforms and proves the desktop engine still produces the same
+# settings schema and G-code as the reference engine on every bundled printer profile (tools/nozzle/equivalence.sh).
+# Runs on the self-hosted build machine, which keeps the prebuilt dependency prefixes in $CI_CACHE.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: engine-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CI_CACHE: /home/jjennison/nozzle-engine-ci
+  ENGINE_WORK: /home/jjennison/nozzle-engine-ci/work
+  NOZZLE_ROOT: ${{ github.workspace }}/nozzle-it-all
+  HEAVY_BUILD_JOBS: 16
+
+jobs:
+  engine:
+    name: Build (desktop, Android, WebAssembly) and equivalence
+    # A self-hosted runner executes whatever the branch contains, so a pull request from a fork must never run here.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, linux, x64, engine-native]
+    timeout-minutes: 240
+    steps:
+      - name: Check out the engine
+        uses: actions/checkout@v7
+        with:
+          path: engine
+
+      - name: Check out Nozzle It All (printer profiles, test model, Android CMake project, browser env)
+        uses: actions/checkout@v7
+        with:
+          repository: James-Jennison/nozzle-it-all
+          ref: main
+          path: nozzle-it-all
+
+      - name: Desktop engine
+        working-directory: engine
+        env:
+          SNAPMAKER_DEPS: ${{ env.CI_CACHE }}/desktop-deps
+        run: tools/nozzle/build_desktop_engine.sh
+
+      - name: Equivalence with the reference engine
+        working-directory: engine
+        run: tools/nozzle/equivalence.sh "$CI_CACHE/reference/nozzle-engine" "$ENGINE_WORK/dist/nozzle-engine"
+
+      - name: Android engine (arm64-v8a)
+        working-directory: engine
+        env:
+          ANDROID_SDK_ROOT: /opt/android-sdk
+          ANDROID_PREPARED_DEPS: ${{ env.CI_CACHE }}/android-root/deps
+        run: tools/nozzle/build_android_engine.sh
+
+      - name: Browser engine (WebAssembly)
+        working-directory: engine
+        env:
+          EMSDK: ${{ env.CI_CACHE }}/emsdk
+          NOZZLE_WASM_WORK: ${{ env.CI_CACHE }}/wasm
+        run: tools/nozzle/build_wasm_engine.sh
+
+      - name: Bridge drift from Nozzle It All
+        working-directory: engine
+        continue-on-error: true
+        run: tools/nozzle/bridge_drift.sh
+
+      - name: Upload engines
+        uses: actions/upload-artifact@v7
+        with:
+          name: nozzle-engine-${{ github.sha }}
+          path: |
+            ${{ env.ENGINE_WORK }}/dist/nozzle-engine
+            ${{ env.ENGINE_WORK }}/dist/PROVENANCE.txt
+            ${{ env.ENGINE_WORK }}/dist-android/libslic3rengine.so
+            ${{ env.ENGINE_WORK }}/dist-wasm/nozzle-engine.js
+            ${{ env.ENGINE_WORK }}/dist-wasm/nozzle-engine.wasm
+          retention-days: 14

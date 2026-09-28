@@ -15,6 +15,7 @@ add_library(slic3r_engine STATIC
     slic3r_engine.cpp
     thumbnail_render.cpp
     nanosvg_impl.cpp
+    option_states.cpp
 )
 target_link_libraries(slic3r_engine PUBLIC
     libslic3r

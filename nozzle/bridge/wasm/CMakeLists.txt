@@ -11,6 +11,7 @@ add_library(slic3r_engine STATIC
     ${NOZZLE_SHARED_BRIDGE}/slic3r_engine.cpp
     ${NOZZLE_SHARED_BRIDGE}/thumbnail_render.cpp
     ${NOZZLE_SHARED_BRIDGE}/nanosvg_impl.cpp
+    ${NOZZLE_SHARED_BRIDGE}/option_states.cpp
 )
 target_include_directories(slic3r_engine PUBLIC ${NOZZLE_SHARED_BRIDGE})
 target_link_libraries(slic3r_engine PUBLIC libslic3r cereal::cereal nanosvg)

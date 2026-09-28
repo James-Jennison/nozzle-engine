@@ -511,7 +511,10 @@ const std::vector<VariableWidthLines> &WallToolPaths::generate()
     const double wall_add_middle_threshold   = std::clamp(unscaled<double>(this->min_bead_width) / perimeter_extrusion_width, 0.01, 0.99); // For an even nr. of lines: When to add a new middle in between the innermost two walls.
     
     const int wall_distribution_count = this->m_params.wall_distribution_count;
-    const size_t max_bead_count = (inset_count < std::numeric_limits<coord_t>::max() / 2) ? 2 * inset_count : std::numeric_limits<coord_t>::max();
+    // Saturate at whichever of coord_t / size_t is smaller: on 32-bit targets (WebAssembly) size_t cannot hold
+    // coord_t's maximum. Unchanged on 64-bit targets, where coord_t's maximum is the smaller.
+    constexpr size_t bead_limit = size_t(std::min<unsigned long long>(std::numeric_limits<coord_t>::max(), std::numeric_limits<size_t>::max()));
+    const size_t max_bead_count = (inset_count < bead_limit / 2) ? 2 * inset_count : bead_limit;
     const auto beading_strat = BeadingStrategyFactory::makeStrategy
         (
             bead_width_0,

@@ -2170,6 +2170,26 @@ void PrintConfigDef::init_fff_params()
     def->mode = comAdvanced;
     def->set_default_value(new ConfigOptionInts { -1 });
 
+    // Nozzle (from upstream OrcaSlicer): nozzle cool-down while ramming before an extruder / hotend change, which Bambu's
+    // H2C change_filament_gcode reads. Upstream's wipe tower also applies it while ramming; this engine's does not.
+    def           = this->add("filament_pre_cooling_temperature", coInts);
+    def->label    = L("Extruder change");
+    def->tooltip  = L("To prevent oozing, the nozzle temperature will be cooled during ramming. Therefore, the ramming time must be greater than the cooldown time. 0 means disabled.");
+    def->mode     = comAdvanced;
+    def->sidetext = u8"°C";
+    def->min      = 0;
+    def->nullable = true;
+    def->set_default_value(new ConfigOptionIntsNullable{0});
+
+    def           = this->add("filament_pre_cooling_temperature_nc", coInts);
+    def->label    = L("Hotend change");
+    def->tooltip  = L("To prevent oozing, the nozzle temperature will be cooled during ramming. Note: only a cooldown command and fan activation are triggered, reaching the target temperature is not guaranteed. 0 means disabled.");
+    def->mode     = comAdvanced;
+    def->sidetext = u8"°C";
+    def->min      = 0;
+    def->nullable = true;
+    def->set_default_value(new ConfigOptionIntsNullable{0});
+
     def = this->add("filament_map", coInts);
     def->label = L("Filament map to extruder");
     def->tooltip = L("Filament map to extruder.");
@@ -4200,6 +4220,36 @@ void PrintConfigDef::init_fff_params()
     def->enum_labels.push_back(L("Bowden"));
     def->mode = comAdvanced;
     def->set_default_value(new ConfigOptionEnumsGeneric{ ExtruderType::etDirectDrive });
+
+    // Nozzle (from upstream OrcaSlicer): hotend heating / cooling rates (°C/s) and the retraction before a nozzle change,
+    // which Bambu's H2C G-code reads.
+    def = this->add("hotend_cooling_rate", coFloats);
+    def->label = "Hotend cooling rate";
+    def->tooltip = "Hotend cooling rate, in °C per second.";
+    def->nullable = true;
+    def->set_default_value(new ConfigOptionFloatsNullable{2});
+
+    def = this->add("hotend_heating_rate", coFloats);
+    def->label = "Hotend heating rate";
+    def->tooltip = "Hotend heating rate, in °C per second.";
+    def->nullable = true;
+    def->set_default_value(new ConfigOptionFloatsNullable{2});
+
+    def = this->add("filament_retract_length_nc", coFloats);
+    def->label = L("length when change hotend");
+    def->tooltip = L("Retraction length before the hotend (nozzle) is changed.");
+    def->sidetext = L("mm");
+    def->mode = comDevelop;
+    def->nullable = true;
+    def->min = 0;
+    def->max = 18;
+    def->set_default_value(new ConfigOptionFloatsNullable { 10. });
+
+    def = this->add("extruder_max_nozzle_count", coInts);
+    def->label = "Maximum nozzle count";
+    def->tooltip = "Nozzles each extruder can hold (a Bambu H2C's nozzle rack).";
+    def->set_default_value(new ConfigOptionInts { 1 });
+    def->cli = ConfigOptionDef::nocli;
 
     def = this->add("extruder_variant_list", coStrings);
     def->label = "Extruder variant list";

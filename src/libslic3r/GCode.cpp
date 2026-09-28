@@ -445,12 +445,55 @@ static inline Point wipe_tower_point_to_object_point(GCode& gcodegen, const Vec2
     return Point(scale_(wipe_tower_pt.x() - gcodegen.origin()(0)), scale_(wipe_tower_pt.y() - gcodegen.origin()(1)));
 }
 
+// Nozzle (from upstream OrcaSlicer): logical nozzles numbered extruder by extruder (extruder_max_nozzle_count each, as
+// upstream's build_nozzle_list), and each used filament's nozzle for a static, whole-print assignment: the only nozzle
+// of its extruder (filament_map), or on a nozzle rack the next free one, in filament order (sharing once all are
+// taken). Upstream's grouping engine chooses rack nozzles to minimise flushing; that engine is not ported, so rack
+// assignments can differ from upstream's.
+static GCodeNozzleLayout static_nozzle_layout(const FullPrintConfig &config, const std::vector<unsigned int> &used_filaments)
+{
+    GCodeNozzleLayout layout;
+    const size_t extruders = config.nozzle_diameter.values.size();
+    std::vector<int> first_nozzle(extruders, 0), count(extruders, 1);
+    for (size_t e = 0; e < extruders; ++e) {
+        count[e]        = std::max(1, config.extruder_max_nozzle_count.values.empty() ? 1 : config.extruder_max_nozzle_count.get_at(e));
+        first_nozzle[e] = int(layout.diameters.size());
+        const int volume = config.nozzle_volume_type.values.empty() ? int(fvtStandard) : config.nozzle_volume_type.get_at(e);
+        for (int i = 0; i < count[e]; ++i) {
+            layout.nozzle_extruder.push_back(int(e));
+            layout.diameters.push_back(config.nozzle_diameter.values[e]);
+            layout.volume_types.push_back(volume == int(fvtHighFlow) ? "High Flow" : "Standard");
+        }
+        if (count[e] > 1)
+            layout.no_hotend_ids = true;
+    }
+    if (config.printer_model.value == "Bambu Lab X2D")
+        layout.no_hotend_ids = true;
+    const size_t filaments = config.filament_type.values.size();
+    std::vector<int> next_free(extruders, 0);
+    layout.filament_nozzle.assign(filaments, 0);
+    for (size_t f = 0; f < filaments; ++f) {
+        const int map = f < config.filament_map.values.size() ? config.filament_map.values[f] : 1;
+        const int e   = map >= 1 && map <= int(extruders) ? map - 1 : 0;
+        layout.filament_nozzle[f] = extruders == 0 ? 0 : first_nozzle[e];
+    }
+    for (unsigned int f : used_filaments) {
+        if (f >= filaments)
+            continue;
+        const int e = layout.nozzle_extruder.empty() ? 0 : layout.nozzle_extruder[layout.filament_nozzle[f]];
+        if (count[e] > 1)
+            layout.filament_nozzle[f] = first_nozzle[e] + (next_free[e]++ % count[e]);
+    }
+    return layout;
+}
+
 // Nozzle (from upstream OrcaSlicer): what Bambu's two-extruder change_filament_gcode reads about an extruder change.
 // This engine prints the prime tower without upstream's interface layers and travels to it without upstream's
 // perimeter-avoiding path, so is_prime_tower_interface and wipe_avoid_perimeter are false: the state upstream is in
 // with enable_tower_interface_features and prime_tower_skip_points off. The template handles both.
 static void set_extruder_change_values(DynamicConfig &config, const FullPrintConfig &full_config, const GCodeWriter &writer,
-                                       int old_filament, int new_filament, int layer_index, float wipe_avoid_pos_x)
+                                       const GCodeNozzleLayout &nozzles, int old_filament, int new_filament, int layer_index,
+                                       float wipe_avoid_pos_x)
 {
     auto extruder_of = [&full_config](int filament) {
         const std::vector<int> &map = full_config.filament_map.values;
@@ -463,6 +506,13 @@ static void set_extruder_change_values(DynamicConfig &config, const FullPrintCon
     };
     config.set_key_value("current_filament_id", new ConfigOptionInt(old_filament));
     config.set_key_value("next_filament_id", new ConfigOptionInt(new_filament));
+    // Logical nozzles and hotends (upstream nozzle_id_for_gcode_placeholder / hotend_id_for_gcode_placeholder).
+    config.set_key_value("current_hotend", new ConfigOptionInt(old_filament < 0 ? -1 : nozzles.hotend_of(old_filament, extruder_of(old_filament))));
+    config.set_key_value("next_hotend", new ConfigOptionInt(nozzles.hotend_of(new_filament, extruder_of(new_filament))));
+    config.set_key_value("current_nozzle_id", new ConfigOptionInt(old_filament < 0 ? -1 : nozzles.nozzle_of(old_filament)));
+    config.set_key_value("next_nozzle_id", new ConfigOptionInt(nozzles.nozzle_of(new_filament)));
+    config.set_key_value("nozzle_diameter_at_nozzle_id", new ConfigOptionFloats(nozzles.diameters));
+    config.set_key_value("nozzle_volume_types", new ConfigOptionStrings(nozzles.volume_types));
     config.set_key_value("old_extruder_variant", new ConfigOptionString(variant_of(old_filament)));
     config.set_key_value("new_extruder_variant", new ConfigOptionString(variant_of(new_filament)));
     // How far the incoming filament is retracted now (upstream GCodeWriter::get_extruder_retracted_length).
@@ -471,6 +521,9 @@ static void set_extruder_change_values(DynamicConfig &config, const FullPrintCon
         if (int(extruder.id()) == new_filament)
             retracted = extruder.retracted();
     config.set_key_value("new_extruder_retracted_length", new ConfigOptionFloat(retracted));
+    // The old filament's retraction before a nozzle change (nil -> 0).
+    config.set_key_value("filament_retract_length_nc", new ConfigOptionFloat(
+        old_filament >= 0 && ! full_config.filament_retract_length_nc.is_nil(old_filament) ? float(full_config.filament_retract_length_nc.get_at(old_filament)) : 0.f));
     // Cooling before the tower, per filament; none on the first layer.
     std::vector<double> cooling_before_tower(full_config.filament_type.values.size(), 0.);
     if (layer_index != 0)
@@ -645,7 +698,7 @@ std::string WipeTowerIntegration::append_tcr(GCode& gcodegen, const WipeTower::T
 
             config.set_key_value("flush_length", new ConfigOptionFloat(purge_length));
             // Upstream measures the tower's bounding box; this engine's tower is unrotated for these printers, so its X span.
-            set_extruder_change_values(config, full_config, gcode_writer, previous_extruder_id, new_extruder_id, gcodegen.m_layer_index,
+            set_extruder_change_values(config, full_config, gcode_writer, gcodegen.m_nozzle_layout, previous_extruder_id, new_extruder_id, gcodegen.m_layer_index,
                                        wipe_avoid_pos_x(m_wipe_tower_pos.x() + m_left, m_wipe_tower_pos.x() + m_right, 3.f));
             { // Nozzle (from upstream OrcaSlicer)
                 std::vector<double> flush_speeds; std::vector<int> flush_temps;
@@ -2884,6 +2937,55 @@ void GCode::_do_export(Print& print, GCodeOutputStream& file, ThumbnailsGenerato
         this->placeholder_parser().set("initial_filament_id", (int) initial_extruder_id);
         this->placeholder_parser().set("current_filament_id", (int) initial_extruder_id);
 
+        // Logical nozzles and hotends at start-up (upstream first_nozzle_id_for_gcode_placeholder and
+        // first_hotend_id_for_gcode_placeholder, static assignment).
+        m_nozzle_layout = static_nozzle_layout(m_config, used_filaments);
+        { // Upstream ToolOrdering::cal_most_used_extruder: layers each extruder prints on; ties go to the later extruder.
+            std::vector<int> layers_per_extruder(std::max<size_t>(1, m_config.nozzle_diameter.values.size()), 0);
+            for (ToolOrdering *ordering : orderings)
+                for (const LayerTools &layer_tools : ordering->layer_tools()) {
+                    std::set<int> extruders;
+                    for (unsigned int filament : layer_tools.extruders)
+                        extruders.insert(extruder_of(filament));
+                    for (int extruder : extruders)
+                        if (extruder < int(layers_per_extruder.size()))
+                            ++layers_per_extruder[extruder];
+                }
+            m_most_used_extruder = 0;
+            for (int e = 1; e < int(layers_per_extruder.size()); ++e)
+                if (layers_per_extruder[e] >= layers_per_extruder[m_most_used_extruder])
+                    m_most_used_extruder = e;
+        }
+        auto hotend_of_filament = [this, &extruder_of](int filament) { return filament < 0 ? -1 : m_nozzle_layout.hotend_of(filament, extruder_of(filament)); };
+        std::vector<int> first_non_support_hotends;
+        for (int filament : first_non_support_filaments)
+            first_non_support_hotends.push_back(hotend_of_filament(filament));
+        this->placeholder_parser().set("first_non_support_hotend", new ConfigOptionInts(first_non_support_hotends));
+        this->placeholder_parser().set("initial_no_support_hotend", hotend_of_filament(int(initial_non_support_extruder_id)));
+        this->placeholder_parser().set("current_hotend", hotend_of_filament(int(initial_extruder_id)));
+        this->placeholder_parser().set("current_nozzle_id", m_nozzle_layout.nozzle_of(int(initial_extruder_id)));
+        this->placeholder_parser().set("initial_nozzle_id", m_nozzle_layout.nozzle_of(int(initial_extruder_id)));
+        this->placeholder_parser().set("nozzle_diameter_at_nozzle_id", new ConfigOptionFloats(m_nozzle_layout.diameters));
+        this->placeholder_parser().set("nozzle_volume_types", new ConfigOptionStrings(m_nozzle_layout.volume_types));
+
+        // A point just beside the wipe tower, toward the bed centre (upstream: the tower's bounding box). This engine keeps
+        // no tower bounding box, so its footprint (position, width, depth; unrotated), clamped to the printable area
+        // (upstream: the area every extruder can reach).
+        Vec2f wipe_tower_center(0.f, 0.f);
+        bool  wipe_tower_center_valid = false;
+        if (has_wipe_tower) {
+            const int   plate = print.get_plate_index();
+            const float x0 = float(m_config.wipe_tower_x.get_at(plate)), y0 = float(m_config.wipe_tower_y.get_at(plate));
+            const float x1 = x0 + float(m_config.prime_tower_width.value), y1 = y0 + float(print.wipe_tower_data().depth);
+            const BoundingBoxf bed(m_config.printable_area.values);
+            wipe_tower_center = (x0 + x1) / 2.f < float(bed.center().x()) ? Vec2f(x1 + 2.f, (y0 + y1) / 2.f) : Vec2f(x0 - 2.f, (y0 + y1) / 2.f);
+            wipe_tower_center.x() = std::clamp(wipe_tower_center.x(), float(bed.min.x()), float(bed.max.x()));
+            wipe_tower_center_valid = true;
+        }
+        this->placeholder_parser().set("wipe_tower_center_pos_x", new ConfigOptionFloat(wipe_tower_center.x()));
+        this->placeholder_parser().set("wipe_tower_center_pos_y", new ConfigOptionFloat(wipe_tower_center.y()));
+        this->placeholder_parser().set("wipe_tower_center_pos_valid", new ConfigOptionBool(wipe_tower_center_valid));
+
         // Hold the chamber temperature for a large flat print: under 0.3 mm tall and over 40000 mm2 on the first layer
         // (objects, support, brim and wipe tower).
         const double print_area_sum_threshold = 40000.0, print_height_threshold = 0.3;
@@ -5059,6 +5161,20 @@ LayerResult GCode::process_layer(const Print& print,
             config.set_key_value("layer_num", new ConfigOptionInt(m_layer_index));
             config.set_key_value("layer_z", new ConfigOptionFloat(print_z));
             config.set_key_value("max_layer_z", new ConfigOptionFloat(m_max_layer_z));
+            { // Nozzle (from upstream OrcaSlicer): what Bambu's multi-extruder timelapse G-code reads. Upstream's timelapse
+              // position picker (TimelapsePosPicker) and farthest-point timelapse are not ported: the position is
+              // upstream's default (0, 0) with has_timelapse_safe_pos false, so the template parks as it does then.
+                const std::vector<int> &map = m_config.filament_map.values;
+                const int filament = int(m_writer.extruder()->id());
+                const int extruder = filament < int(map.size()) && map[filament] > 0 ? map[filament] - 1 : 0;
+                config.set_key_value("most_used_physical_extruder_id", new ConfigOptionInt(m_config.physical_extruder_map.get_at(m_most_used_extruder)));
+                config.set_key_value("curr_physical_extruder_id", new ConfigOptionInt(m_config.physical_extruder_map.get_at(extruder)));
+                config.set_key_value("timelapse_pos_x", new ConfigOptionInt(0));
+                config.set_key_value("timelapse_pos_y", new ConfigOptionInt(0));
+                config.set_key_value("has_timelapse_safe_pos", new ConfigOptionBool(false));
+                config.set_key_value("timelapse_inline_photo", new ConfigOptionBool(false));
+                config.set_key_value("farthest_point_timelapse_enabled", new ConfigOptionBool(false));
+            }
             gcode_res = this->placeholder_parser_process("timelapse_gcode", print.config().time_lapse_gcode.value,
                                                          m_writer.extruder()->id(), &config) +
                         "\n";
@@ -8935,7 +9051,7 @@ std::string GCode::set_extruder(unsigned int extruder_id, double print_z, bool b
     dyn_config.set_key_value("travel_point_3_y", new ConfigOptionFloat(float(travel_point_3.y())));
 
     dyn_config.set_key_value("flush_length", new ConfigOptionFloat(wipe_length));
-    set_extruder_change_values(dyn_config, m_config, m_writer, previous_extruder_id, int(extruder_id), m_layer_index, 110.f);
+    set_extruder_change_values(dyn_config, m_config, m_writer, m_nozzle_layout, previous_extruder_id, int(extruder_id), m_layer_index, 110.f);
     { // Nozzle (from upstream OrcaSlicer)
         std::vector<double> flush_speeds; std::vector<int> flush_temps;
         nozzle_flush_values(m_config, flush_speeds, flush_temps);

@@ -182,6 +182,20 @@ struct LayerResult {
     static LayerResult make_nop_layer_result() { return {"", size_t(std::min<unsigned long long>(std::numeric_limits<coord_t>::max(), std::numeric_limits<size_t>::max())), false, false, true}; }
 };
 
+// Nozzle (from upstream OrcaSlicer): the logical nozzles of a Bambu multi-nozzle printer and which one each filament
+// prints with, for the nozzle-id G-code variables (see static_nozzle_layout() in GCode.cpp).
+struct GCodeNozzleLayout
+{
+    std::vector<int>         filament_nozzle;  // logical nozzle id per filament
+    std::vector<int>         nozzle_extruder;  // extruder per logical nozzle
+    std::vector<double>      diameters;        // per logical nozzle
+    std::vector<std::string> volume_types;     // per logical nozzle, "Standard" / "High Flow"
+    bool                     no_hotend_ids = false; // upstream reports hotend -1 (a nozzle rack, or the X2D)
+
+    int nozzle_of(int filament) const { return filament >= 0 && filament < int(filament_nozzle.size()) ? filament_nozzle[filament] : std::max(filament, 0); }
+    int hotend_of(int filament, int extruder) const { return no_hotend_ids ? -1 : extruder; }
+};
+
 class GCode {
 
 public:
@@ -636,6 +650,9 @@ private:
     coordf_t m_nominal_z;
     bool m_need_change_layer_lift_z = false;
     int m_start_gcode_filament = -1;
+    GCodeNozzleLayout m_nozzle_layout;
+    // Nozzle (from upstream ToolOrdering::cal_most_used_extruder): the extruder printing on the most layers.
+    int m_most_used_extruder = 0;
 
     std::set<unsigned int>                  m_initial_layer_extruders;
     // BBS

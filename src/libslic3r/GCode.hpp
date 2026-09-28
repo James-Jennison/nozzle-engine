@@ -192,6 +192,11 @@ public:
         m_enable_cooling_markers(false),
         m_enable_extrusion_role_markers(false),
         m_last_processor_extrusion_role(erNone),
+        // Nozzle: these were left uninitialised; retract() reads m_last_notgapfill_extrusion_role before any
+        // extrusion has set it (the GCode object lives on the stack), so first-layer Z-hops were random.
+        m_scaled_resolution(0.),
+        m_enable_exclude_object(false),
+        m_last_notgapfill_extrusion_role(erNone),
         m_layer_count(0),
         m_layer_index(-1),
         m_layer(nullptr),

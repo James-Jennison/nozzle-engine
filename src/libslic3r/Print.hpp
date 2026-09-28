@@ -1150,7 +1150,9 @@ private:
     bool                                    m_support_used {false};
 
     //BBS: plate's origin
-    Vec3d   m_origin;
+    // Nozzle: zero until set_plate_origin(); the GUI always sets it, a headless caller may not, and
+    // translate_to_print_space() then read uninitialised memory (garbage EXCLUDE_OBJECT centres on delta printers).
+    Vec3d   m_origin { Vec3d::Zero() };
     //BBS: modified_count
     int     m_modified_count {0};
     //BBS

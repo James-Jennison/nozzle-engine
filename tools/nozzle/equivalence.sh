@@ -34,4 +34,6 @@ for id in "${IDS[@]}"; do
   fi
 done
 echo "profiles: ${#IDS[@]}  identical: $same  differ: $differ  both-fail: $bothfail  one-fails: $onefail"
+# Guard against a comparison of nothing (for example an engine that cannot run): at most a handful of profiles may fail.
+if [ "$same" -eq 0 ] || [ "$bothfail" -gt "${MAX_BOTH_FAIL:-10}" ]; then echo "equivalence: too few profiles sliced ($same identical, $bothfail failed on both engines)"; fail=1; fi
 exit $fail

@@ -562,6 +562,11 @@ endif()
 set(TBB_DEBUG 1)
 set(CMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO RelWithDebInfo Release "")
 find_package(TBB REQUIRED)
+# Nozzle browser engine: oneTBB's scalable allocator has no WebAssembly port; Emscripten's allocator is used instead.
+# The link lines get an empty target; the scalable_* entry points come from engine/wasm/bridge/wasm_standins.cpp.
+if (EMSCRIPTEN AND NOT TARGET TBB::tbbmalloc)
+    add_library(TBB::tbbmalloc INTERFACE IMPORTED)
+endif ()
 # include_directories(SYSTEM ${TBB_INCLUDE_DIRS})
 # add_definitions(${TBB_DEFINITIONS})
 # if(MSVC)

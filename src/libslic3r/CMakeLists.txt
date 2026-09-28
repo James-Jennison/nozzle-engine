@@ -346,6 +346,8 @@ set(lisbslic3r_sources
     PresetBundle.hpp
     Preset.cpp
     Preset.hpp
+    ExtruderVariants.cpp
+    ExtruderVariants.hpp
     PresetFlowVariant.cpp
     PresetFlowVariant.hpp
     PrincipalComponents2D.cpp

@@ -1,4 +1,5 @@
 #include "PrintConfig.hpp"
+#include "ExtruderVariants.hpp"
 #include "ProjectSchemaVersion.hpp"
 #include "ClipperUtils.hpp"
 #include "Config.hpp"
@@ -386,6 +387,12 @@ static const t_config_enum_values s_keys_map_OverhangFanThreshold = {
 CONFIG_OPTION_ENUM_DEFINE_STATIC_MAPS(OverhangFanThreshold)
 
 // BBS
+static const t_config_enum_values s_keys_map_ExtruderType = {
+    { "Direct Drive",   etDirectDrive },
+    { "Bowden",         etBowden }
+};
+CONFIG_OPTION_ENUM_DEFINE_STATIC_MAPS(ExtruderType)
+
 static const t_config_enum_values s_keys_map_BedType = {
     { "Default Plate",      btDefault },
     { "Supertack Plate",    btSuperTack },
@@ -4141,6 +4148,56 @@ void PrintConfigDef::init_fff_params()
     // One entry per extruder (listed in extruder_option_keys(), so it is resized together with
     // nozzle_diameter by set_num_extruders()). Shares the standard/high_flow value domain of
     // FilamentVolumeType; unrelated to the device-side NozzleVolumeType (nvtNormal/nvtBigTraffic).
+    // Nozzle (from upstream OrcaSlicer): Bambu's extruder variants (see ExtruderVariants.hpp). Internal, no translation.
+    def = this->add("extruder_type", coEnums);
+    def->label = "Type";
+    def->tooltip = "Extruder type: direct drive or Bowden.";
+    def->enum_keys_map = &ConfigOptionEnum<ExtruderType>::get_enum_values();
+    def->enum_values.push_back("Direct Drive");
+    def->enum_values.push_back("Bowden");
+    def->enum_labels.push_back(L("Direct Drive"));
+    def->enum_labels.push_back(L("Bowden"));
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionEnumsGeneric{ ExtruderType::etDirectDrive });
+
+    def = this->add("extruder_variant_list", coStrings);
+    def->label = "Extruder variant list";
+    def->tooltip = "Extruder variant list.";
+    def->set_default_value(new ConfigOptionStrings { "Direct Drive Standard" });
+    def->cli = ConfigOptionDef::nocli;
+
+    for (const char *scope : { "printer", "print" }) {
+        def = this->add(std::string(scope) + "_extruder_id", coInts);
+        def->label = std::string(scope) + " extruder id";
+        def->tooltip = "Extruder of each variant column.";
+        def->set_default_value(new ConfigOptionInts { 1 });
+        def->cli = ConfigOptionDef::nocli;
+
+        def = this->add(std::string(scope) + "_extruder_variant", coStrings);
+        def->label = std::string(scope) + " extruder variant";
+        def->tooltip = "Extruder variant of each variant column.";
+        def->set_default_value(new ConfigOptionStrings { "Direct Drive Standard" });
+        def->cli = ConfigOptionDef::nocli;
+    }
+
+    def = this->add("filament_extruder_variant", coStrings);
+    def->label = "Filament's extruder variant";
+    def->tooltip = "Filament's extruder variant.";
+    def->set_default_value(new ConfigOptionStrings { "Direct Drive Standard" });
+    def->cli = ConfigOptionDef::nocli;
+
+    def = this->add("filament_self_index", coInts);
+    def->label = "Filament self index";
+    def->tooltip = "Filament self index.";
+    def->set_default_value(new ConfigOptionInts { 1 });
+    def->cli = ConfigOptionDef::nocli;
+
+    def = this->add("physical_extruder_map", coInts);
+    def->label = "Map the logical extruder to physical extruder";
+    def->tooltip = "Map the logical extruder to physical extruder.";
+    def->mode = comDevelop;
+    def->set_default_value(new ConfigOptionInts{0});
+
     def = this->add("nozzle_volume_type", coEnums);
     def->label = L("Nozzle volume type");
     def->tooltip = L("Flow type of the nozzle installed on each extruder "
@@ -7494,6 +7551,13 @@ size_t get_config_idx(const ConfigBase &config, ConfigFlowDomain domain, unsigne
     switch (domain) {
     case ConfigFlowDomain::Process:
     case ConfigFlowDomain::Printer: {
+        // Nozzle: a Bambu multi-extruder / multi-variant printer's per-extruder vectors, collapsed by
+        // collapse_extruder_variants(), hold one value per extruder: the filament's extruder (filament_map, 1-based).
+        if (extruder_variants_collapsed(config)) {
+            const ConfigOptionInts *filament_map = ints_option(config, "filament_map");
+            return filament_map != nullptr && filament_id < filament_map->values.size() && filament_map->values[filament_id] > 0 ?
+                size_t(filament_map->values[filament_id] - 1) : 0;
+        }
         if (volume_types == nullptr || volume_types->values.empty() || flow_support == nullptr)
             return 0;
 
@@ -7689,7 +7753,6 @@ void PrintConfigDef::handle_legacy(t_config_option_key &opt_key, std::string &va
         "can_switch_nozzle_type", "can_add_auxiliary_fan", "extra_flush_volume", "spaghetti_detector", "adaptive_layer_height",
         "z_hop_type", "z_lift_type", "bed_temperature_difference","long_retraction_when_cut",
         "retraction_distance_when_cut",
-        "extruder_type",
         "internal_bridge_support_thickness","extruder_clearance_max_radius", "top_area_threshold", "reduce_wall_solid_infill","filament_load_time","filament_unload_time",
         "smooth_coefficient", "overhang_totally_speed", "silent_mode",
     };

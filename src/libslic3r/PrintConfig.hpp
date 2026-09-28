@@ -338,6 +338,13 @@ enum ZHopType {
     zhtCount
 };
 
+// Nozzle (from upstream OrcaSlicer): the extruder kind in Bambu's extruder variant names ("Direct Drive Standard").
+enum ExtruderType {
+    etDirectDrive = 0,
+    etBowden,
+    etMaxExtruderType = etBowden
+};
+
 enum FilamentMapMode {
     fmmAutoForFlush,
     fmmAutoForMatch,
@@ -512,6 +519,7 @@ static std::string get_bed_temp_1st_layer_key(const BedType type)
 
 CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(PrinterTechnology)
 CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(GCodeFlavor)
+CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(ExtruderType)
 CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(FuzzySkinType)
 CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(FuzzySkinMode)
 CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(NoiseType)
@@ -1434,6 +1442,10 @@ PRINT_CONFIG_CLASS_DERIVED_DEFINE(
     ((ConfigOptionPoint,              best_object_pos))
     ((ConfigOptionFloats,             slow_down_min_speed))
     ((ConfigOptionFloats,             nozzle_diameter))
+    ((ConfigOptionEnumsGeneric,       extruder_type))
+    ((ConfigOptionStrings,            extruder_variant_list))
+    ((ConfigOptionStrings,            printer_extruder_variant))
+    ((ConfigOptionInts,               physical_extruder_map))
     ((ConfigOptionBool,               reduce_infill_retraction))
     ((ConfigOptionBool,               ooze_prevention))
     ((ConfigOptionString,             filename_format))

@@ -1008,7 +1008,7 @@ public:
 
     // BBS: quick access for volume extruders, 1 based
     mutable std::vector<int> mmuseg_extruders;
-    mutable Timestamp        mmuseg_ts;
+    mutable Timestamp        mmuseg_ts { std::numeric_limits<Timestamp>::max() }; // Nozzle: was uninitialised; never equal before the first computation
 
     // Is set only when volume is Embossed Text type
     // Contain information how to re-create volume
@@ -1189,7 +1189,7 @@ private:
     std::shared_ptr<const TriangleMesh> m_convex_hull;
     //BBS: add convex hull 2d related logic
     mutable Polygon                     m_convex_hull_2d; //BBS, used for convex_hell_2d acceleration
-    mutable Transform3d                 m_cached_trans_matrix; //BBS, used for convex_hell_2d acceleration
+    mutable Transform3d                 m_cached_trans_matrix { Transform3d::Identity() }; //BBS, used for convex_hell_2d acceleration (Nozzle: was uninitialised)
     mutable Polygon                     m_cached_2d_polygon;   //BBS, used for convex_hell_2d acceleration
     Geometry::Transformation        	m_transformation;
 

@@ -9,4 +9,7 @@
 
 namespace nozzle_contract {
 int run_option_states(const std::string& request, std::string& response);
+// `nozzle-engine --config-checks <request.json>`: the same request (plus "plate":bool, "filamentCount":n); response
+// {"notices":[{"id","message","changes":{key:value}}], "conflicts":[...], "states":{}, "forced":{}} (see print_config_checks).
+int run_config_checks(const std::string& request, std::string& response);
 }

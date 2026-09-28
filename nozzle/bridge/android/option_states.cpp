@@ -12,6 +12,8 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
+#include <cstdio>
+#include <set>
 
 namespace engine {
 using namespace Slic3r;
@@ -612,6 +614,133 @@ OptionStates filament_option_states(const DynamicPrintConfig& input, const Optio
         toggle_option("filament_multitool_ramming_volume", multitool_ramming);
         toggle_option("filament_multitool_ramming_flow", multitool_ramming);
     }
+    return out;
+}
+
+// ---- Checks: ConfigManipulation::update_print_fff_config (src/slic3r/GUI/ConfigManipulation.cpp) ----------------------
+// Kept in the GUI's order. Each OK-only dialog becomes a notice (the reset is applied to the working copy so later
+// checks see it, as in the GUI); each Yes/No dialog becomes a conflict whose first choice is the GUI's "Yes". Later
+// checks see the configuration as if the first choice were taken.
+OptionStates print_config_checks(const DynamicPrintConfig& input, const OptionContext& context) {
+    OptionStates out;
+    DynamicPrintConfig cfg = input;
+    DynamicPrintConfig* config = &cfg;
+    auto ser = [&](const std::string& key) { return config->option(key)->serialize(); };
+    auto notice = [&](const std::string& id, const std::string& message, std::vector<std::pair<std::string, ConfigOption*>> sets) {
+        OptionNotice n { id, message, {} };
+        for (auto& [key, value] : sets) { config->set_key_value(key, value); n.changes.emplace_back(key, ser(key)); }
+        out.notices.push_back(n);
+    };
+    auto conflict = [&](const std::string& id, const std::string& message,
+                        std::vector<std::pair<std::string, std::vector<std::pair<std::string, std::string>>>> choices) {
+        OptionConflict c { id, message, {} };
+        for (auto& [label, changes] : choices) c.choices.push_back({ label, changes });
+        out.conflicts.push_back(c);
+        for (auto& [key, value] : choices.front().second) config->set_deserialize_strict(key, value);
+    };
+
+    // layer_height shouldn't be equal to zero
+    auto layer_height = config->opt_float("layer_height");
+    if (layer_height < EPSILON)
+        notice("layer_height_too_small", "Too small layer height. Reset to 0.2.", {{"layer_height", new ConfigOptionFloat(0.2)}});
+    layer_height = config->opt_float("layer_height");
+    //BBS: limite the max layer_herght
+    auto max_lh = get_float(*config, "max_layer_height", 0);
+    if (max_lh > 0.2 && layer_height > max_lh + EPSILON) {
+        char msg[96]; std::snprintf(msg, sizeof msg, "Too large layer height. Reset to %0.3f.", max_lh);
+        notice("layer_height_too_large", msg, {{"layer_height", new ConfigOptionFloat(max_lh)}});
+    }
+    if (config->opt_float("ironing_spacing") < 0.05)
+        notice("ironing_spacing_too_small", "Too small ironing spacing. Reset to 0.1.", {{"ironing_spacing", new ConfigOptionFloat(0.1)}});
+    if (config->opt_float("support_ironing_spacing") < 0.05)
+        notice("support_ironing_spacing_too_small", "Too small ironing spacing. Reset to 0.1.", {{"support_ironing_spacing", new ConfigOptionFloat(0.1)}});
+    if (config->option<ConfigOptionFloat>("initial_layer_print_height")->value < EPSILON)
+        notice("initial_layer_height_zero", "Zero initial layer height is invalid. The first layer height will be reset to 0.2.",
+               {{"initial_layer_print_height", new ConfigOptionFloat(0.2)}});
+    const char* small_tuning = "This setting is only used for model size tunning with small value in some cases. For example, when model "
+                               "size has small error and hard to be assembled. For large size tuning, please use model scale function. "
+                               "The value will be reset to 0.";
+    if (std::abs(config->option<ConfigOptionFloat>("xy_hole_compensation")->value) > 2)
+        notice("xy_hole_compensation_too_large", small_tuning, {{"xy_hole_compensation", new ConfigOptionFloat(0)}});
+    if (std::abs(config->option<ConfigOptionFloat>("xy_contour_compensation")->value) > 2)
+        notice("xy_contour_compensation_too_large", small_tuning, {{"xy_contour_compensation", new ConfigOptionFloat(0)}});
+    if (config->option<ConfigOptionFloat>("elefant_foot_compensation")->value > 1)
+        notice("elephant_foot_too_large", "Too large elephant foot compensation is unreasonable. If really have serious elephant foot "
+               "effect, please check other settings. For example, whether bed temperature is too high. The value will be reset to 0.",
+               {{"elefant_foot_compensation", new ConfigOptionFloat(0)}});
+
+    if (!context.is_plate_config &&
+        config->opt_bool("spiral_mode") &&
+        ! (config->opt_int("wall_loops") == 1 &&
+           config->opt_int("top_shell_layers") == 0 &&
+           config->option<ConfigOptionPercent>("sparse_infill_density")->value == 0 &&
+           ! config->opt_bool("enable_support") &&
+           config->opt_int("enforce_support_layers") == 0 &&
+           ! config->opt_bool("detect_thin_wall") &&
+           ! config->opt_bool("overhang_reverse") &&
+            config->opt_enum<WallDirection>("wall_direction") == WallDirection::Auto &&
+            config->opt_enum<TimelapseType>("timelapse_type") == TimelapseType::tlTraditional))
+        conflict("spiral_mode_settings",
+                 "Spiral mode only works when wall loops is 1, support is disabled, top shell layers is 0, sparse infill density is 0 "
+                 "and timelapse type is traditional.",
+                 { { "Change these settings", { {"wall_loops", "1"}, {"top_shell_layers", "0"}, {"sparse_infill_density", "0%"},
+                     {"enable_support", "0"}, {"enforce_support_layers", "0"}, {"detect_thin_wall", "0"}, {"overhang_reverse", "0"},
+                     {"wall_direction", "auto"}, {"timelapse_type", "0"} } },
+                   { "Turn off spiral mode", { {"spiral_mode", "0"} } } });
+
+    if (config->opt_bool("alternate_extra_wall") &&
+        (config->opt_enum<EnsureVerticalShellThickness>("ensure_vertical_shell_thickness") == evstAll)) {
+        const char* msg = "Alternate extra wall does't work well when ensure vertical shell thickness is set to All.";
+        if (context.is_global_config)
+            conflict("alternate_extra_wall_vertical_shell", msg,
+                     { { "Change ensure vertical shell thickness to Moderate", { {"ensure_vertical_shell_thickness", "ensure_moderate"}, {"alternate_extra_wall", "1"} } },
+                       { "Don't use alternate extra wall", { {"ensure_vertical_shell_thickness", "ensure_all"}, {"alternate_extra_wall", "0"} } } });
+        else
+            notice("alternate_extra_wall_vertical_shell", msg,
+                   {{"ensure_vertical_shell_thickness", new ConfigOptionEnum<EnsureVerticalShellThickness>(evstModerate)},
+                    {"alternate_extra_wall", new ConfigOptionBool(true)}});
+    }
+
+    // Orca enables detect_overhang_wall once per session when support is switched on in the global settings.
+    if (context.is_global_config && config->opt_bool("enable_support") && !config->opt_bool("detect_overhang_wall"))
+        notice("support_needs_overhang_detection", "Support uses overhang wall detection; it has been turned on.",
+               {{"detect_overhang_wall", new ConfigOptionBool(true)}});
+
+    if (config->opt_bool("enable_support")) {
+        auto   support_type = config->opt_enum<SupportType>("support_type");
+        auto   support_style = config->opt_enum<SupportMaterialStyle>("support_style");
+        std::set<int> enum_set_normal = { smsDefault, smsGrid, smsSnug };
+        std::set<int> enum_set_tree   = { smsDefault, smsTreeSlim, smsTreeStrong, smsTreeHybrid, smsTreeOrganic };
+        auto &           set             = is_tree(support_type) ? enum_set_tree : enum_set_normal;
+        if (set.find(support_style) == set.end())
+            notice("support_style_mismatch", "This support style doesn't apply to the chosen support type; it was reset to Default.",
+                   {{"support_style", new ConfigOptionEnum<SupportMaterialStyle>(smsDefault)}});
+    }
+
+    // BBS
+    for (const char* key : { "support_filament", "support_interface_filament" }) {
+        auto* opt = dynamic_cast<const ConfigOptionInt*>(config->option(key));
+        if (opt != nullptr && opt->getInt() > context.filament_count)
+            notice(std::string(key) + "_out_of_range", "The chosen filament doesn't exist in this project; it was reset to Default.",
+                   {{key, new ConfigOptionInt(0)}});
+    }
+
+    if (config->opt_enum<SeamScarfType>("seam_slope_type") != SeamScarfType::None &&
+        config->get_abs_value("seam_slope_start_height") >= layer_height)
+        notice("seam_slope_start_height_too_large", "seam_slope_start_height need to be smaller than layer_height. Reset to 0.",
+               {{"seam_slope_start_height", new ConfigOptionFloatOrPercent(0, false)}});
+
+    float skin_depth = config->opt_float("skin_infill_depth");
+    if (config->opt_float("infill_lock_depth") > skin_depth)
+        notice("infill_lock_depth_too_large", "Lock depth should smaller than skin depth. Reset to 50% of skin depth.",
+               {{"infill_lock_depth", new ConfigOptionFloat(skin_depth / 2)}});
+
+    bool have_arachne = config->opt_enum<PerimeterGeneratorType>("wall_generator") == PerimeterGeneratorType::Arachne;
+    if (config->opt_enum<FuzzySkinMode>("fuzzy_skin_mode") != FuzzySkinMode::Displacement && !have_arachne)
+        conflict("fuzzy_skin_needs_arachne",
+                 "Both [Extrusion] and [Combined] modes of Fuzzy Skin require the Arachne Wall Generator to be enabled.",
+                 { { "Enable Arachne Wall Generator", { {"wall_generator", "arachne"} } },
+                   { "Use Displacement fuzzy skin mode", { {"fuzzy_skin_mode", "displacement"} } } });
     return out;
 }
 

@@ -25,11 +25,19 @@ struct OptionConflict {
     std::vector<Choice> choices;
 };
 
+// A value the GUI resets on its own and tells the user about (Orca's OK-only dialogs).
+struct OptionNotice {
+    std::string id;
+    std::string message;
+    std::vector<std::pair<std::string, std::string>> changes;
+};
+
 struct OptionStates {
     // Only settings a rule mentions appear here; every other setting is enabled and visible. Per-extruder settings are
     // keyed "key#index" (extruder index from 0), Orca's own naming for a vector option's line.
     std::map<std::string, OptionState> states;
     std::vector<OptionConflict> conflicts;
+    std::vector<OptionNotice> notices;
     // Values Orca's GUI forces while applying the rules (for example arc fitting is switched off when extrusion-rate
     // smoothing is on), as {key, serialized value}. Callers apply them so the project matches what Orca would slice.
     std::vector<std::pair<std::string, std::string>> forced;
@@ -41,6 +49,8 @@ struct OptionContext {
     size_t flow_variant_index = 0; // which entry of per-flow-variant vectors applies
     std::string printer_name;      // the printer preset's name (Orca checks it for "Snapmaker U1")
     std::string printer_model_id;  // the vendor model id (for example "SM_U1", "C11"), for the default bed type
+    bool is_plate_config = false;  // settings of one plate (Orca skips the spiral vase check there)
+    int filament_count = 1;        // filaments in the project (support filament indices above it are reset)
 };
 
 // `config` is a full print configuration (printer + filament + process), as the slicer resolves it.
@@ -49,6 +59,9 @@ OptionStates print_option_states(const Slic3r::DynamicPrintConfig& config, const
 OptionStates printer_option_states(const Slic3r::DynamicPrintConfig& config, const OptionContext& context = {});
 // Orca's TabFilament::toggle_options, for every page.
 OptionStates filament_option_states(const Slic3r::DynamicPrintConfig& config, const OptionContext& context = {});
+// Orca's ConfigManipulation::update_print_fff_config: values it resets (notices, with the changes) and combinations it
+// asks about (conflicts, with each choice's changes). Nothing is applied; the caller shows them and applies a choice.
+OptionStates print_config_checks(const Slic3r::DynamicPrintConfig& config, const OptionContext& context = {});
 // All three, merged (keys do not overlap).
 OptionStates all_option_states(const Slic3r::DynamicPrintConfig& config, const OptionContext& context = {});
 

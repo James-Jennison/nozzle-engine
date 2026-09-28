@@ -57,6 +57,10 @@ jobs:
           GOLDEN_JOBS: 16
         run: tools/nozzle/golden.sh "$ENGINE_WORK/dist/nozzle-engine"
 
+      - name: Engine contract (option states, config checks, aliases)
+        working-directory: engine
+        run: tools/nozzle/contract_test.py "$ENGINE_WORK/dist/nozzle-engine"
+
       - name: Android engine (arm64-v8a)
         working-directory: engine
         env:

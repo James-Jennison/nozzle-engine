@@ -9,7 +9,7 @@
 namespace nozzle_contract {
 using json = nlohmann::ordered_json;
 
-int run_option_states(const std::string& request, std::string& response) {
+static int run_contract(const std::string& request, std::string& response, bool checks) {
     using namespace Slic3r;
     try {
         const json req = json::parse(request);
@@ -29,8 +29,11 @@ int run_option_states(const std::string& request, std::string& response) {
         context.flow_variant_index = req.value("flowVariant", 0);
         context.printer_name = req.value("printerName", std::string());
         context.printer_model_id = req.value("printerModelId", std::string());
+        context.is_plate_config = req.value("plate", false);
+        context.filament_count = req.value("filamentCount", 1);
         const std::string scope = req.value("scope", std::string("all"));
-        const engine::OptionStates result = scope == "process"  ? engine::print_option_states(config, context)
+        const engine::OptionStates result = checks ? engine::print_config_checks(config, context)
+                                          : scope == "process"  ? engine::print_option_states(config, context)
                                           : scope == "printer"  ? engine::printer_option_states(config, context)
                                           : scope == "filament" ? engine::filament_option_states(config, context)
                                                                 : engine::all_option_states(config, context);
@@ -50,6 +53,12 @@ int run_option_states(const std::string& request, std::string& response) {
             }
             out["conflicts"].push_back({{"id", c.id}, {"message", c.message}, {"choices", choices}});
         }
+        out["notices"] = json::array();
+        for (const auto& n : result.notices) {
+            json changes = json::object();
+            for (const auto& [k, v] : n.changes) changes[k] = v;
+            out["notices"].push_back({{"id", n.id}, {"message", n.message}, {"changes", changes}});
+        }
         response = out.dump();
         return 0;
     } catch (const std::exception& e) {
@@ -57,4 +66,6 @@ int run_option_states(const std::string& request, std::string& response) {
         return 1;
     }
 }
+int run_option_states(const std::string& request, std::string& response) { return run_contract(request, response, false); }
+int run_config_checks(const std::string& request, std::string& response) { return run_contract(request, response, true); }
 } // namespace nozzle_contract

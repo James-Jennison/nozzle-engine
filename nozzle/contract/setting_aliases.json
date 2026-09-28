@@ -1,0 +1,9342 @@
+{
+ "schema": "nozzle.setting-aliases",
+ "version": 1,
+ "sources": {
+  "PrusaSlicer": {
+   "file": "PrusaSlicer/src/slic3r-domain/src/Slic3r/Domain/ConfigDefsFDM.cpp",
+   "version": "3.0.0-alpha12"
+  },
+  "SuperSlicer": {
+   "file": "SuperSlicer/src/libslic3r/PrintConfig.cpp + SuperSlicer/resources/ui_layout/default/*.ui",
+   "version": "2.7.62"
+  },
+  "BambuStudio": {
+   "file": "BambuStudio/src/libslic3r/PrintConfig.cpp",
+   "version": "02.08.04.57"
+  },
+  "CrealityPrint": {
+   "file": "CrealityPrint/src/libslic3r/PrintConfig.cpp",
+   "version": "7.3.0"
+  },
+  "Cura": {
+   "file": "Cura/Cura/resources/definitions/fdmprinter.def.json",
+   "version": "5.14.0-alpha.0 (setting_version 27)"
+  },
+  "Kiri:Moto": {
+   "file": "KiriMoto/src/kiri/mode/fdm/app/init-menu.js + KiriMoto/src/kiri/app/lang-en.js + KiriMoto/src/kiri/app/consts.js",
+   "version": "4.7.3"
+  },
+  "Snapmaker Orca": {
+   "file": "SnapmakerOrca/src/libslic3r/PrintConfig.cpp + research/inventory/*.json (brands.Sn)",
+   "version": "2.4.0"
+  }
+ },
+ "settings": {
+  "layer_height": [
+   {
+    "alias": "Base Layer height",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "sliceHeight",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": false
+   }
+  ],
+  "initial_layer_print_height": [
+   {
+    "alias": "first_layer_height",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "First layer height",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "first_layer_height",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "First layer height",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "layer_height_0",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "firstSliceHeight",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": false
+   }
+  ],
+  "wall_loops": [
+   {
+    "alias": "perimeters",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "perimeters",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Perimeters count",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "wall_line_count",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Wall Line Count",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "wall_thickness",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Wall Thickness",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "sliceShells",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "shell count",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "alternate_extra_wall": [
+   {
+    "alias": "extra_perimeters_odd_layers",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Extra perimeter on even layers",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "alternate_extra_perimeter",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   }
+  ],
+  "spiral_mode": [
+   {
+    "alias": "spiral_vase",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "spiral_vase",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "magic_spiralize",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Spiralize Outer Contour",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "vase",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "spiral_mode_smooth": [
+   {
+    "alias": "smooth_spiralized_contours",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Smooth Spiralized Contours",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "top_shell_layers": [
+   {
+    "alias": "top_solid_layers",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Top solid layers",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "top_solid_layers",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Top layers",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Top solid layers",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Top solid layers",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Top solid layers",
+    "slicer": "Snapmaker Orca",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "top_layers",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Top Layers",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "sliceTopLayers",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "top layers",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "top_shell_thickness": [
+   {
+    "alias": "top_solid_min_thickness",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Minimum top shell thickness",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "top_solid_min_thickness",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Minimum top shell thickness",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "top_thickness",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Top Thickness",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "bottom_shell_layers": [
+   {
+    "alias": "bottom_solid_layers",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Bottom solid layers",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "bottom_solid_layers",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Bottom solid layers",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "bottom_layers",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Bottom Layers",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "sliceBottomLayers",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "base layers",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "bottom_shell_thickness": [
+   {
+    "alias": "bottom_solid_min_thickness",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Minimum bottom shell thickness",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "bottom_solid_min_thickness",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Minimum bottom shell thickness",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "bottom_thickness",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Bottom Thickness",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "extra_perimeters_on_overhangs": [
+   {
+    "alias": "Extra perimeters on overhangs (Experimental)",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Extra perimeters on overhangs (Experimental)",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "reduce_crossing_wall": [
+   {
+    "alias": "avoid_crossing_perimeters",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Avoid crossing perimeters",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "avoid_crossing_perimeters",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Avoid crossing perimeters",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Avoid crossing wall",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Avoid crossing wall",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "retraction_combing",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Combing Mode",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "travel_avoid_other_parts",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Avoid Printed Parts When Traveling",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "outputAvoidGaps",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "avoid gaps",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "detect_thin_wall": [
+   {
+    "alias": "thin_walls",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Detect thin walls",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "thin_walls",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Thin walls",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "fill_outline_gaps",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Print Thin Walls",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "sliceDetectThin",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "thin walls",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "detect_overhang_wall": [
+   {
+    "alias": "overhangs",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Detect bridging perimeters",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "overhangs",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Detect overhangs",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "overhang_reverse": [
+   {
+    "alias": "overhangs_reverse",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Overhang reversal on even layers",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Overhang reversal",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Overhang reversal",
+    "slicer": "Snapmaker Orca",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "outputAlternating",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "alternating",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "overhang_reverse_threshold": [
+   {
+    "alias": "overhangs_reverse_threshold",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Overhang reversal threshold",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Overhang reversal threshold",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Overhang reversal threshold",
+    "slicer": "Snapmaker Orca",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "wall_direction": [
+   {
+    "alias": "perimeter_direction",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Perimeter direction",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "seam_position": [
+   {
+    "alias": "z_seam_type",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Z Seam Alignment",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "sliceLayerStart",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "start point",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "wall_sequence": [
+   {
+    "alias": "external_perimeters_first",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "External perimeters first",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "external_perimeters_first",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "External perimeters first",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "Order of walls",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "inset_direction",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Wall Ordering",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "sliceShellOrder",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "shell order",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "is_infill_first": [
+   {
+    "alias": "infill_first",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Infill before perimeters",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "infill_first",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Infill before perimeters",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "infill_before_walls",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Infill Before Walls",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "sparse_infill_density": [
+   {
+    "alias": "fill_density",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Fill density",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "fill_density",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Fill density",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "infill_sparse_density",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Infill Density",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "sliceFillSparse",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "fill amount",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "fill_multiline": [
+   {
+    "alias": "infill_multiplier",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Infill Line Multiplier",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "sparse_infill_pattern": [
+   {
+    "alias": "fill_pattern",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Fill pattern",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "fill_pattern",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Sparse fill pattern",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "infill_pattern",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Infill Pattern",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "sliceFillType",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "fill type",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "lateral_lattice_angle_1": [
+   {
+    "alias": "sparse_infill_lattice_angle_1",
+    "slicer": "BambuStudio",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Lattice angle 1",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "lateral_lattice_angle_2": [
+   {
+    "alias": "sparse_infill_lattice_angle_2",
+    "slicer": "BambuStudio",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Lattice angle 2",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "top_surface_pattern": [
+   {
+    "alias": "top_fill_pattern",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Top fill pattern",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "top_fill_pattern",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Top fill Pattern",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Top infill pattern",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "roofing_pattern",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Top Surface Skin Pattern",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "top_bottom_pattern",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Top/Bottom Pattern",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "bottom_surface_pattern": [
+   {
+    "alias": "bottom_fill_pattern",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Bottom fill pattern",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "bottom_fill_pattern",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Bottom fill pattern",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "flooring_pattern",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Bottom Surface Skin Pattern",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "top_bottom_pattern_0",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Bottom Pattern Initial Layer",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "infill_direction": [
+   {
+    "alias": "fill_angle",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Fill angle",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "fill_angle",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Fill angle",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Infill direction",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "infill_angles",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Infill Line Directions",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "solid_infill_direction": [
+   {
+    "alias": "skin_angles",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Top/Bottom Line Directions",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "sliceFillAngle",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "start angle",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "sparse_infill_rotate_template": [
+   {
+    "alias": "fill_angle_template",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Fill angle template",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "align_infill_direction_to_model": [
+   {
+    "alias": "fill_angle_follow_model",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Rotate with object",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "extra_solid_infills": [
+   {
+    "alias": "solid_infill_every_layers",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Solid infill every",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "solid_infill_every_layers",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Solid infill every",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "minimum_sparse_infill_area": [
+   {
+    "alias": "solid_infill_below_area",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Solid infill threshold area",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "solid_infill_below_area",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Solid infill threshold area",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "min_infill_area",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Minimum Infill Area",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "reduce_infill_retraction": [
+   {
+    "alias": "reduce_infill_retraction_mode",
+    "slicer": "BambuStudio",
+    "kind": "key",
+    "approx": true
+   }
+  ],
+  "internal_solid_infill_pattern": [
+   {
+    "alias": "solid_fill_pattern",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Solid fill pattern",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "top_bottom_pattern",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Top/Bottom Pattern",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "gap_fill_target": [
+   {
+    "alias": "gap_fill_enabled",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Fill gaps",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "gap_fill_enabled",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Enable Gap fill",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "ironing_type": [
+   {
+    "alias": "ironing",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Enable ironing",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "ironing",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Enable ironing",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "ironing_enabled",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Enable Ironing",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "ironing_only_highest_layer",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Iron Only Highest Layer",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "ironing_flow": [
+   {
+    "alias": "ironing_flowrate",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "ironing_flowrate",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   }
+  ],
+  "ironing_speed": [
+   {
+    "alias": "speed_ironing",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   }
+  ],
+  "ironing_spacing": [
+   {
+    "alias": "Spacing between ironing passes",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Spacing between ironing lines",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "ironing_line_spacing",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   }
+  ],
+  "support_ironing": [
+   {
+    "alias": "enable_support_ironing",
+    "slicer": "BambuStudio",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Enable ironing support interface",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "ironing_support_layer",
+    "slicer": "CrealityPrint",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Interface Ironing",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "max_travel_detour_distance": [
+   {
+    "alias": "avoid_crossing_perimeters_max_detour",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Avoid crossing perimeters - Max detour length",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "avoid_crossing_perimeters_max_detour",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Avoid crossing perimeters - Max detour length",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Avoid crossing wall - Max detour length",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Avoid crossing wall - Max detour length",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "retraction_combing_max_distance",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Max Comb Distance With No Retract",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "fuzzy_skin": [
+   {
+    "alias": "magic_fuzzy_skin_enabled",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "magic_fuzzy_skin_outside_only",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Fuzzy Skin Outside Only",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "fuzzy_skin_thickness": [
+   {
+    "alias": "magic_fuzzy_skin_thickness",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   }
+  ],
+  "fuzzy_skin_point_distance": [
+   {
+    "alias": "fuzzy_skin_point_dist",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "fuzzy_skin_point_dist",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "magic_fuzzy_skin_point_dist",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   }
+  ],
+  "max_volumetric_extrusion_rate_slope": [
+   {
+    "alias": "max_volumetric_extrusion_rate_slope_positive",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Max volumetric slope positive",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "max_volumetric_extrusion_rate_slope_negative",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Max volumetric slope negative",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "max_volumetric_extrusion_rate_slope_positive",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Max volumetric slope positive",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "max_volumetric_extrusion_rate_slope_negative",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Max volumetric slope negative",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "max_flow_acceleration",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Gradual flow max acceleration",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "inner_wall_speed": [
+   {
+    "alias": "perimeter_speed",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "perimeter_speed",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Internal perimeters speed",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "speed_wall_x",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Inner Wall Speed",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "outputFeedrate",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "print speed",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "outer_wall_speed": [
+   {
+    "alias": "external_perimeter_speed",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "external_perimeter_speed",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "External perimeters speed",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "speed_wall_0",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Outer Wall Speed",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "outputFinishrate",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "finish speed",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "sparse_infill_speed": [
+   {
+    "alias": "infill_speed",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "infill_speed",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Sparse infill speed",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "speed_infill",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Infill Speed",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "internal_solid_infill_speed": [
+   {
+    "alias": "solid_infill_speed",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "solid_infill_speed",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Solid infill speed",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "speed_topbottom",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Top/Bottom Speed",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "top_surface_speed": [
+   {
+    "alias": "top_solid_infill_speed",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "top_solid_infill_speed",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Top solid speed",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "speed_roofing",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Top Surface Skin Speed",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "support_speed": [
+   {
+    "alias": "support_material_speed",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "support_material_speed",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Support speed",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "speed_support",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Support Speed",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "support_object_xy_distance": [
+   {
+    "alias": "support_material_xy_spacing",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "XY separation between an object and its support",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "support_material_xy_spacing",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "XY separation between an object and its support",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "support_xy_distance",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Support X/Y Distance",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "sliceSupportOffset",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "part offset",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "support_interface_speed": [
+   {
+    "alias": "support_material_interface_speed",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Support material interface",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "support_material_interface_speed",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Support interface speed",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "speed_support_interface",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Support Interface Speed",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "bridge_speed": [
+   {
+    "alias": "Bridges",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Bridge Infill speed",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Bridge",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "bridge_skin_speed",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Bridge Skin Speed",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "bridge_wall_speed",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Bridge Wall Speed",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "internal_bridge_speed": [
+   {
+    "alias": "Internal Bridge Infill speed",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "gap_infill_speed": [
+   {
+    "alias": "gap_fill_speed",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Gap fill",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "gap_fill_speed",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Gap fill speed",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "travel_speed": [
+   {
+    "alias": "Travel speed",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "speed_travel",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Travel Speed",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "outputSeekrate",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "move speed",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "travel_speed_z": [
+   {
+    "alias": "Z travel",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Z travel speed",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "speed_z_hop",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Z Hop Speed",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "initial_layer_speed": [
+   {
+    "alias": "first_layer_speed",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "First layer speed",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "first_layer_speed",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Default first layer speed",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "speed_print_layer_0",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Initial Layer Print Speed",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "speed_layer_0",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Initial Layer Speed",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "firstLayerRate",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "shell speed",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "outer_wall_acceleration": [
+   {
+    "alias": "external_perimeter_acceleration",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "external_perimeter_acceleration",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "External Perimeter acceleration",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "acceleration_wall_0",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Outer Wall Acceleration",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "initial_layer_acceleration": [
+   {
+    "alias": "first_layer_acceleration",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "first_layer_acceleration",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "First layer acceleration",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "acceleration_layer_0",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Initial Layer Acceleration",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "top_surface_acceleration": [
+   {
+    "alias": "top_solid_infill_acceleration",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "top_solid_infill_acceleration",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Top solid acceleration",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "acceleration_roofing",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Top Surface Skin Acceleration",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "default_acceleration": [
+   {
+    "alias": "Default acceleration",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "acceleration_print",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Print Acceleration",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "skirt_loops": [
+   {
+    "alias": "skirts",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "skirts",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "skirt_line_count",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Skirt Line Count",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "outputBrimCount",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "skirt count",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "skirt_speed": [
+   {
+    "alias": "brim_speed",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Brim & Skirt speed",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "skirt_brim_speed",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Skirt/Brim Speed",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "min_skirt_length": [
+   {
+    "alias": "Minimal filament extrusion length",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Minimal filament extrusion length",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "skirt_brim_minimal_length",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Skirt/Brim Minimum Length",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "skirt_distance": [
+   {
+    "alias": "Distance from brim/object",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Distance from object",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "skirt_gap",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "outputBrimOffset",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "skirt offset",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "draft_shield": [
+   {
+    "alias": "draft_shield_enabled",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Enable Draft Shield",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "outputDraftShield",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": false
+   }
+  ],
+  "brim_object_gap": [
+   {
+    "alias": "brim_separation",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Brim separation gap",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "brim_separation",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Brim separation gap",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "brim_gap",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Brim Distance",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "brim_type": [
+   {
+    "alias": "brim_location",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Brim Location",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "brim_ears_detection_length": [
+   {
+    "alias": "Brim ear detection length",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "enable_support": [
+   {
+    "alias": "support_material",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Generate Supports",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "support_material",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Generate support material",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "support_enable",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Generate Support",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "sliceSupportType",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": true
+   }
+  ],
+  "support_type": [
+   {
+    "alias": "support_material_auto",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Auto generated supports",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "support_structure",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Support Structure",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "sliceSupportType",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": true
+   }
+  ],
+  "support_threshold_angle": [
+   {
+    "alias": "support_material_threshold",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Overhang threshold",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "support_material_threshold",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Overhang threshold",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "support_angle",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Support Overhang Angle",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "sliceSupportAngle",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "angle",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "enforce_support_layers": [
+   {
+    "alias": "support_material_enforce_layers",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Enforce support for the first n layers",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "support_material_enforce_layers",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Enforce support for the first n layers",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "raft_layers": [
+   {
+    "alias": "raft_surface_layers",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Raft Top Layers",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "outputRaft",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "raft enable",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "raft_first_layer_density": [
+   {
+    "alias": "Raft first layer density",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "raft_first_layer_expansion": [
+   {
+    "alias": "Raft first layer expansion",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Raft first layer expansion",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "raft_contact_distance": [
+   {
+    "alias": "raft_airgap",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Raft Air Gap",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "outputRaftSpacing",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "raft gap",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "raft_expansion": [
+   {
+    "alias": "raft_margin",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Raft Extra Margin",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "support_base_pattern": [
+   {
+    "alias": "support_material_pattern",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "support_material_pattern",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Support pattern",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Base pattern(Normal)",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "support_base_pattern_tree",
+    "slicer": "CrealityPrint",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Base pattern(Tree)",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "support_pattern",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Support Pattern",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "support_base_pattern_spacing": [
+   {
+    "alias": "support_material_spacing",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Pattern spacing",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "support_material_spacing",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Pattern spacing",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "support_line_distance",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Support Line Distance",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "support_expansion": [
+   {
+    "alias": "support_offset",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Support Horizontal Expansion",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "sliceSupportExtra",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": false
+   }
+  ],
+  "support_style": [
+   {
+    "alias": "support_material_style",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "support_material_style",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Support tower style",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "sliceSupportTree",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "tree type",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "independent_support_layer_height": [
+   {
+    "alias": "support_material_synchronize_layers",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Synchronize with object layers",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "support_material_synchronize_layers",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Synchronize with object layers",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "support_angle": [
+   {
+    "alias": "support_material_angle",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "support_material_angle",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Support pattern angle",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "support_infill_angles",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Support Infill Line Directions",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "support_interface_top_layers": [
+   {
+    "alias": "support_material_interface_layers",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "support_material_interface_layers",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "support_roof_height",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Support Roof Thickness",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "support_roof_enable",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Enable Support Roof",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "support_interface_bottom_layers": [
+   {
+    "alias": "support_material_bottom_interface_layers",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "support_material_bottom_interface_layers",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "support_bottom_height",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Support Floor Thickness",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "support_bottom_enable",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Enable Support Floor",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "support_interface_pattern": [
+   {
+    "alias": "support_material_interface_pattern",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "support_material_top_interface_pattern",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Support top interface pattern",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "Support Interface Pattern",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "support_roof_pattern",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Support Roof Pattern",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "support_interface_spacing": [
+   {
+    "alias": "support_material_interface_spacing",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Interface pattern spacing",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "support_material_interface_spacing",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Interface pattern spacing",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "support_roof_line_distance",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Support Roof Line Distance",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "support_top_z_distance": [
+   {
+    "alias": "support_material_contact_distance",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Top contact Z distance",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "support_material_contact_distance",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Contact distance on top of supports",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "support_top_distance",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Support Top Distance",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "support_z_distance",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Support Z Distance",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "sliceSupportGap",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "layer gap",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "support_on_build_plate_only": [
+   {
+    "alias": "support_material_buildplate_only",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Support on build plate only",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "support_material_buildplate_only",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Support on build plate only",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "support_type",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Support Placement",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "bridge_no_support": [
+   {
+    "alias": "dont_support_bridges",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "dont_support_bridges",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   }
+  ],
+  "thick_bridges": [
+   {
+    "alias": "Thick bridges",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Thick bridges",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Thick bridges",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "dont_filter_internal_bridges": [
+   {
+    "alias": "Don't filter out small internal bridges (beta)",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "enable_extra_bridge_layer": [
+   {
+    "alias": "bridge_enable_more_layers",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Bridge Has Multiple Layers",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "max_bridge_length": [
+   {
+    "alias": "overhangs_bridge_threshold",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Bridge max length",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "print_sequence": [
+   {
+    "alias": "complete_objects",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Complete individual objects",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "complete_objects",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Complete individual objects",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "filename_format": [
+   {
+    "alias": "output_filename_format",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Output filename format",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "wall_filament": [
+   {
+    "alias": "perimeter_extruder",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Perimeter extruder",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "perimeter_extruder",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Perimeter extruder",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Walls filament",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "wall_extruder_nr",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Wall Extruder",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "support_bottom_z_distance": [
+   {
+    "alias": "support_material_bottom_contact_distance",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Bottom contact Z distance",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "support_material_bottom_contact_distance",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Contact distance under the bottom of supports",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "support_bottom_distance",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Support Bottom Distance",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "sparse_infill_filament": [
+   {
+    "alias": "infill_extruder",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Infill extruder",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "infill_extruder",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Infill extruder",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Sparse infill filament",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "infill_extruder_nr",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Infill Extruder",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "solid_infill_filament": [
+   {
+    "alias": "solid_infill_extruder",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Solid infill extruder",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "solid_infill_extruder",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Solid infill extruder",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Solid infill filament",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "support_filament": [
+   {
+    "alias": "support_material_extruder",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Support material/raft/skirt extruder",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "support_material_extruder",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Support material extruder",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "support_extruder_nr",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Support Extruder",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "sliceSupportNozzle",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "tool",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "support_interface_filament": [
+   {
+    "alias": "support_material_interface_extruder",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Support material/raft interface extruder",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "support_material_interface_extruder",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Support material/raft interface extruder",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "support_interface_extruder_nr",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Support Interface Extruder",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "delta_temperature": [
+   {
+    "alias": "preheat_temperature_delta",
+    "slicer": "CrealityPrint",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Preheat temperature",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "line_width": [
+   {
+    "alias": "extrusion_width",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Default extrusion width",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "extrusion_width",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Default extrusion width",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Line Width",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "sliceLineWidth",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "line width",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "initial_layer_line_width": [
+   {
+    "alias": "first_layer_extrusion_width",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "first_layer_extrusion_width",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "First layer width",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "initial_layer_line_width_factor",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Initial Layer Line Width",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "inner_wall_line_width": [
+   {
+    "alias": "perimeter_extrusion_width",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "perimeter_extrusion_width",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Perimeter width",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "wall_line_width_x",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Inner Wall(s) Line Width",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "outer_wall_line_width": [
+   {
+    "alias": "external_perimeter_extrusion_width",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "external_perimeter_extrusion_width",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "External perimeters width",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "wall_line_width_0",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Outer Wall Line Width",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "sparse_infill_line_width": [
+   {
+    "alias": "infill_extrusion_width",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "infill_extrusion_width",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Infill width",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "infill_line_width",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Infill Line Width",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "internal_solid_infill_line_width": [
+   {
+    "alias": "solid_infill_extrusion_width",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "solid_infill_extrusion_width",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Solid infill width",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "skin_line_width",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Top/Bottom Line Width",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "top_surface_line_width": [
+   {
+    "alias": "top_infill_extrusion_width",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "top_infill_extrusion_width",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "roofing_line_width",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Top Surface Skin Line Width",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "support_line_width": [
+   {
+    "alias": "support_material_extrusion_width",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "support_material_extrusion_width",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Support material width",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Support Line Width",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "infill_wall_overlap": [
+   {
+    "alias": "infill_overlap",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Infill/perimeters overlap",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "infill_overlap",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Infill/perimeters encroachment",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "infill_overlap",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Infill Overlap Percentage",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "sliceFillOverlap",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "fill overlap",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "top_bottom_infill_wall_overlap": [
+   {
+    "alias": "top_solid_infill_overlap",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Top solid infill overlap",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "skin_overlap",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Skin Overlap Percentage",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "bridge_flow": [
+   {
+    "alias": "bridge_flow_ratio",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "bridge_flow_ratio",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Bridge flow",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "bridge_skin_material_flow",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Bridge Skin Flow",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "elefant_foot_compensation": [
+   {
+    "alias": "first_layer_size_compensation",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "XY First layer compensation",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "xy_offset_layer_0",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Initial Layer Horizontal Expansion",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "elefant_foot_compensation_layers": [
+   {
+    "alias": "first_layer_size_compensation_layers",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "XY First layer compensation height in layers",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "xy_contour_compensation": [
+   {
+    "alias": "xy_size_compensation",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "XY Size Compensation",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "xy_size_compensation",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Outer XY size compensation",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "xy_offset",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Horizontal Expansion",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "sliceCompOuter",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "shell outer offset",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "xy_hole_compensation": [
+   {
+    "alias": "hole_size_compensation",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "XY holes compensation",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "hole_xy_offset",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Hole Horizontal Expansion",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "sliceCompInner",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "shell inner offset",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "resolution": [
+   {
+    "alias": "Slice resolution",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Slice resolution",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "meshfix_maximum_resolution",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Maximum Resolution",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "enable_prime_tower": [
+   {
+    "alias": "wipe_tower",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "wipe_tower",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Enable wipe tower",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "prime_tower_enable",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Enable Prime Tower",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "outputPurgeTower",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "purge tower",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "prime_tower_width": [
+   {
+    "alias": "wipe_tower_width",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "wipe_tower_width",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Wipe tower Width",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "prime_tower_size",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Prime Tower Size",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "prime_tower_brim_width": [
+   {
+    "alias": "wipe_tower_brim_width",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Wipe tower brim width",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "wipe_tower_brim_width",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Wipe tower brim width",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "prime_tower_base_size",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Prime Tower Base Size",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "prime_volume": [
+   {
+    "alias": "multimaterial_purging",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Purging volume",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "prime_tower_min_volume",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Prime Tower Minimum Volume",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "wipe_tower_no_sparse_layers": [
+   {
+    "alias": "No sparse layers (EXPERIMENTAL)",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "No sparse layers (EXPERIMENTAL)",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "No sparse layers (experimental)",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "compatible_printers": [
+   {
+    "alias": "Compatible printers",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Compatible machine",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Compatible machine",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "compatible_printers_condition": [
+   {
+    "alias": "Compatible printers condition",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Compatible machine condition",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Compatible machine condition",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "flush_into_infill": [
+   {
+    "alias": "wipe_into_infill",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Wipe into this object's infill",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "wipe_into_infill",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Wipe into this object's infill",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "flush_into_objects": [
+   {
+    "alias": "wipe_into_objects",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Wipe into this object",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "wipe_into_objects",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Wipe into this object",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "tree_support_branch_angle": [
+   {
+    "alias": "support_tree_angle",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Maximum Branch Angle",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "support_tree_angle",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Maximum Branch Angle",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "Branch angle",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "support_tree_angle",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Maximum Branch Angle",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "tree_support_angle_slow": [
+   {
+    "alias": "support_tree_angle_slow",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "support_tree_angle_slow",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "support_tree_angle_slow",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   }
+  ],
+  "tree_support_wall_count": [
+   {
+    "alias": "Support wall loops(Normal)",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "tree_support_wall_count_tree",
+    "slicer": "CrealityPrint",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Support wall loops(Tree)",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "support_wall_count",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Support Wall Line Count",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "tree_support_top_rate": [
+   {
+    "alias": "support_tree_top_rate",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "support_tree_top_rate",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "support_tree_top_rate",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   }
+  ],
+  "tree_support_branch_distance": [
+   {
+    "alias": "support_tree_branch_distance",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Branch Distance",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "support_tree_branch_distance",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Branch Distance",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "Branch distance",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "tree_support_tip_diameter": [
+   {
+    "alias": "support_tree_tip_diameter",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "support_tree_tip_diameter",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "support_tree_tip_diameter",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   }
+  ],
+  "tree_support_branch_diameter": [
+   {
+    "alias": "support_tree_branch_diameter",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Branch Diameter",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "support_tree_branch_diameter",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Branch Diameter",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "Branch diameter",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "support_tree_branch_diameter",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Branch Diameter",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "tree_support_branch_diameter_angle": [
+   {
+    "alias": "support_tree_branch_diameter_angle",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "support_tree_branch_diameter_angle",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "support_tree_branch_diameter_angle",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   }
+  ],
+  "enable_arc_fitting": [
+   {
+    "alias": "arc_fitting",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "arc_fitting",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "fdmArcEnabled",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "arc output",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "infill_combination": [
+   {
+    "alias": "automatic_infill_combination",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Automatic infill combination",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "infill_every_layers",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Combine infill every n layers",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "infill_every_layers",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Combine infill every n layers",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "infill_sparse_thickness",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Infill Layer Thickness",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "sliceFillRepeat",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "fill repeat",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "infill_combination_max_layer_height": [
+   {
+    "alias": "automatic_infill_combination_max_layer_height",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Automatic infill combination - Max layer height",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "support_bottom_interface_spacing": [
+   {
+    "alias": "support_bottom_line_distance",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Support Floor Line Distance",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "enable_overhang_speed": [
+   {
+    "alias": "enable_dynamic_overhang_speeds",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Enable dynamic overhang speeds",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "overhangs_dynamic_speed",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "wall_overhang_speed_factors",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Overhanging Wall Speeds",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "overhang_1_4_speed": [
+   {
+    "alias": "overhang_speed_3",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": true
+   }
+  ],
+  "overhang_2_4_speed": [
+   {
+    "alias": "overhang_speed_2",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": true
+   }
+  ],
+  "overhang_3_4_speed": [
+   {
+    "alias": "overhang_speed_1",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": true
+   }
+  ],
+  "overhang_4_4_speed": [
+   {
+    "alias": "overhang_speed_0",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": true
+   }
+  ],
+  "initial_layer_infill_speed": [
+   {
+    "alias": "first_layer_infill_speed",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "First layer infill speed",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "first_layer_infill_speed",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Infill max first layer speed",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "firstLayerFillRate",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "fill speed",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "only_one_wall_top": [
+   {
+    "alias": "top_one_perimeter_type",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Single perimeter on top surfaces",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "only_one_perimeter_top",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Only one perimeter on Top surfaces",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "top_one_wall_type",
+    "slicer": "BambuStudio",
+    "kind": "key",
+    "approx": false
+   }
+  ],
+  "wall_generator": [
+   {
+    "alias": "perimeter_generator",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Perimeter generator",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "perimeter_generator",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Perimeter generator",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "wall_transition_length": [
+   {
+    "alias": "Perimeter transition length",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Perimeter transition length",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "wall_transition_filter_deviation": [
+   {
+    "alias": "Perimeter transitioning filter margin",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Perimeter transitioning filter margin",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "wall_transition_angle": [
+   {
+    "alias": "Perimeter transitioning threshold angle",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Perimeter transitioning threshold angle",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "wall_distribution_count": [
+   {
+    "alias": "Perimeter distribution count",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Perimeter distribution count",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "min_bead_width": [
+   {
+    "alias": "Minimum perimeter width",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Minimum perimeter width",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Minimum Thin Wall Line Width",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "small_perimeter_speed": [
+   {
+    "alias": "Small perimeters speed",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "small_feature_speed_factor",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Small Feature Speed",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "small_perimeter_threshold": [
+   {
+    "alias": "small_perimeter_max_length",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Max small perimeters length",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "Small perimeter threshold",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "small_feature_max_length",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Small Feature Max Length",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "outputShortPoly",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "short path",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "bridge_angle": [
+   {
+    "alias": "Bridging angle",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Bridging angle",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Bridge direction",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Bridge infill direction",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "filter_out_gap_fill": [
+   {
+    "alias": "gap_fill_min_length",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Gapfill: Min length",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "travel_acceleration": [
+   {
+    "alias": "Travel acceleration",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "acceleration_travel",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Travel Acceleration",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "inner_wall_acceleration": [
+   {
+    "alias": "perimeter_acceleration",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "perimeter_acceleration",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Internal Perimeter acceleration",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "acceleration_wall_x",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Inner Wall Acceleration",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "min_width_top_surface": [
+   {
+    "alias": "Minimum top width for infill",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "top_area_threshold",
+    "slicer": "BambuStudio",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Top area threshold",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "default_jerk": [
+   {
+    "alias": "jerk_print",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Print Jerk",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "outer_wall_jerk": [
+   {
+    "alias": "jerk_wall_0",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Outer Wall Jerk",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "inner_wall_jerk": [
+   {
+    "alias": "jerk_wall_x",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Inner Wall Jerk",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "infill_jerk": [
+   {
+    "alias": "jerk_infill",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Infill Jerk",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "top_surface_jerk": [
+   {
+    "alias": "jerk_roofing",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Top Surface Skin Jerk",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "initial_layer_jerk": [
+   {
+    "alias": "jerk_layer_0",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Initial Layer Jerk",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "travel_jerk": [
+   {
+    "alias": "jerk_travel",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Travel Jerk",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "top_solid_infill_flow_ratio": [
+   {
+    "alias": "fill_top_flow_ratio",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "roofing_material_flow",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Top Surface Skin Flow",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "bottom_solid_infill_flow_ratio": [
+   {
+    "alias": "flooring_material_flow",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Bottom Surface Skin Flow",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "only_one_wall_first_layer": [
+   {
+    "alias": "only_one_perimeter_first_layer",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Only one perimeter on first layer",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "only_one_perimeter_first_layer",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Only one perimeter on First layer",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "print_flow_ratio": [
+   {
+    "alias": "print_extrusion_multiplier",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Object flow ratio",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "material_flow",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Flow",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "outputShellMult",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "shell factor",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "seam_gap": [
+   {
+    "alias": "seam_gap_distance",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Seam gap distance",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "role_based_wipe_speed": [
+   {
+    "alias": "role_base_wipe_speed",
+    "slicer": "BambuStudio",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Role-based wipe speed",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "wipe_before_external_loop": [
+   {
+    "alias": "wipe_extra_perimeter",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Extra Wipe for external perimeters",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "bridge_density": [
+   {
+    "alias": "bridge_overlap",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Max bridge density",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "Bridge density",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "bridge_skin_density",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Bridge Skin Density",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "bridge_acceleration": [
+   {
+    "alias": "Bridge acceleration",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "sparse_infill_acceleration": [
+   {
+    "alias": "infill_acceleration",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "infill_acceleration",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Infill acceleration",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "acceleration_infill",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Infill Acceleration",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "internal_solid_infill_acceleration": [
+   {
+    "alias": "solid_infill_acceleration",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "solid_infill_acceleration",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Solid acceleration",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "acceleration_topbottom",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Top/Bottom Acceleration",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "tree_support_brim_width": [
+   {
+    "alias": "support_brim_width",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Support Inner Brim Width",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "initial_layer_travel_speed": [
+   {
+    "alias": "speed_travel_layer_0",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   }
+  ],
+  "slow_down_layers": [
+   {
+    "alias": "speed_slowdown_layers",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Number of Slower Layers",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "infill_anchor": [
+   {
+    "alias": "Length of the infill anchor",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Length of the infill anchor",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "sparse_infill_anchor",
+    "slicer": "BambuStudio",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Length of sparse infill anchor",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "infill_anchor_max": [
+   {
+    "alias": "sparse_infill_anchor_max",
+    "slicer": "BambuStudio",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Maximum length of sparse infill anchor",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "make_overhang_printable": [
+   {
+    "alias": "conical_overhang_enabled",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Make Overhang Printable",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "make_overhang_printable_angle": [
+   {
+    "alias": "conical_overhang_angle",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Maximum Model Angle",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "make_overhang_printable_hole_size": [
+   {
+    "alias": "conical_overhang_hole_size",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Maximum Overhang Hole Area",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "wipe_tower_max_purge_speed": [
+   {
+    "alias": "filament_max_wipe_tower_speed",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Max speed on the wipe tower",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "Maximum wipe tower print speed",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "prime_tower_max_speed",
+    "slicer": "BambuStudio",
+    "kind": "key",
+    "approx": true
+   }
+  ],
+  "wipe_tower_extra_rib_length": [
+   {
+    "alias": "prime_tower_extra_rib_length",
+    "slicer": "BambuStudio",
+    "kind": "key",
+    "approx": false
+   }
+  ],
+  "wipe_tower_rib_width": [
+   {
+    "alias": "prime_tower_rib_width",
+    "slicer": "BambuStudio",
+    "kind": "key",
+    "approx": false
+   }
+  ],
+  "wipe_tower_fillet_wall": [
+   {
+    "alias": "prime_tower_fillet_wall",
+    "slicer": "BambuStudio",
+    "kind": "key",
+    "approx": false
+   }
+  ],
+  "wipe_tower_filament": [
+   {
+    "alias": "wipe_tower_extruder",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Wipe tower extruder",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "wipe_tower_extruder",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Wipe tower extruder",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "wipe_tower_bridging": [
+   {
+    "alias": "prime_tower_max_bridging_distance",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Prime Tower Maximum Bridging Distance",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "wipe_tower_rotation_angle": [
+   {
+    "alias": "Prime tower rotation angle",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "tree_support_branch_distance_organic": [
+   {
+    "alias": "support_tree_branch_distance",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Branch Distance",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "support_tree_branch_distance",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Branch Distance",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "tree_support_branch_diameter_organic": [
+   {
+    "alias": "support_tree_branch_diameter",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Branch Diameter",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "support_tree_branch_diameter",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Branch Diameter",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "support_tree_branch_diameter",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Branch Diameter",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "tree_support_branch_angle_organic": [
+   {
+    "alias": "support_tree_angle",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Maximum Branch Angle",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "support_tree_angle",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Maximum Branch Angle",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "support_tree_angle",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Maximum Branch Angle",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "hole_to_polyhole": [
+   {
+    "alias": "Convert round holes to polyholes",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "small_area_infill_flow_compensation_model": [
+   {
+    "alias": "Small Area Infill Flow Compensation (beta)",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "seam_slope_type": [
+   {
+    "alias": "scarf_seam_placement",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Scarf joint placement",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "Scarf seam: activation",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Scarf seam type",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "seam_slope_conditional": [
+   {
+    "alias": "scarf_seam_only_on_smooth",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Scarf joint only on smooth perimeters",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "Smart scarf seam application",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "scarf_angle_threshold": [
+   {
+    "alias": "Scarf application angle threshold",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "seam_slope_start_height": [
+   {
+    "alias": "scarf_seam_start_height",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "scarf_joint_seam_start_height_ratio",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Scarf Seam Start Height",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "seam_slope_entire_loop": [
+   {
+    "alias": "scarf_seam_entire_loop",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Scarf joint around entire perimeter",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "seam_slope_min_length": [
+   {
+    "alias": "scarf_seam_length",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Scarf joint length",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "scarf_joint_seam_length",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Scarf Seam Length",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "outputScarfLength",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": false
+   }
+  ],
+  "seam_slope_inner_walls": [
+   {
+    "alias": "scarf_seam_on_inner_perimeters",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Scarf joint on inner perimeters",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "interlocking_beam": [
+   {
+    "alias": "interlocking_enable",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Generate Interlocking Structure",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "interlocking_orientation": [
+   {
+    "alias": "Interlocking Structure Orientation",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "interlocking_beam_layer_count": [
+   {
+    "alias": "Interlocking Beam Layer Count",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "dithering_local_z_mode": [
+   {
+    "alias": "Local Z dithering mode",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Advanced dithering",
+    "slicer": "Snapmaker Orca",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "filament_diameter": [
+   {
+    "alias": "material_diameter",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   }
+  ],
+  "filament_type": [
+   {
+    "alias": "Filament type",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Filament type",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "material_type",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Material Type",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "filament_is_support": [
+   {
+    "alias": "material_is_support_material",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Is support material",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "filament_max_volumetric_speed": [
+   {
+    "alias": "material_max_flowrate",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Material Maximum Flow Rate",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "outputMaxFlowrate",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "max flowrate",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "filament_flow_ratio": [
+   {
+    "alias": "extrusion_multiplier",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Extrusion multiplier",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "extrusion_multiplier",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Extrusion multiplier",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "material_flow",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Flow",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "filament_cost": [
+   {
+    "alias": "Cost",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Filament cost",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "nozzle_temperature": [
+   {
+    "alias": "temperature",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Nozzle temperature",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "temperature",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Nozzle temperature",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Nozzle temperature",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Nozzle temperature",
+    "slicer": "Snapmaker Orca",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "material_print_temperature",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Printing Temperature",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "outputTemp",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": false
+   }
+  ],
+  "nozzle_temperature_initial_layer": [
+   {
+    "alias": "first_layer_temperature",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "First layer nozzle temperature",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "first_layer_temperature",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "First layer nozzle temperature",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Initial layer nozzle temperature",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Initial layer nozzle temperature",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Initial layer nozzle temperature",
+    "slicer": "Snapmaker Orca",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "material_print_temperature_layer_0",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Printing Temperature Initial Layer",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "firstLayerNozzleTemp",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": false
+   }
+  ],
+  "cool_plate_temp": [
+   {
+    "alias": "bed_temperature",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Bed temperature",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "bed_temperature",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Bed temperature",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "Bed temperature",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Cool Plate",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Bed temperature",
+    "slicer": "Snapmaker Orca",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "material_bed_temperature",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Build Plate Temperature",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "textured_cool_plate_temp": [
+   {
+    "alias": "Bed temperature",
+    "slicer": "Snapmaker Orca",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "eng_plate_temp": [
+   {
+    "alias": "bed_temperature",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Bed temperature",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "bed_temperature",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Bed temperature",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "Bed temperature",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Engineering plate",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Bed temperature",
+    "slicer": "Snapmaker Orca",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "material_bed_temperature",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Build Plate Temperature",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "hot_plate_temp": [
+   {
+    "alias": "bed_temperature",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Bed temperature",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "bed_temperature",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Bed temperature",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "Bed temperature",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Smooth PEI Plate / High Temp Plate",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Bed temperature",
+    "slicer": "Snapmaker Orca",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "material_bed_temperature",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Build Plate Temperature",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "outputBedTemp",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": true
+   }
+  ],
+  "textured_plate_temp": [
+   {
+    "alias": "bed_temperature",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Bed temperature",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "bed_temperature",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Bed temperature",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "Bed temperature",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Textured PEI Plate",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Bed temperature",
+    "slicer": "Snapmaker Orca",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "material_bed_temperature",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Build Plate Temperature",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "cool_plate_temp_initial_layer": [
+   {
+    "alias": "first_layer_bed_temperature",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "First layer bed temperature",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "first_layer_bed_temperature",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "First layer bed temperature",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "Initial layer bed temperature",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Cool Plate",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Initial layer bed temperature",
+    "slicer": "Snapmaker Orca",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "material_bed_temperature_layer_0",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Build Plate Temperature Initial Layer",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "textured_cool_plate_temp_initial_layer": [
+   {
+    "alias": "Initial layer bed temperature",
+    "slicer": "Snapmaker Orca",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "eng_plate_temp_initial_layer": [
+   {
+    "alias": "first_layer_bed_temperature",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "First layer bed temperature",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "first_layer_bed_temperature",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "First layer bed temperature",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "Initial layer bed temperature",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Engineering plate",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Initial layer bed temperature",
+    "slicer": "Snapmaker Orca",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "material_bed_temperature_layer_0",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Build Plate Temperature Initial Layer",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "hot_plate_temp_initial_layer": [
+   {
+    "alias": "first_layer_bed_temperature",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "First layer bed temperature",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "first_layer_bed_temperature",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "First layer bed temperature",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "Initial layer bed temperature",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Smooth PEI Plate / High Temp Plate",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Initial layer bed temperature",
+    "slicer": "Snapmaker Orca",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "material_bed_temperature_layer_0",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Build Plate Temperature Initial Layer",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "firstLayerBedTemp",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": true
+   }
+  ],
+  "textured_plate_temp_initial_layer": [
+   {
+    "alias": "first_layer_bed_temperature",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "First layer bed temperature",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "first_layer_bed_temperature",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "First layer bed temperature",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "Initial layer bed temperature",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Textured PEI Plate",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Initial layer bed temperature",
+    "slicer": "Snapmaker Orca",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "material_bed_temperature_layer_0",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Build Plate Temperature Initial Layer",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "supertack_plate_temp_initial_layer": [
+   {
+    "alias": "Initial layer bed temperature",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Initial layer bed temperature",
+    "slicer": "Snapmaker Orca",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "supertack_plate_temp": [
+   {
+    "alias": "Bed temperature",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Bed temperature",
+    "slicer": "Snapmaker Orca",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "graphic_effect_plate_temp": [
+   {
+    "alias": "Bed temperature",
+    "slicer": "Snapmaker Orca",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "graphic_effect_plate_temp_initial_layer": [
+   {
+    "alias": "Initial layer bed temperature",
+    "slicer": "Snapmaker Orca",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "reduce_fan_stop_start_freq": [
+   {
+    "alias": "fan_always_on",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "fan_always_on",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   }
+  ],
+  "dont_slow_down_outer_wall": [
+   {
+    "alias": "no_slow_down_for_cooling_on_outwalls",
+    "slicer": "BambuStudio",
+    "kind": "key",
+    "approx": false
+   }
+  ],
+  "slow_down_for_layer_cooling": [
+   {
+    "alias": "cooling",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Enable auto cooling",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "cooling",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Enable auto cooling",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "fan_min_speed": [
+   {
+    "alias": "min_fan_speed",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Min fan speed",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "min_fan_speed",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "cool_fan_speed_min",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Regular Fan Speed",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "fan_max_speed": [
+   {
+    "alias": "max_fan_speed",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Max fan speed",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "max_fan_speed",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Max fan speed",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "cool_fan_speed_max",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Maximum Fan Speed",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "outputFanSpeed",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": true
+   }
+  ],
+  "enable_overhang_bridge_fan": [
+   {
+    "alias": "enable_dynamic_fan_speeds",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Enable dynamic fan speeds",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "Force cooling for overhang and bridge",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Force cooling for overhang and bridge",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "overhang_fan_speed": [
+   {
+    "alias": "bridge_fan_speed",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Bridges fan speed",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "bridge_fan_speed",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Bridge Infill fan speed",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "overhangs_fan_speed",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Overhangs Perimeter fan speed",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "Fan speed for overhang",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Fan speed for overhang",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "bridge_fan_speed",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Bridge Fan Speed",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "overhang_fan_threshold": [
+   {
+    "alias": "Cooling overhang threshold",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Cooling overhang threshold",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "close_fan_the_first_x_layers": [
+   {
+    "alias": "disable_fan_first_layers",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Disable fan for the first",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "disable_fan_first_layers",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Disable fan for the first",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "outputFanLayer",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "fan on layer",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "full_fan_speed_layer": [
+   {
+    "alias": "Model fan speed at layer",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "cool_fan_full_layer",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Regular Fan Speed at Layer",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "fan_cooling_layer_time": [
+   {
+    "alias": "fan_below_layer_time",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Enable fan if layer print time is below",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "fan_below_layer_time",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Enable fan if layer print time is below",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "cool_min_layer_time_fan_speed_max",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Regular/Maximum Fan Speed Threshold",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "slow_down_layer_time": [
+   {
+    "alias": "slowdown_below_layer_time",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Slow down if layer print time is below",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "slowdown_below_layer_time",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Slow down if layer print time is below",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Layer time goal",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "cool_min_layer_time",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Minimum Layer Time",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "outputMinLayerTime",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "min layer time",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "slow_down_min_speed": [
+   {
+    "alias": "min_print_speed",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "min_print_speed",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "cool_min_speed",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Minimum Speed",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "outputMinSpeed",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "min speed",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "filament_start_gcode": [
+   {
+    "alias": "start_filament_gcode",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "start_filament_gcode",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Filament start G-code",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "filament_end_gcode": [
+   {
+    "alias": "end_filament_gcode",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "end_filament_gcode",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Filament end G-code",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "filament_vendor": [
+   {
+    "alias": "material_brand",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Material Brand",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "compatible_prints": [
+   {
+    "alias": "Compatible print profiles",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Compatible process profiles",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Compatible process profiles",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "compatible_prints_condition": [
+   {
+    "alias": "Compatible print profiles condition",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Compatible process profiles condition",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Compatible process profiles condition",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "enable_pressure_advance": [
+   {
+    "alias": "pressure_advance",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Pressure advance",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "pressure_advance": [
+   {
+    "alias": "pressure_advance_value",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "filament_pressure_advance",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "material_pressure_advance_factor",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Pressure advance factor",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "chamber_temperature": [
+   {
+    "alias": "chamber_temperatures",
+    "slicer": "BambuStudio",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "build_volume_temperature",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Build Volume Temperature",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "filament_shrink": [
+   {
+    "alias": "filament_shrinkage_compensation_xy",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Shrinkage compensation XY",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Shrinkage",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Shrinkage",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "material_shrinkage_percentage_xy",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Horizontal Scaling Factor Shrinkage Compensation",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "filament_shrinkage_compensation_z": [
+   {
+    "alias": "Shrinkage compensation Z",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "material_shrinkage_percentage_z",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Vertical Scaling Factor Shrinkage Compensation",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "internal_bridge_fan_speed": [
+   {
+    "alias": "Internal Bridge Infill fan speed",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "filament_multitool_ramming": [
+   {
+    "alias": "Enable ramming for multitool setups",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Enable ramming for multitool setups",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Enable ramming for multitool setups",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "filament_multitool_ramming_volume": [
+   {
+    "alias": "Multitool ramming volume",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Multitool ramming volume",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Multitool ramming volume",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "filament_multitool_ramming_flow": [
+   {
+    "alias": "Multitool ramming flow",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Multitool ramming flow",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Multitool ramming flow",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "idle_temperature": [
+   {
+    "alias": "material_standby_temperature",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Standby Temperature",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "printable_area": [
+   {
+    "alias": "bed_shape",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Bed shape",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "gcode_flavor": [
+   {
+    "alias": "machine_gcode_flavor",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   }
+  ],
+  "fan_kickstart": [
+   {
+    "alias": "Fan KickStart time",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Kickstart duration",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "fan_speedup_time": [
+   {
+    "alias": "Fan startup delay",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "fan_speedup_overhangs": [
+   {
+    "alias": "Fan delay only for overhangs",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "single_extruder_multi_material": [
+   {
+    "alias": "machine_extruders_share_nozzle",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Extruders Share Nozzle",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "machine_start_gcode": [
+   {
+    "alias": "start_gcode",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "start_gcode",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   }
+  ],
+  "machine_end_gcode": [
+   {
+    "alias": "end_gcode",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "end_gcode",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   }
+  ],
+  "before_layer_change_gcode": [
+   {
+    "alias": "before_layer_gcode",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "before_layer_gcode",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   }
+  ],
+  "printing_by_object_gcode": [
+   {
+    "alias": "between_objects_gcode",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Between objects G-code",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "between_objects_gcode",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Between objects G-code",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Between Object Gcode",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Between Object Gcode",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "layer_change_gcode": [
+   {
+    "alias": "layer_gcode",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "After layer change G-code",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "layer_gcode",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "After layer change G-code",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "time_lapse_gcode": [
+   {
+    "alias": "Time lapse G-code",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Time lapse G-code",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "change_filament_gcode": [
+   {
+    "alias": "toolchange_gcode",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Tool change G-code",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "toolchange_gcode",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Tool change G-code",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "change_extrusion_role_gcode": [
+   {
+    "alias": "feature_gcode",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "After extrusion type change in G-code",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "printable_height": [
+   {
+    "alias": "max_print_height",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Max print height",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "machine_height",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Machine Height",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "extruder_clearance_radius": [
+   {
+    "alias": "Extruder clearance radius",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "extruder_clearance_height_to_lid": [
+   {
+    "alias": "extruder_clearance_height",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "extruder_clearance_height",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Extruder clearance height",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "extruder_clearance_height_to_rod": [
+   {
+    "alias": "extruder_clearance_height",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "extruder_clearance_height",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Extruder clearance height",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "default_print_profile": [
+   {
+    "alias": "Default print profile",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "silent_mode": [
+   {
+    "alias": "Supports stealth mode",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Supports stealth mode",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "scan_first_layer": [
+   {
+    "alias": "machine_scan_first_layer",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Scan the first layer",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "machine_pause_gcode": [
+   {
+    "alias": "pause_print_gcode",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Pause Print G-code",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "pause_print_gcode",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Pause Print G-code",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "auxiliary_fan": [
+   {
+    "alias": "Side Fan",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "z_hop_types": [
+   {
+    "alias": "travel_ramping_lift",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Use ramping lift",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "travel_ramping_lift",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Use ramping lift",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "Z Hop Type",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Z hop type",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "z_hop_when_prime": [
+   {
+    "alias": "retraction_hop_after_extruder_switch",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Z Hop After Extruder Switch",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "travel_slope": [
+   {
+    "alias": "Ramping slope angle",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Ramping slope angle",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "retract_lift_enforce": [
+   {
+    "alias": "retract_lift_top",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   }
+  ],
+  "support_air_filtration": [
+   {
+    "alias": "Air filtration enhancement",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Back Fan",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "thumbnails": [
+   {
+    "alias": "Thumbnails size",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "use_firmware_retraction": [
+   {
+    "alias": "machine_firmware_retract",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Firmware Retraction",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "use_relative_e_distances": [
+   {
+    "alias": "relative_extrusion",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Relative Extrusion",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "disable_m73": [
+   {
+    "alias": "remaining_times",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Supports remaining times",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "remaining_times",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Supports remaining times",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "preferred_orientation": [
+   {
+    "alias": "init_z_rotate",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   }
+  ],
+  "emit_machine_limits_to_gcode": [
+   {
+    "alias": "machine_limits_usage",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Purpose of Machine Limits",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "machine_limits_usage",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Purpose of Machine Limits",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "long_retractions_when_cut": [
+   {
+    "alias": "Long retraction when cut(experimental)",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Long retraction when cut(experimental)",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "machine_max_acceleration_extruding": [
+   {
+    "alias": "Maximum acceleration when extruding",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Maximum acceleration when extruding",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Maximum acceleration for extruding",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Maximum acceleration for extruding",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Maximum acceleration for extruding",
+    "slicer": "Snapmaker Orca",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "machine_max_acceleration_retracting": [
+   {
+    "alias": "Maximum acceleration when retracting",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Maximum acceleration when retracting",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Maximum acceleration for retracting",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Maximum acceleration for retracting",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Maximum acceleration for retracting",
+    "slicer": "Snapmaker Orca",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "machine_max_acceleration_travel": [
+   {
+    "alias": "Maximum acceleration for travel moves",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Maximum acceleration for travel moves",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Maximum acceleration for travel",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Maximum acceleration for travel",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Maximum acceleration for travel",
+    "slicer": "Snapmaker Orca",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "machine_max_acceleration_x": [
+   {
+    "alias": "Maximum acceleration X",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Maximum Acceleration X",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "machine_max_acceleration_y": [
+   {
+    "alias": "Maximum acceleration Y",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Maximum Acceleration Y",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "machine_max_acceleration_z": [
+   {
+    "alias": "Maximum acceleration Z",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Maximum Acceleration Z",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "machine_max_acceleration_e": [
+   {
+    "alias": "Maximum acceleration E",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Maximum Filament Acceleration",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "machine_max_speed_x": [
+   {
+    "alias": "machine_max_feedrate_x",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "machine_max_feedrate_x",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Maximum feedrate X",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "machine_max_feedrate_x",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Maximum Speed X",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "machine_max_speed_y": [
+   {
+    "alias": "machine_max_feedrate_y",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "machine_max_feedrate_y",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Maximum feedrate Y",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "machine_max_feedrate_y",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Maximum Speed Y",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "machine_max_speed_z": [
+   {
+    "alias": "machine_max_feedrate_z",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "machine_max_feedrate_z",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Maximum feedrate Z",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "machine_max_feedrate_z",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Maximum Speed Z",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "machine_max_speed_e": [
+   {
+    "alias": "machine_max_feedrate_e",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "machine_max_feedrate_e",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Maximum feedrate E",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "machine_max_feedrate_e",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Maximum Speed E",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "machine_min_extruding_rate": [
+   {
+    "alias": "Minimum feedrate when extruding",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Minimum feedrate when extruding",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Minimum speed for extruding",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Minimum speed for extruding",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Minimum speed for extruding",
+    "slicer": "Snapmaker Orca",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "machine_minimum_feedrate",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Minimum Feedrate",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "machine_min_travel_rate": [
+   {
+    "alias": "Minimum travel feedrate",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Minimum travel feedrate",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Minimum travel speed",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Minimum travel speed",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Minimum travel speed",
+    "slicer": "Snapmaker Orca",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "machine_max_jerk_x": [
+   {
+    "alias": "Maximum jerk X",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "machine_max_jerk_xy",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Default X-Y Jerk",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "machine_max_jerk_y": [
+   {
+    "alias": "Maximum jerk Y",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "machine_max_jerk_xy",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Default X-Y Jerk",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "machine_max_jerk_z": [
+   {
+    "alias": "Maximum jerk Z",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Default Z Jerk",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "machine_max_jerk_e": [
+   {
+    "alias": "Maximum jerk E",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Default Filament Jerk",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "machine_max_junction_deviation": [
+   {
+    "alias": "Maximum junction deviation",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Maximum Junction Deviation",
+    "slicer": "Snapmaker Orca",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "nozzle_diameter": [
+   {
+    "alias": "machine_nozzle_size",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   }
+  ],
+  "min_layer_height": [
+   {
+    "alias": "Min layer height",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "max_layer_height": [
+   {
+    "alias": "Max layer height",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "retraction_length": [
+   {
+    "alias": "retract_length",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "retract_length",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Retraction Length",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Retraction Length",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Retraction Length",
+    "slicer": "Snapmaker Orca",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "retraction_amount",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Retraction Distance",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "outputRetractDist",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "retract distance",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "z_hop": [
+   {
+    "alias": "retract_lift",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Lift height",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "retract_lift",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Lift height",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Z hop when retract",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Z hop when retract",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "retraction_hop",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Z Hop Height",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "retraction_hop_enabled",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Z Hop When Retracted",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "zHopDistance",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "z hop distance",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "retract_lift_above": [
+   {
+    "alias": "Z hop lower boundary",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Z hop lower boundary",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Z-hop lower boundary",
+    "slicer": "Snapmaker Orca",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "retract_lift_below": [
+   {
+    "alias": "Z hop upper boundary",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Z hop upper boundary",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Z-hop upper boundary",
+    "slicer": "Snapmaker Orca",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "retraction_speed": [
+   {
+    "alias": "retract_speed",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "retract_speed",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "retraction_retract_speed",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Retraction Retract Speed",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "outputRetractSpeed",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "retract rate",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "deretraction_speed": [
+   {
+    "alias": "deretract_speed",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Deretraction Speed",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "deretract_speed",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Deretraction Speed",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Deretraction Speed",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Deretraction Speed",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "retraction_prime_speed",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Retraction Prime Speed",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "retract_restart_extra": [
+   {
+    "alias": "Deretraction extra length",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Deretraction extra length",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "retraction_extra_prime_amount",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Retraction Extra Prime Amount",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "retraction_minimum_travel": [
+   {
+    "alias": "retract_before_travel",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Minimum travel after retraction",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "retract_before_travel",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Minimum travel after retraction",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "retraction_min_travel",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Retraction Minimum Travel",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "wipe_distance": [
+   {
+    "alias": "outputRetractWipe",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "retract wipe",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "retract_when_changing_layer": [
+   {
+    "alias": "retract_layer_change",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Retract on layer change",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "retract_layer_change",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Retract on layer change",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "retract_at_layer_change",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Retract at Layer Change",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "outputLayerRetract",
+    "slicer": "Kiri:Moto",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "force retract",
+    "slicer": "Kiri:Moto",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "retract_length_toolchange": [
+   {
+    "alias": "switch_extruder_retraction_amount",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Nozzle Switch Retraction Distance",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "retract_restart_extra_toolchange": [
+   {
+    "alias": "Extrat length on toolchange restart",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   }
+  ]
+ },
+ "choices": {
+  "slicing_mode=close_holes": [
+   {
+    "alias": "meshfix_union_all_remove_holes",
+    "slicer": "Cura",
+    "approx": true
+   },
+   {
+    "alias": "Remove All Holes",
+    "slicer": "Cura",
+    "approx": true
+   }
+  ],
+  "ensure_vertical_shell_thickness=ensure_all": [
+   {
+    "alias": "Enabled (2.7 experimental)",
+    "slicer": "SuperSlicer",
+    "approx": true
+   }
+  ],
+  "ensure_vertical_shell_thickness=ensure_moderate": [
+   {
+    "alias": "partial (2.9 experimental)",
+    "slicer": "SuperSlicer",
+    "approx": true
+   }
+  ],
+  "ensure_vertical_shell_thickness=none": [
+   {
+    "alias": "Disabled (2.5)",
+    "slicer": "SuperSlicer",
+    "approx": false
+   }
+  ],
+  "seam_position=aligned": [
+   {
+    "alias": "sharpest_corner",
+    "slicer": "Cura",
+    "approx": true
+   },
+   {
+    "alias": "Sharpest Corner",
+    "slicer": "Cura",
+    "approx": true
+   }
+  ],
+  "seam_position=back": [
+   {
+    "alias": "rear",
+    "slicer": "PrusaSlicer",
+    "approx": false
+   },
+   {
+    "alias": "rear",
+    "slicer": "SuperSlicer",
+    "approx": false
+   },
+   {
+    "alias": "User Specified",
+    "slicer": "Cura",
+    "approx": true
+   }
+  ],
+  "seam_position=nearest": [
+   {
+    "alias": "shortest",
+    "slicer": "Cura",
+    "approx": false
+   }
+  ],
+  "seam_position=random": [
+   {
+    "alias": "Scattered",
+    "slicer": "SuperSlicer",
+    "approx": false
+   }
+  ],
+  "wall_sequence=inner wall/outer wall": [
+   {
+    "alias": "inside_out",
+    "slicer": "Cura",
+    "approx": false
+   },
+   {
+    "alias": "Inside To Outside",
+    "slicer": "Cura",
+    "approx": false
+   },
+   {
+    "alias": "in-out",
+    "slicer": "Kiri:Moto",
+    "approx": false
+   }
+  ],
+  "wall_sequence=inner-outer-inner wall": [
+   {
+    "alias": "inner wall/outer wall/inner wall",
+    "slicer": "BambuStudio",
+    "approx": false
+   }
+  ],
+  "wall_sequence=outer wall/inner wall": [
+   {
+    "alias": "outside_in",
+    "slicer": "Cura",
+    "approx": false
+   },
+   {
+    "alias": "Outside To Inside",
+    "slicer": "Cura",
+    "approx": false
+   },
+   {
+    "alias": "out-in",
+    "slicer": "Kiri:Moto",
+    "approx": false
+   }
+  ],
+  "sparse_infill_pattern=adaptivecubic": [
+   {
+    "alias": "cubicsubdiv",
+    "slicer": "Cura",
+    "approx": false
+   },
+   {
+    "alias": "Cubic Subdivision",
+    "slicer": "Cura",
+    "approx": false
+   }
+  ],
+  "sparse_infill_pattern=honeycomb": [
+   {
+    "alias": "hex",
+    "slicer": "Kiri:Moto",
+    "approx": false
+   }
+  ],
+  "sparse_infill_pattern=quartercubic": [
+   {
+    "alias": "quarter_cubic",
+    "slicer": "Cura",
+    "approx": false
+   }
+  ],
+  "sparse_infill_pattern=rectilinear": [
+   {
+    "alias": "lines",
+    "slicer": "Cura",
+    "approx": false
+   },
+   {
+    "alias": "linear",
+    "slicer": "Kiri:Moto",
+    "approx": false
+   }
+  ],
+  "sparse_infill_pattern=tri-hexagon": [
+   {
+    "alias": "trihexagon",
+    "slicer": "Cura",
+    "approx": false
+   }
+  ],
+  "sparse_infill_pattern=triangles": [
+   {
+    "alias": "triangle",
+    "slicer": "Kiri:Moto",
+    "approx": false
+   }
+  ],
+  "top_surface_pattern=monotonicline": [
+   {
+    "alias": "monotoniclines",
+    "slicer": "PrusaSlicer",
+    "approx": false
+   },
+   {
+    "alias": "Monotonic Lines",
+    "slicer": "PrusaSlicer",
+    "approx": false
+   },
+   {
+    "alias": "monotoniclines",
+    "slicer": "SuperSlicer",
+    "approx": false
+   },
+   {
+    "alias": "Monotonic Lines",
+    "slicer": "SuperSlicer",
+    "approx": false
+   }
+  ],
+  "top_surface_pattern=rectilinear": [
+   {
+    "alias": "lines",
+    "slicer": "Cura",
+    "approx": false
+   }
+  ],
+  "bottom_surface_pattern=monotonicline": [
+   {
+    "alias": "monotoniclines",
+    "slicer": "PrusaSlicer",
+    "approx": false
+   },
+   {
+    "alias": "Monotonic Lines",
+    "slicer": "PrusaSlicer",
+    "approx": false
+   },
+   {
+    "alias": "monotoniclines",
+    "slicer": "SuperSlicer",
+    "approx": false
+   },
+   {
+    "alias": "Monotonic Lines",
+    "slicer": "SuperSlicer",
+    "approx": false
+   }
+  ],
+  "bottom_surface_pattern=rectilinear": [
+   {
+    "alias": "lines",
+    "slicer": "Cura",
+    "approx": false
+   }
+  ],
+  "internal_solid_infill_pattern=monotonicline": [
+   {
+    "alias": "monotoniclines",
+    "slicer": "SuperSlicer",
+    "approx": false
+   },
+   {
+    "alias": "Monotonic Lines",
+    "slicer": "SuperSlicer",
+    "approx": false
+   }
+  ],
+  "internal_solid_infill_pattern=rectilinear": [
+   {
+    "alias": "lines",
+    "slicer": "Cura",
+    "approx": false
+   }
+  ],
+  "ironing_type=solid": [
+   {
+    "alias": "All solid surfaces",
+    "slicer": "PrusaSlicer",
+    "approx": false
+   },
+   {
+    "alias": "All solid surfaces",
+    "slicer": "SuperSlicer",
+    "approx": false
+   }
+  ],
+  "ironing_type=top": [
+   {
+    "alias": "All top surfaces",
+    "slicer": "PrusaSlicer",
+    "approx": false
+   },
+   {
+    "alias": "All top surfaces",
+    "slicer": "SuperSlicer",
+    "approx": false
+   }
+  ],
+  "ironing_type=topmost": [
+   {
+    "alias": "Topmost surface only",
+    "slicer": "PrusaSlicer",
+    "approx": false
+   },
+   {
+    "alias": "Topmost surface only",
+    "slicer": "SuperSlicer",
+    "approx": false
+   },
+   {
+    "alias": "ironing_only_highest_layer",
+    "slicer": "Cura",
+    "approx": true
+   },
+   {
+    "alias": "Iron Only Highest Layer",
+    "slicer": "Cura",
+    "approx": true
+   }
+  ],
+  "ironing_pattern=rectilinear": [
+   {
+    "alias": "zigzag",
+    "slicer": "Cura",
+    "approx": true
+   },
+   {
+    "alias": "Zig Zag",
+    "slicer": "Cura",
+    "approx": true
+   }
+  ],
+  "fuzzy_skin=external": [
+   {
+    "alias": "Outside walls",
+    "slicer": "PrusaSlicer",
+    "approx": false
+   },
+   {
+    "alias": "Outside walls",
+    "slicer": "SuperSlicer",
+    "approx": false
+   },
+   {
+    "alias": "magic_fuzzy_skin_outside_only",
+    "slicer": "Cura",
+    "approx": true
+   },
+   {
+    "alias": "Fuzzy Skin Outside Only",
+    "slicer": "Cura",
+    "approx": true
+   }
+  ],
+  "fuzzy_skin=none": [
+   {
+    "alias": "None(allow paint)",
+    "slicer": "BambuStudio",
+    "approx": false
+   }
+  ],
+  "skirt_type=perobject": [
+   {
+    "alias": "skirt_per_object",
+    "slicer": "BambuStudio",
+    "approx": false
+   },
+   {
+    "alias": "Skirt per object",
+    "slicer": "BambuStudio",
+    "approx": false
+   }
+  ],
+  "draft_shield=enabled": [
+   {
+    "alias": "full",
+    "slicer": "Cura",
+    "approx": true
+   }
+  ],
+  "brim_type=brim_ears": [
+   {
+    "alias": "Brim ears",
+    "slicer": "SuperSlicer",
+    "approx": false
+   },
+   {
+    "alias": "Brim ears",
+    "slicer": "CrealityPrint",
+    "approx": false
+   }
+  ],
+  "brim_type=inner_only": [
+   {
+    "alias": "inside",
+    "slicer": "Cura",
+    "approx": false
+   },
+   {
+    "alias": "Inside Only",
+    "slicer": "Cura",
+    "approx": false
+   }
+  ],
+  "brim_type=no_brim": [
+   {
+    "alias": "No brim",
+    "slicer": "PrusaSlicer",
+    "approx": false
+   },
+   {
+    "alias": "No brim",
+    "slicer": "SuperSlicer",
+    "approx": false
+   }
+  ],
+  "brim_type=outer_and_inner": [
+   {
+    "alias": "everywhere",
+    "slicer": "Cura",
+    "approx": false
+   }
+  ],
+  "brim_type=outer_only": [
+   {
+    "alias": "outside",
+    "slicer": "Cura",
+    "approx": false
+   },
+   {
+    "alias": "Outside Only",
+    "slicer": "Cura",
+    "approx": false
+   }
+  ],
+  "support_type=normal(auto)": [
+   {
+    "alias": "automatic",
+    "slicer": "Kiri:Moto",
+    "approx": true
+   }
+  ],
+  "support_type=normal(manual)": [
+   {
+    "alias": "enforcers_only",
+    "slicer": "PrusaSlicer",
+    "approx": true
+   },
+   {
+    "alias": "Manual Only",
+    "slicer": "PrusaSlicer",
+    "approx": true
+   },
+   {
+    "alias": "manual",
+    "slicer": "Kiri:Moto",
+    "approx": true
+   }
+  ],
+  "support_type=tree(auto)": [
+   {
+    "alias": "tree",
+    "slicer": "Cura",
+    "approx": false
+   }
+  ],
+  "support_base_pattern=rectilinear": [
+   {
+    "alias": "lines",
+    "slicer": "Cura",
+    "approx": false
+   }
+  ],
+  "support_base_pattern=rectilinear-grid": [
+   {
+    "alias": "grid",
+    "slicer": "Cura",
+    "approx": true
+   }
+  ],
+  "support_style=organic": [
+   {
+    "alias": "tree_organic",
+    "slicer": "BambuStudio",
+    "approx": false
+   },
+   {
+    "alias": "Tree Organic",
+    "slicer": "BambuStudio",
+    "approx": false
+   },
+   {
+    "alias": "tree",
+    "slicer": "Cura",
+    "approx": true
+   },
+   {
+    "alias": "tree type",
+    "slicer": "Kiri:Moto",
+    "approx": true
+   }
+  ],
+  "support_interface_top_layers=0": [
+   {
+    "alias": "0 (off)",
+    "slicer": "SuperSlicer",
+    "approx": false
+   }
+  ],
+  "support_interface_top_layers=1": [
+   {
+    "alias": "1 (light)",
+    "slicer": "SuperSlicer",
+    "approx": false
+   }
+  ],
+  "support_interface_top_layers=2": [
+   {
+    "alias": "2 (default)",
+    "slicer": "SuperSlicer",
+    "approx": false
+   }
+  ],
+  "support_interface_top_layers=3": [
+   {
+    "alias": "3 (heavy)",
+    "slicer": "SuperSlicer",
+    "approx": false
+   }
+  ],
+  "support_interface_bottom_layers=0": [
+   {
+    "alias": "0 (off)",
+    "slicer": "SuperSlicer",
+    "approx": false
+   }
+  ],
+  "support_interface_bottom_layers=1": [
+   {
+    "alias": "1 (light)",
+    "slicer": "SuperSlicer",
+    "approx": false
+   }
+  ],
+  "support_interface_bottom_layers=2": [
+   {
+    "alias": "2 (default)",
+    "slicer": "SuperSlicer",
+    "approx": false
+   }
+  ],
+  "support_interface_bottom_layers=3": [
+   {
+    "alias": "3 (heavy)",
+    "slicer": "SuperSlicer",
+    "approx": false
+   }
+  ],
+  "support_interface_pattern=rectilinear": [
+   {
+    "alias": "lines",
+    "slicer": "Cura",
+    "approx": false
+   }
+  ],
+  "print_sequence=by layer": [
+   {
+    "alias": "all_at_once",
+    "slicer": "Cura",
+    "approx": false
+   },
+   {
+    "alias": "All at Once",
+    "slicer": "Cura",
+    "approx": false
+   }
+  ],
+  "print_sequence=by object": [
+   {
+    "alias": "complete_objects",
+    "slicer": "PrusaSlicer",
+    "approx": true
+   },
+   {
+    "alias": "Complete individual objects",
+    "slicer": "PrusaSlicer",
+    "approx": true
+   },
+   {
+    "alias": "complete_objects",
+    "slicer": "SuperSlicer",
+    "approx": true
+   },
+   {
+    "alias": "Complete individual objects",
+    "slicer": "SuperSlicer",
+    "approx": true
+   },
+   {
+    "alias": "one_at_a_time",
+    "slicer": "Cura",
+    "approx": false
+   },
+   {
+    "alias": "One at a Time",
+    "slicer": "Cura",
+    "approx": false
+   }
+  ],
+  "wall_generator=arachne": [
+   {
+    "alias": "adaptive",
+    "slicer": "Kiri:Moto",
+    "approx": true
+   }
+  ],
+  "wipe_tower_wall_type=rib": [
+   {
+    "alias": "prime_tower_rib_wall",
+    "slicer": "BambuStudio",
+    "approx": true
+   },
+   {
+    "alias": "Rib wall",
+    "slicer": "BambuStudio",
+    "approx": true
+   }
+  ],
+  "seam_slope_type=all": [
+   {
+    "alias": "Contours and holes",
+    "slicer": "SuperSlicer",
+    "approx": false
+   },
+   {
+    "alias": "everywhere",
+    "slicer": "PrusaSlicer",
+    "approx": true
+   }
+  ],
+  "seam_slope_type=external": [
+   {
+    "alias": "Contours",
+    "slicer": "SuperSlicer",
+    "approx": false
+   },
+   {
+    "alias": "contours",
+    "slicer": "PrusaSlicer",
+    "approx": true
+   }
+  ],
+  "seam_slope_type=none": [
+   {
+    "alias": "nowhere",
+    "slicer": "PrusaSlicer",
+    "approx": true
+   }
+  ],
+  "gcode_flavor=marlin": [
+   {
+    "alias": "Marlin (legacy)",
+    "slicer": "PrusaSlicer",
+    "approx": false
+   }
+  ],
+  "z_hop_types=Slope Lift": [
+   {
+    "alias": "travel_ramping_lift",
+    "slicer": "PrusaSlicer",
+    "approx": true
+   },
+   {
+    "alias": "Use ramping lift",
+    "slicer": "PrusaSlicer",
+    "approx": true
+   }
+  ]
+ }
+}

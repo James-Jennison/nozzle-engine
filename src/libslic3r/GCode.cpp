@@ -2378,7 +2378,12 @@ void GCode::_do_export(Print& print, GCodeOutputStream& file, ThumbnailsGenerato
     m_placeholder_parser_integration.parser = print.placeholder_parser();
     m_placeholder_parser_integration.parser.update_timestamp();
     m_placeholder_parser_integration.parser.update_user_name();
-    m_placeholder_parser_integration.context.rng = std::mt19937(std::chrono::high_resolution_clock::now().time_since_epoch().count());
+    // Nozzle: NOZZLE_GCODE_RANDOM_SEED makes the custom G-code random() function reproducible (for equivalence tests);
+    // without it the seed is the clock, as before.
+    if (const char* seed = std::getenv("NOZZLE_GCODE_RANDOM_SEED"); seed != nullptr && *seed != '\0')
+        m_placeholder_parser_integration.context.rng = std::mt19937(std::strtoul(seed, nullptr, 10));
+    else
+        m_placeholder_parser_integration.context.rng = std::mt19937(std::chrono::high_resolution_clock::now().time_since_epoch().count());
     // Enable passing global variables between PlaceholderParser invocations.
     m_placeholder_parser_integration.context.global_config = std::make_unique<DynamicConfig>();
     print.update_object_placeholders(m_placeholder_parser_integration.parser.config_writable(), ".gcode");

@@ -850,6 +850,9 @@ CopyFileResult copy_file_inner(const std::string& from, const std::string& to, s
 	// We want to allow copying files on Linux to succeed even if changing the file attributes fails.
 	// That may happen when copying on some exotic file system, for example Linux on Chrome.
 	copy_file_linux(source, target, ec);
+#elif defined(__EMSCRIPTEN__)
+	// Nozzle browser engine: Boost 1.86 removed copy_option; copy_options is its replacement.
+	boost::filesystem::copy_file(source, target, boost::filesystem::copy_options::overwrite_existing, ec);
 #else // __linux__
 	boost::filesystem::copy_file(source, target, boost::filesystem::copy_option::overwrite_if_exists, ec);
 #endif // __linux__

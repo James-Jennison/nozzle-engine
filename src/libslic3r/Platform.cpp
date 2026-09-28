@@ -82,6 +82,12 @@ void detect_platform()
 			::fclose(f);
 		}
 	}
+#elif defined(__EMSCRIPTEN__)
+	// Nozzle browser engine: WebAssembly in a browser worker. Nothing host-specific is available; behave as generic Linux
+	// (the closest match for path and file-system decisions).
+	BOOST_LOG_TRIVIAL(info) << "Platform: WebAssembly";
+	s_platform 		  = Platform::Linux;
+	s_platform_flavor = PlatformFlavor::GenericLinux;
 #elif defined(__OpenBSD__)
     BOOST_LOG_TRIVIAL(info) << "Platform: OpenBSD";
 	s_platform 		  = Platform::BSDUnix;

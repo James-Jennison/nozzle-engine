@@ -445,6 +445,57 @@ static inline Point wipe_tower_point_to_object_point(GCode& gcodegen, const Vec2
     return Point(scale_(wipe_tower_pt.x() - gcodegen.origin()(0)), scale_(wipe_tower_pt.y() - gcodegen.origin()(1)));
 }
 
+// Nozzle (from upstream OrcaSlicer): what Bambu's two-extruder change_filament_gcode reads about an extruder change.
+// This engine prints the prime tower without upstream's interface layers and travels to it without upstream's
+// perimeter-avoiding path, so is_prime_tower_interface and wipe_avoid_perimeter are false: the state upstream is in
+// with enable_tower_interface_features and prime_tower_skip_points off. The template handles both.
+static void set_extruder_change_values(DynamicConfig &config, const FullPrintConfig &full_config, const GCodeWriter &writer,
+                                       int old_filament, int new_filament, int layer_index, float wipe_avoid_pos_x)
+{
+    auto extruder_of = [&full_config](int filament) {
+        const std::vector<int> &map = full_config.filament_map.values;
+        return filament >= 0 && filament < int(map.size()) && map[filament] > 0 ? map[filament] - 1 : 0;
+    };
+    const std::vector<std::string> &variants = full_config.printer_extruder_variant.values;
+    auto variant_of = [&](int filament) {
+        const int extruder = extruder_of(filament);
+        return filament >= 0 && extruder < int(variants.size()) ? variants[extruder] : std::string();
+    };
+    config.set_key_value("current_filament_id", new ConfigOptionInt(old_filament));
+    config.set_key_value("next_filament_id", new ConfigOptionInt(new_filament));
+    config.set_key_value("old_extruder_variant", new ConfigOptionString(variant_of(old_filament)));
+    config.set_key_value("new_extruder_variant", new ConfigOptionString(variant_of(new_filament)));
+    // How far the incoming filament is retracted now (upstream GCodeWriter::get_extruder_retracted_length).
+    double retracted = 0.;
+    for (const Extruder &extruder : writer.extruders())
+        if (int(extruder.id()) == new_filament)
+            retracted = extruder.retracted();
+    config.set_key_value("new_extruder_retracted_length", new ConfigOptionFloat(retracted));
+    // Cooling before the tower, per filament; none on the first layer.
+    std::vector<double> cooling_before_tower(full_config.filament_type.values.size(), 0.);
+    if (layer_index != 0)
+        for (size_t i = 0; i < cooling_before_tower.size(); ++i)
+            cooling_before_tower[i] = full_config.filament_cooling_before_tower.is_nil(i) ? 0. : full_config.filament_cooling_before_tower.get_at(i);
+    config.set_key_value("filament_cooling_before_tower", new ConfigOptionFloats(cooling_before_tower));
+    int interface_temp = full_config.filament_tower_interface_print_temp.get_at(new_filament);
+    if (interface_temp == -1)
+        interface_temp = full_config.nozzle_temperature_range_high.get_at(new_filament);
+    config.set_key_value("is_prime_tower_interface", new ConfigOptionBool(false));
+    config.set_key_value("filament_tower_interface_purge_volume", new ConfigOptionFloat(full_config.filament_tower_interface_purge_volume.get_at(new_filament)));
+    config.set_key_value("filament_tower_interface_print_temp", new ConfigOptionInt(interface_temp));
+    config.set_key_value("wipe_avoid_perimeter", new ConfigOptionBool(false));
+    config.set_key_value("wipe_avoid_pos_x", new ConfigOptionFloat(wipe_avoid_pos_x));
+}
+
+// Upstream get_wipe_avoid_pos_x: an X just outside the wipe tower, inside Bambu's safe band, for the template's wipe.
+static float wipe_avoid_pos_x(float tower_min_x, float tower_max_x, float offset)
+{
+    const float left = 100, right = 250;
+    if (const float a = tower_max_x + offset; a > left && a < right) return a;
+    if (const float b = tower_min_x - offset; b > left && b < right) return b;
+    return 110.f;
+}
+
 std::string WipeTowerIntegration::append_tcr(GCode& gcodegen, const WipeTower::ToolChangeResult& tcr, int new_extruder_id, double z) const
 {
     if (new_extruder_id != -1 && new_extruder_id != tcr.new_tool)
@@ -593,6 +644,9 @@ std::string WipeTowerIntegration::append_tcr(GCode& gcodegen, const WipeTower::T
             config.set_key_value("travel_point_3_y", new ConfigOptionFloat(float(travel_point_3.y())));
 
             config.set_key_value("flush_length", new ConfigOptionFloat(purge_length));
+            // Upstream measures the tower's bounding box; this engine's tower is unrotated for these printers, so its X span.
+            set_extruder_change_values(config, full_config, gcode_writer, previous_extruder_id, new_extruder_id, gcodegen.m_layer_index,
+                                       wipe_avoid_pos_x(m_wipe_tower_pos.x() + m_left, m_wipe_tower_pos.x() + m_right, 3.f));
             { // Nozzle (from upstream OrcaSlicer)
                 std::vector<double> flush_speeds; std::vector<int> flush_temps;
                 nozzle_flush_values(gcodegen.config(), flush_speeds, flush_temps);
@@ -8881,6 +8935,7 @@ std::string GCode::set_extruder(unsigned int extruder_id, double print_z, bool b
     dyn_config.set_key_value("travel_point_3_y", new ConfigOptionFloat(float(travel_point_3.y())));
 
     dyn_config.set_key_value("flush_length", new ConfigOptionFloat(wipe_length));
+    set_extruder_change_values(dyn_config, m_config, m_writer, previous_extruder_id, int(extruder_id), m_layer_index, 110.f);
     { // Nozzle (from upstream OrcaSlicer)
         std::vector<double> flush_speeds; std::vector<int> flush_temps;
         nozzle_flush_values(m_config, flush_speeds, flush_temps);

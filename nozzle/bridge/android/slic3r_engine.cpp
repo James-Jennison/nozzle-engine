@@ -10,6 +10,7 @@
 #include <atomic>
 #include <memory>
 #include <mutex>
+#include <set>
 #include <stdexcept>
 #include <unordered_map>
 #include <algorithm>
@@ -22,6 +23,7 @@
 #include "libslic3r/Model.hpp"
 #include "libslic3r/Print.hpp"
 #include "libslic3r/PrintConfig.hpp"
+#include "libslic3r/ExtruderVariants.hpp"
 #include "libslic3r/Config.hpp"
 #include "libslic3r/TriangleSelector.hpp"
 #include "libslic3r/Format/bbs_3mf.hpp"
@@ -108,6 +110,15 @@ void mark_bambu_printer(Slic3r::Print& print, const Slic3r::DynamicPrintConfig& 
 #else
     (void) print; (void) config;
 #endif
+}
+
+// Gives every filament of a multi-filament print its own copy of a Bambu filament profile's extruder-variant columns
+// (Slic3r::expand_filament_variant_columns); the keys the request overrides are the per-filament ones.
+void expand_filament_variants(Slic3r::DynamicPrintConfig& config, size_t profile_columns,
+                              const std::vector<std::pair<std::string, std::string>>& config_overrides) {
+    std::set<std::string> per_filament_keys;
+    for (const auto& override_entry : config_overrides) per_filament_keys.insert(override_entry.first);
+    Slic3r::expand_filament_variant_columns(config, profile_columns, per_filament_keys);
 }
 
 void drop_unset_feature_filaments(Slic3r::DynamicPrintConfig& profile) {
@@ -493,7 +504,9 @@ std::vector<ArrangeResult> arrange_models(const std::vector<ArrangeItem>& items,
         drop_unset_feature_filaments(profile_config);
         config.apply(profile_config);
     }
+    const size_t filament_columns = Slic3r::filament_variant_columns(config);
     for (const auto& [key, value] : config_overrides) config.set_deserialize_strict(key, value);
+    expand_filament_variants(config, filament_columns, config_overrides);
 
     Model model;
     for (const ArrangeItem& item : items) {
@@ -572,9 +585,11 @@ void slice_file(const std::string& input_model_path,
         config.apply(profile_config);
     }
 
+    const size_t filament_columns = Slic3r::filament_variant_columns(config);
     for (const auto& [key, value] : config_overrides) {
         config.set_deserialize_strict(key, value);
     }
+    expand_filament_variants(config, filament_columns, config_overrides);
 
     Model model = load_and_place_model(input_model_path, config, transform);
     slice_model(model, config, output_gcode_path);
@@ -632,9 +647,11 @@ void slice_bambu_bundle(const std::string& input_model_path,
         drop_unset_feature_filaments(profile_config);
         config.apply(profile_config);
     }
+    const size_t filament_columns = Slic3r::filament_variant_columns(config);
     for (const auto& [key, value] : config_overrides) {
         config.set_deserialize_strict(key, value);
     }
+    expand_filament_variants(config, filament_columns, config_overrides);
 
     Model model = load_and_place_model(input_model_path, config, transform);
     bundle_model(model, config, output_bundle_path);
@@ -671,9 +688,11 @@ void slice_multi_object_bambu_bundle(const std::vector<std::pair<std::string, Mo
         drop_unset_feature_filaments(profile_config);
         config.apply(profile_config);
     }
+    const size_t filament_columns = Slic3r::filament_variant_columns(config);
     for (const auto& [key, value] : config_overrides) {
         config.set_deserialize_strict(key, value);
     }
+    expand_filament_variants(config, filament_columns, config_overrides);
 
     Model combined;
     size_t object_index = 0;
@@ -726,9 +745,11 @@ void slice_multi_object(const std::vector<std::tuple<std::string, ModelTransform
         drop_unset_feature_filaments(profile_config);
         config.apply(profile_config);
     }
+    const size_t filament_columns = Slic3r::filament_variant_columns(config);
     for (const auto& [key, value] : config_overrides) {
         config.set_deserialize_strict(key, value);
     }
+    expand_filament_variants(config, filament_columns, config_overrides);
 
     Model combined;
     size_t object_index = 0;
@@ -1025,9 +1046,11 @@ void slice_paint_session(PaintSessionHandle handle, const std::string& output_gc
         drop_unset_feature_filaments(profile_config);
         s.config.apply(profile_config);
     }
+    const size_t filament_columns = Slic3r::filament_variant_columns(s.config);
     for (const auto& [key, value] : config_overrides) {
         s.config.set_deserialize_strict(key, value);
     }
+    expand_filament_variants(s.config, filament_columns, config_overrides);
     slice_model(s.model, s.config, output_gcode_path);
 }
 

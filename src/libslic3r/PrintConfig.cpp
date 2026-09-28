@@ -2145,6 +2145,31 @@ void PrintConfigDef::init_fff_params()
     def->sidetext = L("mm");
     def->set_default_value(new ConfigOptionFloatsNullable {10});
 
+    // Nozzle (from upstream OrcaSlicer): prime tower settings Bambu's change_filament_gcode reads.
+    def = this->add("filament_cooling_before_tower", coFloats);
+    def->label = L("Cooling before tower");
+    def->tooltip = L("Nozzle temperature drop before printing the prime tower after a filament change.");
+    def->sidetext = u8"°C";
+    def->mode = comDevelop;
+    def->nullable = true;
+    def->set_default_value(new ConfigOptionFloatsNullable { 10. });
+
+    def = this->add("filament_tower_interface_purge_volume", coFloats);
+    def->label = L("Interface purge volume");
+    def->tooltip = L("Purge volume for the prime tower interface layer.");
+    def->sidetext = L("mm³");
+    def->min = 0;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionFloats { 20. });
+
+    def = this->add("filament_tower_interface_print_temp", coInts);
+    def->label = L("Interface print temperature");
+    def->tooltip = L("Print temperature for prime tower interface layer (where different materials meet). If set to -1, use max recommended nozzle temperature.");
+    def->sidetext = u8"°C";
+    def->min = -1;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionInts { -1 });
+
     def = this->add("filament_map", coInts);
     def->label = L("Filament map to extruder");
     def->tooltip = L("Filament map to extruder.");

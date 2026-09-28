@@ -235,6 +235,65 @@ void collapse_to_filaments(DynamicPrintConfig &config, const std::set<std::strin
 
 } // namespace
 
+size_t filament_variant_columns(const ConfigBase &config)
+{
+    const auto *variants = dynamic_cast<const ConfigOptionStrings*>(config.option("filament_extruder_variant"));
+    return variants ? variants->values.size() : 0;
+}
+
+namespace {
+// Tiles a vector option's k profile columns once per filament, or repeats each of its per-filament values k times.
+template<class Opt>
+void expand_columns(ConfigOption *option, size_t filaments, size_t columns, bool per_filament)
+{
+    auto *opt = dynamic_cast<Opt*>(option);
+    if (opt == nullptr || opt->values.empty())
+        return;
+    decltype(opt->values) values;
+    values.reserve(filaments * columns);
+    for (size_t f = 0; f < filaments; ++f)
+        for (size_t c = 0; c < columns; ++c)
+            values.push_back(per_filament ? opt->get_at(f) : opt->get_at(c));
+    opt->values = std::move(values);
+}
+} // namespace
+
+void expand_filament_variant_columns(DynamicPrintConfig &config, size_t profile_columns, const std::set<std::string> &per_filament_keys)
+{
+    size_t filaments = 0;
+    for (const char *key : { "filament_diameter", "filament_colour", "filament_type" })
+        if (const auto *vec = dynamic_cast<const ConfigOptionVectorBase*>(config.option(key)))
+            filaments = std::max(filaments, vec->size());
+    if (profile_columns <= 1 || filaments <= 1)
+        return;
+    std::set<std::string> keys = filament_options_with_variant;
+    keys.insert("filament_extruder_variant");
+    for (const std::string &key : keys) {
+        const ConfigOptionDef *def = config.def()->get(key);
+        ConfigOption          *opt = def ? config.option(key) : nullptr;
+        if (opt == nullptr)
+            continue;
+        const bool per_filament = per_filament_keys.count(key) > 0;
+        // A value the profile left single (not per variant) applies to every column already.
+        if (! per_filament && static_cast<const ConfigOptionVectorBase*>(opt)->size() != profile_columns)
+            continue;
+        switch (def->type) {
+        case coStrings:          expand_columns<ConfigOptionStrings>(opt, filaments, profile_columns, per_filament); break;
+        case coInts:             expand_columns<ConfigOptionInts>(opt, filaments, profile_columns, per_filament); break;
+        case coFloats:           expand_columns<ConfigOptionFloats>(opt, filaments, profile_columns, per_filament); break;
+        case coPercents:         expand_columns<ConfigOptionPercents>(opt, filaments, profile_columns, per_filament); break;
+        case coFloatsOrPercents: expand_columns<ConfigOptionFloatsOrPercents>(opt, filaments, profile_columns, per_filament); break;
+        case coBools:            expand_columns<ConfigOptionBools>(opt, filaments, profile_columns, per_filament); break;
+        case coEnums:            expand_columns<ConfigOptionEnumsGeneric>(opt, filaments, profile_columns, per_filament); break;
+        default: break;
+        }
+    }
+    std::vector<int> ids;
+    for (size_t f = 0; f < filaments; ++f)
+        ids.insert(ids.end(), profile_columns, int(f + 1));
+    config.option<ConfigOptionInts>("filament_self_index", true)->values = std::move(ids);
+}
+
 bool support_different_extruders(const DynamicPrintConfig &config, int &extruder_count)
 {
     std::set<std::string> variants;

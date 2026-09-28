@@ -9,7 +9,7 @@ NOZZLE_ROOT="${NOZZLE_ROOT:-/mnt/faststorage/Nozzle It All}"
 PREFIX="${SNAPMAKER_DEPS:-/mnt/faststorage/Snapmaker-Orca/OrcaSlicer/deps/build/destdir/usr/local}"
 WORK="${ENGINE_WORK:-/mnt/faststorage/build-work/test-slicer-engine}"
 BDIR="$WORK/build-desktop"; DIST="$WORK/dist"
-BRIDGE="${NOZZLE_BRIDGE:-$NOZZLE_ROOT/engine/native/bridge}"
+BRIDGE="${NOZZLE_BRIDGE:-$ROOT/nozzle/bridge/native}"
 JOBS="${HEAVY_BUILD_JOBS:-${JOBS:-6}}"
 export PKG_CONFIG_PATH="$PREFIX/lib64/pkgconfig:$PREFIX/lib/pkgconfig"
 cmake -S "$ROOT" -B "$BDIR" -GNinja -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$PREFIX" \
@@ -23,5 +23,5 @@ cmake -S "$ROOT" -B "$BDIR" -GNinja -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_B
 cmake --build "$BDIR" -j"$JOBS" --target nozzle-engine
 mkdir -p "$DIST"; cp "$BDIR/android_jni/nozzle-engine" "$DIST/"; strip "$DIST/nozzle-engine"
 { echo "nozzle-engine built $(date -u +%FT%TZ) from $(git -C "$ROOT" rev-parse HEAD)$(git -C "$ROOT" diff --quiet || echo ' (dirty)')"
-  echo "bridge: $BRIDGE (nozzle $(git -C "$NOZZLE_ROOT" rev-parse --short HEAD))"; echo "deps: $PREFIX"
+  echo "bridge: $BRIDGE"; echo "deps: $PREFIX"
   (cd "$DIST" && sha256sum nozzle-engine); } | tee "$DIST/PROVENANCE.txt"

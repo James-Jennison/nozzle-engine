@@ -76,6 +76,7 @@ Model& Model::assign_copy(const Model &rhs)
     // BBS
     this->plates_custom_gcodes = rhs.plates_custom_gcodes;
     this->curr_plate_index = rhs.curr_plate_index;
+    this->virtual_extruders = rhs.virtual_extruders; // Nozzle: PrusaSlicer 2.9.6 Model::assign_copy
     this->calib_pa_pattern.reset();
 
     if (rhs.calib_pa_pattern) {
@@ -123,6 +124,7 @@ Model& Model::assign_copy(Model &&rhs)
     // BBS
     this->plates_custom_gcodes = std::move(rhs.plates_custom_gcodes);
     this->curr_plate_index = rhs.curr_plate_index;
+    this->virtual_extruders = std::move(rhs.virtual_extruders); // Nozzle: PrusaSlicer 2.9.6 Model::assign_copy
     this->calib_pa_pattern.reset();
     this->calib_pa_pattern.swap(rhs.calib_pa_pattern);
 

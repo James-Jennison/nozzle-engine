@@ -3189,11 +3189,19 @@ void PrintObject::bridge_over_infill()
 
 // Clamp extruder IDs that exceed the total number of available filaments
 // (physical + virtual/mixed) back to the default extruder.
-static void clamp_exturder_to_default(ConfigOptionInt &opt, size_t num_total_filaments)
+// Nozzle It All engine: a PrusaSlicer 2.9.6 virtual extruder id is kept as well (PrusaSlicer 2.9.6 PrintObject.cpp
+// clamp_exturder_to_default, 2619-2635).
+static void clamp_exturder_to_default(ConfigOptionInt &opt, size_t num_total_filaments,
+                                      const FullSpectrum::VirtualExtruders &virtual_extruders = {})
 {
-    if (opt.value > (int)num_total_filaments)
-        // assign the default extruder
-        opt.value = 1;
+    if (opt.value <= (int)num_total_filaments)
+        return;
+
+    if (FullSpectrum::is_virtual_extruder(static_cast<unsigned int>(opt.value), virtual_extruders))
+        return;
+
+    // assign the default extruder
+    opt.value = 1;
 }
 
 PrintObjectConfig PrintObject::object_config_from_model_object(const PrintObjectConfig &default_object_config, const ModelObject &object, size_t num_extruders)
@@ -3238,7 +3246,11 @@ static void apply_to_print_region_config(PrintRegionConfig &out, const DynamicPr
             }
 }
 
-PrintRegionConfig region_config_from_model_volume(const PrintRegionConfig &default_or_parent_region_config, const DynamicPrintConfig *layer_range_config, const ModelVolume &volume, size_t num_extruders)
+// Nozzle It All engine: `virtual_extruders` / `out_source_virtual_extruder_id` are PrusaSlicer 2.9.6's
+// (PrintObject.cpp region_config_from_model_volume, 2680-2710).
+PrintRegionConfig region_config_from_model_volume(const PrintRegionConfig &default_or_parent_region_config, const DynamicPrintConfig *layer_range_config, const ModelVolume &volume, size_t num_extruders,
+                                                  const FullSpectrum::VirtualExtruders &virtual_extruders = {},
+                                                  std::optional<unsigned int> *out_source_virtual_extruder_id = nullptr)
 {
     PrintRegionConfig config = default_or_parent_region_config;
     if (volume.is_model_part()) {
@@ -3256,10 +3268,15 @@ PrintRegionConfig region_config_from_model_volume(const PrintRegionConfig &defau
         assert(volume.is_model_part());
     	apply_to_print_region_config(config, *layer_range_config);
     }
+    const std::optional<unsigned int> source_virtual = FullSpectrum::source_virtual_extruder_in_region_config(config, virtual_extruders);
+    if (out_source_virtual_extruder_id != nullptr) {
+        *out_source_virtual_extruder_id = source_virtual;
+    }
+
     // Clamp invalid extruders to the default extruder (with index 1).
-    clamp_exturder_to_default(config.sparse_infill_filament,       num_extruders);
-    clamp_exturder_to_default(config.wall_filament,    num_extruders);
-    clamp_exturder_to_default(config.solid_infill_filament, num_extruders);
+    clamp_exturder_to_default(config.sparse_infill_filament,       num_extruders, virtual_extruders);
+    clamp_exturder_to_default(config.wall_filament,    num_extruders, virtual_extruders);
+    clamp_exturder_to_default(config.solid_infill_filament, num_extruders, virtual_extruders);
     if (config.sparse_infill_density.value < 0.00011f)
         // Switch of infill for very low infill rates, also avoid division by zero in infill generator for these very low rates.
         // See GH issue #5910.
@@ -3358,7 +3375,9 @@ std::vector<unsigned int> PrintObject::object_extruders() const
         }
     }
     sort_remove_duplicates(extruders);
-    return extruders;
+    // Nozzle It All engine: as Print::object_extruders() (PrusaSlicer 2.9.6), a virtual extruder id (also reached here
+    // through a volume's own or painted extruder) stands for its physical components.
+    return FullSpectrum::expand_virtual_extruders_0based(extruders, this->print()->virtual_extruders());
 }
 
 namespace {

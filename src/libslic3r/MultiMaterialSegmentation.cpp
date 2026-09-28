@@ -2197,7 +2197,13 @@ std::vector<std::vector<ExPolygons>> segmentation_by_painting(const PrintObject 
 std::vector<std::vector<ExPolygons>> multi_material_segmentation_by_painting(const PrintObject &print_object, const std::function<void()> &throw_on_cancel_callback) {
     const size_t num_physical_filaments = print_object.print()->config().filament_colour.size();
     const size_t num_total_filaments    = print_object.print()->mixed_filament_manager().total_filaments(num_physical_filaments);
-    const size_t num_facets_states      = num_total_filaments + 1;
+    // Nozzle It All engine, PrusaSlicer 2.9.6 (MultiMaterialSegmentation.cpp calc_num_facets_states, 2358-2366): room
+    // for every virtual extruder's painted state as well.
+    size_t max_extruder_id = num_total_filaments;
+    for (const FullSpectrum::VirtualExtruder& virtual_extruder : print_object.print()->virtual_extruders()) {
+        max_extruder_id = std::max<size_t>(max_extruder_id, virtual_extruder.id);
+    }
+    const size_t num_facets_states      = max_extruder_id + 1;
     const float  max_width          = float(print_object.config().mmu_segmented_region_max_width.value);
     const float  interlocking_depth = float(print_object.config().mmu_segmented_region_interlocking_depth.value);
     const bool   interlocking_beam  = print_object.config().interlocking_beam.value;

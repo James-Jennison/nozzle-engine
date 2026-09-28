@@ -85,6 +85,23 @@ using namespace std::literals::string_view_literals;
 
 namespace Slic3r {
 
+// Nozzle (from upstream OrcaSlicer): flush_volumetric_speeds / flush_temperatures, one per filament. A 0 (or unset)
+// flush speed falls back to the filament's max volumetric speed, and a 0 flush temperature to the top of its
+// recommended nozzle range. Upstream's fast-purge temperature (prime_volume_mode) isn't in this engine.
+static void nozzle_flush_values(const PrintConfig& c, std::vector<double>& speeds, std::vector<int>& temps)
+{
+    const size_t n = c.filament_max_volumetric_speed.values.size();
+    speeds.assign(n, 0.); temps.assign(n, 0);
+    for (size_t i = 0; i < n; ++i) {
+        double s = i < c.filament_flush_volumetric_speed.values.size() ? c.filament_flush_volumetric_speed.values[i] : 0.;
+        if (std::isnan(s) || s <= 0.) s = c.filament_max_volumetric_speed.get_at(i);
+        int t = i < c.filament_flush_temp.values.size() ? c.filament_flush_temp.values[i] : 0;
+        if (t == ConfigOptionIntsNullable::nil_value() || t <= 0) t = c.nozzle_temperature_range_high.get_at(i);
+        speeds[i] = s; temps[i] = t;
+    }
+}
+
+
 //! macro used to mark string used at localization,
 //! return same string
 #define L(s) (s)
@@ -576,6 +593,12 @@ std::string WipeTowerIntegration::append_tcr(GCode& gcodegen, const WipeTower::T
             config.set_key_value("travel_point_3_y", new ConfigOptionFloat(float(travel_point_3.y())));
 
             config.set_key_value("flush_length", new ConfigOptionFloat(purge_length));
+            { // Nozzle (from upstream OrcaSlicer)
+                std::vector<double> flush_speeds; std::vector<int> flush_temps;
+                nozzle_flush_values(gcodegen.config(), flush_speeds, flush_temps);
+                config.set_key_value("flush_volumetric_speeds", new ConfigOptionFloats(flush_speeds));
+                config.set_key_value("flush_temperatures", new ConfigOptionInts(flush_temps));
+            }
 
             int   flush_count = std::min(g_max_flush_count, (int) std::round(purge_volume / g_purge_volume_one_time));
             float flush_unit  = purge_length / flush_count;
@@ -2501,6 +2524,8 @@ void GCode::_do_export(Print& print, GCodeOutputStream& file, ThumbnailsGenerato
     // BBS
     this->placeholder_parser().set("initial_no_support_tool", initial_non_support_extruder_id);
     this->placeholder_parser().set("initial_no_support_extruder", initial_non_support_extruder_id);
+    // Nozzle (from upstream OrcaSlicer): the filament-named spelling newer Bambu start G-code uses.
+    this->placeholder_parser().set("initial_no_support_filament_id", (int) initial_non_support_extruder_id);
     this->placeholder_parser().set("current_extruder", initial_extruder_id);
     // Orca: set the key for compatibilty
     this->placeholder_parser().set("retraction_distance_when_cut", m_config.retraction_distances_when_cut.get_at(initial_extruder_id));
@@ -2602,6 +2627,14 @@ void GCode::_do_export(Print& print, GCodeOutputStream& file, ThumbnailsGenerato
             this->placeholder_parser().set("in_head_wrap_detect_zone", !intersection_pl(project_polys, {head_wrap_detect_zone}).empty());
         }
 
+        { // Nozzle (from upstream OrcaSlicer): the height of the tallest object, rounded up.
+            coordf_t max_print_z = 0;
+            for (auto& obj : print.objects())
+                if (!obj->layers().empty())
+                    max_print_z = std::max(max_print_z, (*std::max_element(obj->layers().begin(), obj->layers().end(), [](Layer* a, Layer* b) { return a->print_z < b->print_z; }))->print_z);
+            this->placeholder_parser().set("max_print_z", new ConfigOptionInt(std::ceil(max_print_z)));
+        }
+
         BoundingBoxf mesh_bbox(m_config.bed_mesh_min, m_config.bed_mesh_max);
         auto         mesh_margin = m_config.adaptive_bed_mesh_margin.value;
         mesh_bbox.min            = mesh_bbox.min.cwiseMax((bbox.min.array() - mesh_margin).matrix());
@@ -2672,6 +2705,17 @@ void GCode::_do_export(Print& print, GCodeOutputStream& file, ThumbnailsGenerato
         this->placeholder_parser().set("bed_temperature_initial_layer_vector", new ConfigOptionString());
         this->placeholder_parser().set("chamber_temperature", new ConfigOptionInts(m_config.chamber_temperature));
         this->placeholder_parser().set("overall_chamber_temperature", new ConfigOptionInt(max_chamber_temp));
+        { // Nozzle (from upstream OrcaSlicer): variables newer Bambu start G-code reads.
+            int min_temperature_vitrification = std::numeric_limits<int>::max();
+            for (const unsigned int extruder_id : print.extruders())
+                min_temperature_vitrification = std::min(min_temperature_vitrification, m_config.temperature_vitrification.get_at(extruder_id));
+            if (min_temperature_vitrification == std::numeric_limits<int>::max()) min_temperature_vitrification = 0;
+            this->placeholder_parser().set("min_vitrification_temperature", new ConfigOptionInt(min_temperature_vitrification));
+            std::vector<double> flush_speeds; std::vector<int> flush_temps;
+            nozzle_flush_values(m_config, flush_speeds, flush_temps);
+            this->placeholder_parser().set("flush_volumetric_speeds", new ConfigOptionFloats(flush_speeds));
+            this->placeholder_parser().set("flush_temperatures", new ConfigOptionInts(flush_temps));
+        }
 
         // SoftFever: support variables `first_layer_temperature` and `first_layer_bed_temperature`
         this->placeholder_parser().set("first_layer_bed_temperature", new ConfigOptionInts(*first_bed_temp_opt));
@@ -8732,6 +8776,12 @@ std::string GCode::set_extruder(unsigned int extruder_id, double print_z, bool b
     dyn_config.set_key_value("travel_point_3_y", new ConfigOptionFloat(float(travel_point_3.y())));
 
     dyn_config.set_key_value("flush_length", new ConfigOptionFloat(wipe_length));
+    { // Nozzle (from upstream OrcaSlicer)
+        std::vector<double> flush_speeds; std::vector<int> flush_temps;
+        nozzle_flush_values(m_config, flush_speeds, flush_temps);
+        dyn_config.set_key_value("flush_volumetric_speeds", new ConfigOptionFloats(flush_speeds));
+        dyn_config.set_key_value("flush_temperatures", new ConfigOptionInts(flush_temps));
+    }
 
     int   flush_count = std::min(g_max_flush_count, (int) std::round(wipe_volume / g_purge_volume_one_time));
     float flush_unit  = wipe_length / flush_count;

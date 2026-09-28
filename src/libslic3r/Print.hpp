@@ -18,6 +18,8 @@
 #include "GCode/GCodeProcessor.hpp"
 #include "MultiMaterialSegmentation.hpp"
 #include "MixedFilament.hpp"
+// Nozzle It All engine: PrusaSlicer 2.9.6 virtual extruders (Print.hpp).
+#include "Feature/FullSpectrum/VirtualExtruder.hpp"
 #include "libslic3r.h"
 
 #include <Eigen/Geometry>
@@ -152,6 +154,8 @@ public:
     // Identifier of this PrintRegion in the list of Print::m_print_regions.
     int                         print_region_id() const throw() { return m_print_region_id; }
     int                         print_object_region_id() const throw() { return m_print_object_region_id; }
+    // Nozzle It All engine, from PrusaSlicer 2.9.6 (Print.hpp): the virtual extruder this region was created for.
+    std::optional<unsigned int> source_virtual_extruder_id() const throw() { return m_source_virtual_extruder_id; }
 	// 1-based extruder identifier for this region and role.
 	unsigned int 				extruder(FlowRole role) const;
     Flow                        flow(const PrintObject &object, FlowRole role, double layer_height, bool first_layer = false) const;
@@ -162,7 +166,8 @@ public:
 
     // Collect 0-based extruder indices used to print this region's object.
 	void                        collect_object_printing_extruders(const Print &print, std::vector<unsigned int> &object_extruders) const;
-	static void                 collect_object_printing_extruders(const PrintConfig &print_config, const PrintRegionConfig &region_config, const bool has_brim, std::vector<unsigned int> &object_extruders);
+	static void                 collect_object_printing_extruders(const PrintConfig &print_config, const PrintRegionConfig &region_config, const bool has_brim, std::vector<unsigned int> &object_extruders,
+	                                                              const FullSpectrum::VirtualExtruders &virtual_extruders = {});
 
 // Methods modifying the PrintRegion's state:
 public:
@@ -170,6 +175,7 @@ public:
     void                        set_config(PrintRegionConfig &&config) { m_config = std::move(config); m_config_hash = m_config.hash(); }
     void                        config_apply_only(const ConfigBase &other, const t_config_option_keys &keys, bool ignore_nonexistent = false)
                                         { m_config.apply_only(other, keys, ignore_nonexistent); m_config_hash = m_config.hash(); }
+    void                        set_source_virtual_extruder_id(std::optional<unsigned int> v) throw() { m_source_virtual_extruder_id = v; }
 private:
     friend Print;
     friend void print_region_ref_inc(PrintRegion&);
@@ -181,9 +187,11 @@ private:
     int                m_print_region_id { -1 };
     int                m_print_object_region_id { -1 };
     int                m_ref_cnt { 0 };
+    std::optional<unsigned int> m_source_virtual_extruder_id;
 };
 
-inline bool operator==(const PrintRegion &lhs, const PrintRegion &rhs) { return lhs.config_hash() == rhs.config_hash() && lhs.config() == rhs.config(); }
+// Nozzle It All engine: PrusaSlicer 2.9.6 also compares the source virtual extruder.
+inline bool operator==(const PrintRegion &lhs, const PrintRegion &rhs) { return lhs.config_hash() == rhs.config_hash() && lhs.config() == rhs.config() && lhs.source_virtual_extruder_id() == rhs.source_virtual_extruder_id(); }
 inline bool operator!=(const PrintRegion &lhs, const PrintRegion &rhs) { return ! (lhs == rhs); }
 
 template<typename T>
@@ -944,6 +952,18 @@ public:
     Flow                brim_flow() const;
     Flow                skirt_flow() const;
 
+    // Nozzle It All engine, from PrusaSlicer 2.9.6 (Print.hpp). This engine counts filaments (filament_diameter), not
+    // nozzles, as its physical extruders (the same count Print::apply() uses).
+    unsigned int num_physical_extruders() const
+    {
+        return static_cast<unsigned int>(m_config.filament_diameter.size());
+    }
+
+    const FullSpectrum::VirtualExtruders& virtual_extruders() const
+    {
+        return m_virtual_extruders;
+    }
+
     std::vector<unsigned int> object_extruders() const;
     std::vector<unsigned int> support_material_extruders() const;
     std::vector<unsigned int> extruders(bool conside_custom_gcode = false) const;
@@ -1098,11 +1118,15 @@ private:
     PrintObjectConfig                       m_default_object_config;
     PrintRegionConfig                       m_default_region_config;
     MixedFilamentManager                    m_mixed_filament_mgr;
+    // Nozzle It All engine, from PrusaSlicer 2.9.6: the model's virtual extruders valid for this printer.
+    FullSpectrum::VirtualExtruders          m_virtual_extruders;
     PrintObjectPtrs                         m_objects;
     PrintRegionPtrs                         m_print_regions;
     
     //SoftFever
-    bool m_isBBLPrinter;
+    // Nozzle It All engine: initialised as upstream OrcaSlicer does (Snapmaker Orca leaves it uninitialised; only its GUI
+    // and CLI set it, so a headless slice picked BBL or non-BBL G-code at random).
+    bool m_isBBLPrinter = false;
 
     // Ordered collections of extrusion paths to build skirt loops and brim.
     ExtrusionEntityCollection               m_skirt;

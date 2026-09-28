@@ -5,6 +5,7 @@
 
 
 #include <cfloat>
+#include <map>
 #include "Point.hpp"
 #include "TriangleMesh.hpp"
 
@@ -373,6 +374,11 @@ public:
     // For all triangles selected by seed fill, set new EnforcerBlockerType and remove flag indicating that triangle was selected by seed fill.
     // The operation may merge split triangles if they are being assigned the same color.
     void seed_fill_apply_on_triangles(EnforcerBlockerType new_state);
+
+    // Nozzle It All engine: from PrusaSlicer 2.9.6 (src/libslic3r/TriangleSelector.hpp, AGPL-3.0), used by its virtual
+    // extruders (Feature/FullSpectrum) to renumber painted states on import. Replaces the state of every leaf triangle
+    // found in `remap`, then merges children that became identical.
+    void remap_states(const std::map<EnforcerBlockerType, EnforcerBlockerType>& remap);
 
 protected:
     // Triangle and info about how it's split.

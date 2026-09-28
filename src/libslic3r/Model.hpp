@@ -19,6 +19,8 @@
 #include "TextConfiguration.hpp"
 #include "EmbossShape.hpp"
 #include "TriangleSelector.hpp"
+// Nozzle It All engine: PrusaSlicer 2.9.6 virtual extruders (Model::virtual_extruders).
+#include "Feature/FullSpectrum/VirtualExtruder.hpp"
 
 //BBS: add bbs 3mf
 #include "Format/bbs_3mf.hpp"
@@ -1528,6 +1530,10 @@ public:
     ModelObjectPtrs     objects;
     // Wipe tower object.
     ModelWipeTower	wipe_tower;
+    // Nozzle It All engine, from PrusaSlicer 2.9.6 (Model.hpp): virtual extruder definitions. Empty when no virtual
+    // extruders are defined.
+    FullSpectrum::VirtualExtruders virtual_extruders;
+    FullSpectrum::VirtualExtruders &get_virtual_extruders() { return virtual_extruders; }
     // BBS static members store extruder parameters and speed map of all models
     static std::map<size_t, ExtruderParams> extruderParamsMap;
     static GlobalSpeedMap printSpeedMap;

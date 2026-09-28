@@ -735,7 +735,10 @@ static bool mm_paint_applies_to_parent_region(const PrintObjectRegions::LayerRan
     return root_model_part != nullptr && root_model_part->is_mm_painted();
 }
 
-PrintRegionConfig region_config_from_model_volume(const PrintRegionConfig &default_or_parent_region_config, const DynamicPrintConfig *layer_range_config, const ModelVolume &volume, size_t num_extruders);
+// Nozzle It All engine: the virtual extruder parameters are PrusaSlicer 2.9.6's (PrintApply.cpp 680-685).
+PrintRegionConfig region_config_from_model_volume(const PrintRegionConfig &default_or_parent_region_config, const DynamicPrintConfig *layer_range_config, const ModelVolume &volume, size_t num_extruders,
+                                                  const FullSpectrum::VirtualExtruders &virtual_extruders = {},
+                                                  std::optional<unsigned int> *out_source_virtual_extruder_id = nullptr);
 
 void print_region_ref_inc(PrintRegion &r) { ++ r.m_ref_cnt; }
 void print_region_ref_reset(PrintRegion &r) { r.m_ref_cnt = 0; }
@@ -748,6 +751,7 @@ bool verify_update_print_object_regions(
     ModelVolumePtrs                     model_volumes,
     const PrintRegionConfig            &default_region_config,
     size_t                              num_extruders,
+    const FullSpectrum::VirtualExtruders &virtual_extruders,
     PrintObjectRegions                 &print_object_regions,
     const std::function<void(const PrintRegionConfig&, const PrintRegionConfig&, const t_config_option_keys&)> &callback_invalidate)
 {
@@ -794,16 +798,23 @@ bool verify_update_print_object_regions(
                             } else if (PrintObjectRegions::BoundingBox parent_bbox = find_modifier_volume_extents(layer_range, parent_region_id); parent_bbox.intersects(*bbox))
                                 // Such parent region does not exist. If it is needed, then we need to reslice.
                                 // Only create new region for a modifier, which actually modifies config of it's parent.
-                                if (PrintRegionConfig config = region_config_from_model_volume(parent_region.region->config(), nullptr, **it_model_volume, num_extruders);
+                                if (PrintRegionConfig config = region_config_from_model_volume(parent_region.region->config(), nullptr, **it_model_volume, num_extruders, virtual_extruders);
                                     config != parent_region.region->config())
                                     // This modifier newly overrides a region, which it did not before. We need to reslice.
                                     return false;
                         }
                     }
                 }
+                // Nozzle It All engine (PrusaSlicer 2.9.6 PrintApply.cpp 753-759): a change of the source virtual extruder
+                // needs a reslice.
+                std::optional<unsigned int> new_source_virtual;
                 PrintRegionConfig cfg = region.parent == -1 ?
-                    region_config_from_model_volume(default_region_config, layer_range.config, **it_model_volume, num_extruders) :
-                    region_config_from_model_volume(layer_range.volume_regions[region.parent].region->config(), nullptr, **it_model_volume, num_extruders);
+                    region_config_from_model_volume(default_region_config, layer_range.config, **it_model_volume, num_extruders, virtual_extruders, &new_source_virtual) :
+                    region_config_from_model_volume(layer_range.volume_regions[region.parent].region->config(), nullptr, **it_model_volume, num_extruders, virtual_extruders, &new_source_virtual);
+                if (new_source_virtual != region.region->source_virtual_extruder_id()) {
+                    return false;
+                }
+
                 if (cfg != region.region->config()) {
                     // Region configuration changed.
                     if (print_region_ref_cnt(*region.region) == 0) {
@@ -883,7 +894,8 @@ bool verify_update_print_object_regions(
             size_t hash = regions[i]->config_hash();
             size_t j = i;
             for (++ j; j < regions.size() && regions[j]->config_hash() == hash; ++ j)
-                if (regions[i]->config() == regions[j]->config()) {
+                if (regions[i]->config() == regions[j]->config()
+                    && regions[i]->source_virtual_extruder_id() == regions[j]->source_virtual_extruder_id()) {
                     // Regions were merged. We need to reslice.
                     return false;
                 }
@@ -972,6 +984,7 @@ static PrintObjectRegions* generate_print_object_regions(
     const PrintRegionConfig                     &default_region_config,
     const Transform3d                           &trafo,
     size_t                                       num_extruders,
+    const FullSpectrum::VirtualExtruders        &virtual_extruders,
     const float                                  xy_contour_compensation,
     const std::vector<unsigned int>             &painting_extruders,
     const bool                                   has_painted_fuzzy_skin)
@@ -1009,15 +1022,27 @@ static PrintObjectRegions* generate_print_object_regions(
     update_volume_bboxes(layer_ranges_regions, out->cached_volume_ids, model_volumes, out->trafo_bboxes, is_mm_painted ? 0.f : std::max(0.f, xy_contour_compensation));
 
     std::vector<PrintRegion*> region_set;
-    auto get_create_region = [&region_set, &all_regions](PrintRegionConfig &&config) -> PrintRegion* {
-        size_t hash = config.hash();
-        auto it = Slic3r::lower_bound_by_predicate(region_set.begin(), region_set.end(), [&config, hash](const PrintRegion* l) {
-            return l->config_hash() < hash || (l->config_hash() == hash && l->config() < config); });
-        if (it != region_set.end() && (*it)->config_hash() == hash && (*it)->config() == config)
+    // Nozzle It All engine: regions are also keyed by their source virtual extruder (PrusaSlicer 2.9.6 PrintApply.cpp 964-987).
+    auto get_create_region = [&region_set, &all_regions](
+        PrintRegionConfig &&config,
+        std::optional<unsigned int> source_virtual = std::nullopt) -> PrintRegion*
+    {
+        const size_t hash = config.hash();
+        auto it = Slic3r::lower_bound_by_predicate(region_set.begin(), region_set.end(),
+            [&config, hash, source_virtual](const PrintRegion *l) {
+                if (l->config_hash() != hash)    return l->config_hash() < hash;
+                if (l->config() != config)       return l->config() < config;
+                return l->source_virtual_extruder_id() < source_virtual;
+            });
+        if (it != region_set.end()
+            && (*it)->config_hash() == hash
+            && (*it)->config() == config
+            && (*it)->source_virtual_extruder_id() == source_virtual)
             return *it;
         // Insert into a sorted array, it has O(n) complexity, but the calling algorithm has an O(n^2*log(n)) complexity anyways.
         all_regions.emplace_back(std::make_unique<PrintRegion>(std::move(config), hash, int(all_regions.size())));
         PrintRegion *region = all_regions.back().get();
+        region->set_source_virtual_extruder_id(source_virtual);
         region_set.emplace(it, region);
         return region;
     };
@@ -1029,11 +1054,12 @@ static PrintObjectRegions* generate_print_object_regions(
                 if (const PrintObjectRegions::BoundingBox *bbox = find_volume_extents(layer_range, volume); bbox) {
                     if (volume.is_model_part()) {
                         // Add a model volume, assign an existing region or generate a new one.
-                        layer_range.volume_regions.push_back({
-                            &volume, -1,
-                            get_create_region(region_config_from_model_volume(default_region_config, layer_range.config, volume, num_extruders)),
-                            bbox
-                        });
+                        std::optional<unsigned int> source_virtual;
+                        PrintRegionConfig region_config = region_config_from_model_volume(
+                            default_region_config, layer_range.config, volume,
+                            num_extruders, virtual_extruders, &source_virtual);
+                        PrintRegion *region = get_create_region(std::move(region_config), source_virtual);
+                        layer_range.volume_regions.push_back({ &volume, -1, region, bbox });
                     } else if (volume.is_negative_volume()) {
                         // Add a negative (subtractor) volume. Such volume has neither region nor parent volume assigned.
                         layer_range.volume_regions.push_back({ &volume, -1, nullptr, bbox });
@@ -1048,10 +1074,14 @@ static PrintObjectRegions* generate_print_object_regions(
                             if (parent_volume.is_model_part() || parent_volume.is_modifier())
                                 if (PrintObjectRegions::BoundingBox parent_bbox = find_modifier_volume_extents(layer_range, parent_region_id); parent_bbox.intersects(*bbox)) {
                                     // Only create new region for a modifier, which actually modifies config of it's parent.
-                                    if (PrintRegionConfig config = region_config_from_model_volume(parent_region.region->config(), nullptr, volume, num_extruders);
+                                    std::optional<unsigned int> source_virtual;
+                                    if (PrintRegionConfig config = region_config_from_model_volume(
+                                            parent_region.region->config(), nullptr, volume,
+                                            num_extruders, virtual_extruders, &source_virtual);
                                         config != parent_region.region->config()) {
                                         added = true;
-                                        layer_range.volume_regions.push_back({ &volume, parent_region_id, get_create_region(std::move(config)), bbox });
+                                        PrintRegion *region = get_create_region(std::move(config), source_virtual);
+                                        layer_range.volume_regions.push_back({ &volume, parent_region_id, region, bbox });
                                     } else if (parent_model_part_id == -1 && parent_volume.is_model_part())
                                         parent_model_part_id = parent_region_id;
                                 }
@@ -1063,6 +1093,64 @@ static PrintObjectRegions* generate_print_object_regions(
                     }
                 }
             }
+    }
+
+    // Nozzle It All engine, PrusaSlicer 2.9.6 (PrintApply.cpp 1039-1097):
+    // Create PaintedRegions for each physical extruder a virtual extruder can
+    // resolve to. Both MM segmentation and remap_virtual_region_slices_to_physical
+    // need these target regions to exist.
+    for (PrintObjectRegions::LayerRangeRegions& layer_range : layer_ranges_regions) {
+        const int num_volume_regions = int(layer_range.volume_regions.size());
+        for (int volume_region_id = 0; volume_region_id < num_volume_regions; ++volume_region_id) {
+            const PrintObjectRegions::VolumeRegion& volume_region =
+                layer_range.volume_regions[volume_region_id];
+            if (!volume_region.model_volume->is_model_part()
+                && !volume_region.model_volume->is_modifier())
+            {
+                continue;
+            }
+
+            const std::optional<unsigned int> source_virtual =
+                volume_region.region->source_virtual_extruder_id();
+            if (!source_virtual.has_value()) {
+                continue;
+            }
+
+            const unsigned int virtual_extruder_id = *source_virtual;
+            // Find the matching virtual extruder definition.
+            for (const FullSpectrum::VirtualExtruder& virtual_extruder : virtual_extruders) {
+                if (virtual_extruder.id != virtual_extruder_id) {
+                    continue;
+                }
+
+                std::set<unsigned int> distinct_physical_ids;
+                if (virtual_extruder.gradient.has_value()) {
+                    for (const FullSpectrum::VirtualExtruderGradientStop& stop : virtual_extruder.gradient->stops)
+                    {
+                        distinct_physical_ids.insert(stop.extruder_id);
+                    }
+                } else {
+                    for (const FullSpectrum::VirtualExtruderComponent& component : virtual_extruder.components) {
+                        distinct_physical_ids.insert(component.extruder_id);
+                    }
+                }
+
+                for (unsigned int physical_id : distinct_physical_ids) {
+                    assert(physical_id >= 1 && physical_id <= num_extruders);
+                    PrintRegionConfig painted_region_config        = volume_region.region->config();
+                    painted_region_config.wall_filament.value         = physical_id;
+                    painted_region_config.solid_infill_filament.value = physical_id;
+                    painted_region_config.sparse_infill_filament.value = physical_id;
+                    layer_range.painted_regions.push_back(
+                        {physical_id,
+                         volume_region_id,
+                         get_create_region(std::move(painted_region_config))}
+                    );
+                }
+
+                break;
+            }
+        }
     }
 
     // Finally add painting regions.
@@ -1182,7 +1270,8 @@ static void append_mixed_component_extruders(const MixedFilamentManager &mixed_m
 }
 
 static bool painted_region_targets_match(const PrintObjectRegions           &print_object_regions,
-                                         const std::vector<unsigned int>    &painting_extruders)
+                                         const std::vector<unsigned int>    &painting_extruders,
+                                         const FullSpectrum::VirtualExtruders &virtual_extruders)
 {
     std::vector<unsigned int> expected_extruders = painting_extruders;
     std::sort(expected_extruders.begin(), expected_extruders.end());
@@ -1200,6 +1289,13 @@ static bool painted_region_targets_match(const PrintObjectRegions           &pri
                 for (unsigned int extruder_id : expected_extruders)
                     expected_targets.emplace_back(parent_region_id, extruder_id);
             }
+            // Nozzle It All engine: generate_print_object_regions() also creates a painted region for every physical
+            // component of a region's source virtual extruder (PrusaSlicer 2.9.6).
+            if (parent_region.region != nullptr &&
+                (parent_region.model_volume->is_model_part() || parent_region.model_volume->is_modifier()))
+                if (const std::optional<unsigned int> source_virtual = parent_region.region->source_virtual_extruder_id(); source_virtual.has_value())
+                    for (unsigned int physical_id : FullSpectrum::expand_virtual_extruders_1based({ *source_virtual }, virtual_extruders))
+                        expected_targets.emplace_back(parent_region_id, physical_id);
         }
 
         std::vector<std::pair<int, unsigned int>> actual_targets;
@@ -1209,6 +1305,8 @@ static bool painted_region_targets_match(const PrintObjectRegions           &pri
 
         std::sort(expected_targets.begin(), expected_targets.end());
         std::sort(actual_targets.begin(), actual_targets.end());
+        expected_targets.erase(std::unique(expected_targets.begin(), expected_targets.end()), expected_targets.end());
+        actual_targets.erase(std::unique(actual_targets.begin(), actual_targets.end()), actual_targets.end());
         if (actual_targets != expected_targets)
             return false;
     }
@@ -1461,6 +1559,18 @@ Print::ApplyStatus Print::apply(const Model &model, DynamicPrintConfig new_full_
     // Used for extruder ID clamping so that virtual IDs are accepted.
     size_t num_total_filaments = m_mixed_filament_mgr.total_filaments(num_extruders);
 
+    // Nozzle It All engine, PrusaSlicer 2.9.6 (Print::apply, PrintApply.cpp 1179-1224): the model's virtual extruders
+    // that this printer's physical extruders (here: filaments) can print. A project uses either these or Snapmaker's
+    // mixed filaments, whose ids share the same range above the physical count.
+    const FullSpectrum::VirtualExtruders virtual_extruders = FullSpectrum::filter_virtual_extruders_for_physical_count(
+        static_cast<unsigned int>(num_extruders), model.virtual_extruders);
+    const bool virtual_extruders_differ = (virtual_extruders != m_virtual_extruders);
+    m_virtual_extruders = virtual_extruders;
+    if (virtual_extruders_differ) {
+        update_apply_status(this->invalidate_step(psWipeTower));
+        update_apply_status(this->invalidate_step(psGCodeExport));
+    }
+
     ModelObjectStatusDB model_object_status_db;
 
     // 1) Synchronize model objects.
@@ -1599,7 +1709,7 @@ Print::ApplyStatus Print::apply(const Model &model, DynamicPrintConfig new_full_
             model_object_status.print_object_regions = print_objects_range.begin()->print_object->m_shared_regions;
             model_object_status.print_object_regions->ref_cnt_inc();
         }
-        if (solid_or_modifier_differ || model_origin_translation_differ || layer_height_ranges_differ ||
+        if (solid_or_modifier_differ || model_origin_translation_differ || layer_height_ranges_differ || virtual_extruders_differ ||
             ! model_object.layer_height_profile.timestamp_matches(model_object_new.layer_height_profile)) {
             // The very first step (the slicing step) is invalidated. One may freely remove all associated PrintObjects.
             model_object_status.print_object_regions_status =
@@ -1859,7 +1969,8 @@ Print::ApplyStatus Print::apply(const Model &model, DynamicPrintConfig new_full_
             for (size_t state_idx = static_cast<size_t>(EnforcerBlockerType::Extruder1); state_idx < used_facet_states.size(); ++state_idx) {
                 if (!used_facet_states[state_idx])
                     continue;
-                if (state_idx <= num_total_filaments) {
+                // Nozzle It All engine: painted PrusaSlicer 2.9.6 virtual extruder states are kept too (expanded below).
+                if (state_idx <= num_total_filaments || FullSpectrum::is_virtual_extruder(static_cast<unsigned int>(state_idx), virtual_extruders)) {
                     painting_extruders.emplace_back(static_cast<unsigned int>(state_idx));
                     append_mixed_component_extruders(m_mixed_filament_mgr,
                                                      static_cast<unsigned int>(state_idx),
@@ -1870,6 +1981,11 @@ Print::ApplyStatus Print::apply(const Model &model, DynamicPrintConfig new_full_
             }
             std::sort(painting_extruders.begin(), painting_extruders.end());
             painting_extruders.erase(std::unique(painting_extruders.begin(), painting_extruders.end()), painting_extruders.end());
+
+            // Nozzle It All engine, PrusaSlicer 2.9.6 (PrintApply.cpp 1641-1643):
+            // Expand virtual extruder IDs to their physical components.
+            // PaintedRegions will be created only for physical extruder IDs.
+            painting_extruders = FullSpectrum::expand_virtual_extruders_1based(painting_extruders, virtual_extruders);
 
             bool expanded_all_channels_for_same_layer = false;
             if (same_layer_mode_active && !painting_extruders.empty()) {
@@ -1937,7 +2053,7 @@ Print::ApplyStatus Print::apply(const Model &model, DynamicPrintConfig new_full_
                 print_object_regions->clear();
                 model_object_status.print_object_regions_status = ModelObjectStatus::PrintObjectRegionsStatus::Invalid;
                 print_regions_reshuffled = true;
-            } else if (print_object_regions && !painted_region_targets_match(*print_object_regions, painting_extruders)) {
+            } else if (print_object_regions && !painted_region_targets_match(*print_object_regions, painting_extruders, virtual_extruders)) {
                 invalidate();
                 model_object_status.print_object_regions_status = ModelObjectStatus::PrintObjectRegionsStatus::PartiallyValid;
                 print_regions_reshuffled = true;
@@ -1946,6 +2062,7 @@ Print::ApplyStatus Print::apply(const Model &model, DynamicPrintConfig new_full_
                     print_object.model_object()->volumes,
                     m_default_region_config,
                     num_total_filaments,
+                    virtual_extruders,
                     *print_object_regions,
                     [it_print_object, it_print_object_end, &update_apply_status](const PrintRegionConfig &old_config, const PrintRegionConfig &new_config, const t_config_option_keys &diff_keys) {
                         for (auto it = it_print_object; it != it_print_object_end; ++it)
@@ -1971,6 +2088,7 @@ Print::ApplyStatus Print::apply(const Model &model, DynamicPrintConfig new_full_
                 m_default_region_config,
                 model_object_status.print_instances.front().trafo,
                 num_total_filaments ,
+                virtual_extruders,
                 print_object.is_mm_painted() ? 0.f : float(print_object.config().xy_contour_compensation.value),
                 painting_extruders,
                 print_object.is_fuzzy_skin_painted());
@@ -1987,7 +2105,8 @@ Print::ApplyStatus Print::apply(const Model &model, DynamicPrintConfig new_full_
 
     if (print_regions_reshuffled) {
         // Update Print::m_print_regions from objects.
-        struct cmp { bool operator() (const PrintRegion *l, const PrintRegion *r) const { return l->config_hash() == r->config_hash() && l->config() == r->config(); } };
+        // Nozzle It All engine: PrusaSlicer 2.9.6 also compares the source virtual extruder.
+        struct cmp { bool operator() (const PrintRegion *l, const PrintRegion *r) const { return l->config_hash() == r->config_hash() && l->config() == r->config() && l->source_virtual_extruder_id() == r->source_virtual_extruder_id(); } };
         std::set<const PrintRegion*, cmp> region_set;
         m_print_regions.clear();
         PrintObjectRegions *print_object_regions = nullptr;

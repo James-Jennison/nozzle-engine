@@ -131,6 +131,8 @@ set(lisbslic3r_sources
     Feature/Interlocking/InterlockingGenerator.hpp
     Feature/Interlocking/VoxelUtils.cpp
     Feature/Interlocking/VoxelUtils.hpp
+    Feature/FullSpectrum/VirtualExtruder.cpp
+    Feature/FullSpectrum/VirtualExtruder.hpp
     FileParserError.hpp
     AllowlistManager.cpp
     AllowlistManager.hpp
@@ -574,6 +576,8 @@ target_link_libraries(libslic3r
         libnest2d
         miniz
         opencv_world
+        # Nozzle It All engine: PrusaSlicer 2.9.6 links its colour mixer PUBLIC into libslic3r (virtual extruders).
+        prusa_fdm_mixer
     PRIVATE
         ${CMAKE_DL_LIBS}
         ${EXPAT_LIBRARIES}
@@ -602,7 +606,7 @@ else()
     # Link freetype for OCCT dependency (CAD operations need font rendering)
     target_link_libraries(libslic3r PRIVATE ${FREETYPE_LIBRARIES})
     target_link_libraries(libslic3r PRIVATE OpenSSL::Crypto)
-    if (NOT APPLE)
+    if (NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN)
         target_link_libraries(libslic3r PRIVATE fontconfig)
     endif()
 endif()

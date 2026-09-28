@@ -30,6 +30,8 @@ add_subdirectory(minilzo)
 add_subdirectory(qhull)
 add_subdirectory(qoi)
 add_subdirectory(semver)      # Semver static library
+# Nozzle It All engine: PrusaSlicer 2.9.6's filament colour mixer (bundled_deps/prusa_fdm_mixer), for its virtual extruders.
+add_subdirectory(prusa_fdm_mixer)
 
 # Eigen header-only library
 add_subdirectory(eigen)

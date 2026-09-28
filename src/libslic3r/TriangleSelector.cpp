@@ -1985,6 +1985,28 @@ void TriangleSelector::seed_fill_unselect_all_triangles()
             triangle.unselect_by_seed_fill();
 }
 
+// Nozzle It All engine: PrusaSlicer 2.9.6 TriangleSelector::remap_states (src/libslic3r/TriangleSelector.cpp 1125-1143),
+// unchanged but for the state type (PrusaSlicer's TriangleStateType is this engine's EnforcerBlockerType).
+void TriangleSelector::remap_states(const std::map<EnforcerBlockerType, EnforcerBlockerType>& remap)
+{
+    for (Triangle& tr : m_triangles) {
+        if (!tr.valid() || tr.is_split()) {
+            continue;
+        }
+
+        if (const auto it = remap.find(tr.get_state()); it != remap.end()) {
+            tr.set_state(it->second);
+        }
+    }
+
+    for (Triangle& tr : m_triangles) {
+        if (tr.is_split() && tr.valid()) {
+            const size_t facet_idx = &tr - &m_triangles.front();
+            this->remove_useless_children(int(facet_idx));
+        }
+    }
+}
+
 void TriangleSelector::seed_fill_apply_on_triangles(EnforcerBlockerType new_state)
 {
     for (Triangle &triangle : m_triangles)

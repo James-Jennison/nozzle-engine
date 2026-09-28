@@ -74,12 +74,23 @@ coordf_t PrintRegion::bridging_height_avg(const PrintConfig &print_config) const
     return this->nozzle_dmr_avg(print_config) * sqrt(m_config.bridge_flow.value);
 }
 
-void PrintRegion::collect_object_printing_extruders(const PrintConfig &print_config, const PrintRegionConfig &region_config, const bool has_brim, std::vector<unsigned int> &object_extruders)
+// Nozzle It All engine: the virtual extruder expansion is PrusaSlicer 2.9.6's (PrintRegion.cpp 78-104): a virtual
+// extruder id stands for its physical components.
+void PrintRegion::collect_object_printing_extruders(const PrintConfig &print_config, const PrintRegionConfig &region_config, const bool has_brim, std::vector<unsigned int> &object_extruders,
+                                                    const FullSpectrum::VirtualExtruders &virtual_extruders)
 {
     // These checks reflect the same logic used in the GUI for enabling/disabling extruder selection fields.
     // BBS
     auto num_extruders = (int)print_config.filament_diameter.size();
-    auto emplace_extruder = [num_extruders, &object_extruders](int extruder_id) {
+    auto emplace_extruder = [num_extruders, &object_extruders, &virtual_extruders](int extruder_id) {
+        if (extruder_id > num_extruders && FullSpectrum::is_virtual_extruder(static_cast<unsigned int>(extruder_id), virtual_extruders)) {
+            for (unsigned int physical_1based : FullSpectrum::expand_virtual_extruders_1based({ static_cast<unsigned int>(extruder_id) }, virtual_extruders)) {
+                object_extruders.emplace_back(physical_1based - 1);
+            }
+
+            return;
+        }
+
     	int i = std::max(0, extruder_id - 1);
         object_extruders.emplace_back((i >= num_extruders) ? 0 : i);
     };
@@ -98,11 +109,16 @@ void PrintRegion::collect_object_printing_extruders(const Print &print, std::vec
 #ifndef NDEBUG
     // BBS
     auto num_extruders = int(print.config().filament_diameter.size());
-    assert(this->config().wall_filament    <= num_extruders);
-    assert(this->config().sparse_infill_filament       <= num_extruders);
-    assert(this->config().solid_infill_filament <= num_extruders);
+    // Nozzle It All engine (PrusaSlicer 2.9.6): a virtual extruder id is valid too.
+    auto valid_extruder = [&](int id) {
+        return id <= num_extruders ||
+               FullSpectrum::is_virtual_extruder(static_cast<unsigned int>(id), print.virtual_extruders());
+    };
+    assert(valid_extruder(this->config().wall_filament));
+    assert(valid_extruder(this->config().sparse_infill_filament));
+    assert(valid_extruder(this->config().solid_infill_filament));
 #endif
-    collect_object_printing_extruders(print.config(), this->config(), print.has_brim(), object_extruders);
+    collect_object_printing_extruders(print.config(), this->config(), print.has_brim(), object_extruders, print.virtual_extruders());
 }
 
 }

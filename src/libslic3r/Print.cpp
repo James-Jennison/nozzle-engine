@@ -909,7 +909,10 @@ std::vector<unsigned int> Print::object_extruders() const
         }
     }
     sort_remove_duplicates(extruders);
-    return extruders;
+
+    // Nozzle It All engine, from PrusaSlicer 2.9.6 (Print::object_extruders): expand virtual extruder IDs to their
+    // physical components.
+    return FullSpectrum::expand_virtual_extruders_0based(extruders, m_virtual_extruders);
 }
 
 // returns 0-based indices of used extruders

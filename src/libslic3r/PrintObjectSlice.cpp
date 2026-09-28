@@ -5265,6 +5265,21 @@ void PrintObject::slice_volumes()
 
         BOOST_LOG_TRIVIAL(debug) << "Slicing volumes - MMU segmentation";
         std::vector<std::vector<ExPolygons>> mm_segmentation = multi_material_segmentation_by_painting(*this, [print]() { print->throw_if_canceled(); });
+        // Nozzle It All engine, PrusaSlicer 2.9.6 (PrintObjectSlice.cpp apply_mm_segmentation, 588-599): painted
+        // virtual extruder states print with the physical extruder their layer cycle picks.
+        if (!m_print->virtual_extruders().empty()) {
+            std::vector<double> print_z_per_layer(mm_segmentation.size());
+            for (size_t layer_id = 0; layer_id < mm_segmentation.size(); ++layer_id) {
+                print_z_per_layer[layer_id] = this->get_layer(int(layer_id))->print_z;
+            }
+
+            FullSpectrum::remap_virtual_extruders_to_physical(
+                mm_segmentation,
+                print_z_per_layer,
+                m_print->num_physical_extruders(),
+                m_print->virtual_extruders()
+            );
+        }
         apply_mixed_surface_indentation(*this, mm_segmentation);
         apply_mixed_component_surface_offsets(*this, mm_segmentation);
         std::vector<std::vector<ExPolygons>> local_z_segmentation =
@@ -5298,6 +5313,16 @@ void PrintObject::slice_volumes()
 
         BOOST_LOG_TRIVIAL(debug) << "Slicing volumes - Fuzzy skin segmentation";
         apply_fuzzy_skin_segmentation(*this, [print]() { print->throw_if_canceled(); });
+    }
+
+    // Nozzle It All engine, PrusaSlicer 2.9.6 (PrintObjectSlice.cpp 943-949): the slices of a volume whose extruder is
+    // a virtual one move, layer by layer, to the physical extruder's region its layer cycle picks.
+    if (!m_print->virtual_extruders().empty()) {
+        FullSpectrum::remap_virtual_region_slices_to_physical(
+            *this,
+            m_print->num_physical_extruders(),
+            m_print->virtual_extruders()
+        );
     }
 
     apply_surface_emboss_mixed_region_override(*this, [print]() { print->throw_if_canceled(); });

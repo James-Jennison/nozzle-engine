@@ -1239,6 +1239,8 @@ PRINT_CONFIG_CLASS_DEFINE(
     ((ConfigOptionFloatsNullable,      filament_flush_volumetric_speed))
     ((ConfigOptionIntsNullable,        filament_flush_temp))
     ((ConfigOptionInts,                required_nozzle_HRC))
+    ((ConfigOptionInts,                filament_map))
+    ((ConfigOptionStrings,             filament_vendor))
     // BBS
     ((ConfigOptionBool,                scan_first_layer))
     ((ConfigOptionPoints,              thumbnail_size))
@@ -1291,6 +1293,8 @@ PRINT_CONFIG_CLASS_DEFINE(
     ((ConfigOptionInt,                 nozzle_hrc))
     ((ConfigOptionBool,                auxiliary_fan))
     ((ConfigOptionBool,                support_air_filtration))
+    ((ConfigOptionBool,                support_cooling_filter))
+    ((ConfigOptionBool,                cooling_filter_enabled))
     ((ConfigOptionEnum<PrinterStructure>,printer_structure))
     ((ConfigOptionBool,                support_chamber_temp_control))
 
@@ -1359,6 +1363,9 @@ PRINT_CONFIG_CLASS_DERIVED_DEFINE(
 
     //BBS
     ((ConfigOptionInts,               additional_cooling_fan_speed))
+    ((ConfigOptionInts,               close_additional_fan_first_x_layers))
+    ((ConfigOptionInts,               additional_fan_full_speed_layer))
+    ((ConfigOptionFloats,             first_x_layer_fan_speed))
     ((ConfigOptionBool,               reduce_crossing_wall))
     ((ConfigOptionFloatOrPercent,     max_travel_detour_distance))
     ((ConfigOptionPoints,             printable_area))
@@ -1407,6 +1414,8 @@ PRINT_CONFIG_CLASS_DERIVED_DEFINE(
     ((ConfigOptionStrings,            filament_multi_colors))
     ((ConfigOptionInts,               filament_colour_mode))
     ((ConfigOptionBools,              activate_air_filtration))
+    ((ConfigOptionBools,              activate_air_filtration_during_print))
+    ((ConfigOptionBools,              activate_air_filtration_on_completion))
     ((ConfigOptionInts,               during_print_exhaust_fan_speed))
     ((ConfigOptionInts,               complete_print_exhaust_fan_speed))
     ((ConfigOptionFloatOrPercent,     initial_layer_line_width))

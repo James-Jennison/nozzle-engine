@@ -2765,6 +2765,94 @@ void GCode::_do_export(Print& print, GCodeOutputStream& file, ThumbnailsGenerato
         }
     }
 
+    { // Nozzle (from upstream OrcaSlicer): what Bambu's multi-extruder start G-code reads about the filaments and extruders.
+        // The filaments the print uses, and those on its first layer (upstream Print::set_slice_used_filaments).
+        std::vector<unsigned int> used_filaments, first_layer_filaments;
+        std::vector<ToolOrdering*> orderings;
+        std::vector<ToolOrdering> object_orderings;
+        if (print.config().print_sequence == PrintSequence::ByObject) {
+            object_orderings.reserve(print_object_instances_ordering.size());
+            for (const PrintInstance *instance : print_object_instances_ordering)
+                object_orderings.emplace_back(*instance->print_object, initial_extruder_id);
+            for (ToolOrdering &ordering : object_orderings)
+                orderings.push_back(&ordering);
+        } else
+            orderings.push_back(&tool_ordering);
+        for (ToolOrdering *ordering : orderings)
+            for (size_t idx = 0; idx < ordering->layer_tools().size(); ++idx) {
+                const std::vector<unsigned int> &layer_filaments = ordering->layer_tools()[idx].extruders;
+                used_filaments.insert(used_filaments.end(), layer_filaments.begin(), layer_filaments.end());
+                if (idx == 0)
+                    first_layer_filaments.insert(first_layer_filaments.end(), layer_filaments.begin(), layer_filaments.end());
+            }
+        sort_remove_duplicates(used_filaments);
+        sort_remove_duplicates(first_layer_filaments);
+
+        this->placeholder_parser().set("is_all_bbl_filament", std::all_of(used_filaments.begin(), used_filaments.end(),
+            [this](unsigned int idx) { return m_config.filament_vendor.get_at(idx) == "Bambu Lab"; }));
+        this->placeholder_parser().set("has_tpu_in_first_layer", new ConfigOptionBool(std::any_of(first_layer_filaments.begin(), first_layer_filaments.end(),
+            [this](unsigned int idx) { return m_config.filament_type.get_at(idx) == "TPU"; })));
+        // The fastest auxiliary fan speed any used filament asks for (upstream ToolOrdering::cal_max_additional_fan).
+        float max_additional_fan = 0.f;
+        for (unsigned int filament : used_filaments)
+            max_additional_fan = std::max(max_additional_fan, float(m_config.additional_cooling_fan_speed.get_at(filament)));
+        this->placeholder_parser().set("max_additional_fan", max_additional_fan);
+
+        // The first filament, and the first non-support filament, each extruder prints (upstream
+        // ToolOrdering::cal_non_support_filaments, static filament_map; -1 for an extruder that prints nothing).
+        const size_t num_extruders = m_config.nozzle_diameter.size();
+        std::vector<int> first_filaments(num_extruders, -1), first_non_support_filaments(num_extruders, -1);
+        auto extruder_of = [this](unsigned int filament) {
+            return filament < m_config.filament_map.values.size() && m_config.filament_map.values[filament] > 0 ? m_config.filament_map.values[filament] - 1 : 0;
+        };
+        for (ToolOrdering *ordering : orderings)
+            for (const LayerTools &layer_tools : ordering->layer_tools())
+                for (unsigned int filament : layer_tools.extruders) {
+                    const int extruder = extruder_of(filament);
+                    if (extruder >= int(num_extruders))
+                        continue;
+                    if (first_filaments[extruder] == -1)
+                        first_filaments[extruder] = int(filament);
+                    if (first_non_support_filaments[extruder] == -1 && ! m_config.filament_is_support.get_at(filament))
+                        first_non_support_filaments[extruder] = int(filament);
+                }
+        this->placeholder_parser().set("first_tools", new ConfigOptionInts(first_filaments));
+        this->placeholder_parser().set("first_filaments", new ConfigOptionInts(first_filaments));
+        this->placeholder_parser().set("first_non_support_tools", new ConfigOptionInts(first_non_support_filaments));
+        this->placeholder_parser().set("first_non_support_filaments", new ConfigOptionInts(first_non_support_filaments));
+        this->placeholder_parser().set("initial_filament_id", (int) initial_extruder_id);
+        this->placeholder_parser().set("current_filament_id", (int) initial_extruder_id);
+
+        // Hold the chamber temperature for a large flat print: under 0.3 mm tall and over 40000 mm2 on the first layer
+        // (objects, support, brim and wipe tower).
+        const double print_area_sum_threshold = 40000.0, print_height_threshold = 0.3;
+        double   area_sum   = 0.0;
+        coordf_t max_height = -1.0;
+        for (ObjectID object_id : print.print_object_ids()) {
+            const PrintObject *print_object = print.get_object(object_id);
+            if (! print_object->layers().empty() && print_object->layers().back()->print_z > max_height)
+                max_height = print_object->layers().back()->print_z;
+            if (! print_object->layers().empty() && print_object->layers().front()->print_z < print.config().initial_layer_print_height + EPSILON)
+                for (const ExPolygon &expoly : print_object->layers().front()->lslices)
+                    area_sum += expoly.area();
+            if (! print_object->support_layers().empty() && print_object->support_layers().front()->print_z < print.config().initial_layer_print_height + EPSILON)
+                for (const ExPolygon &expoly : print_object->support_layers().front()->support_islands)
+                    area_sum += expoly.area();
+            if (auto brim = print.m_brimMap.find(object_id); brim != print.m_brimMap.end())
+                for (const ExtrusionEntity *entity : brim->second.entities) {
+                    Polygons covered;
+                    entity->polygons_covered_by_spacing(covered, 0.0f);
+                    for (const Polygon &polygon : covered)
+                        area_sum += polygon.area();
+                }
+        }
+        // Upstream measures the wipe tower mesh's bottom; this engine keeps no mesh, so the tower's width x depth.
+        if (has_wipe_tower)
+            area_sum += scale_(double(print.config().prime_tower_width.value)) * scale_(double(print.wipe_tower_data().depth));
+        this->placeholder_parser().set("hold_chamber_temp_for_flat_print", new ConfigOptionBool(
+            max_height > 0 && max_height < print_height_threshold && area_sum > print_area_sum_threshold * 1.0e10));
+    }
+
     // Compute chamber cooling mode based on all filaments used on this plate.
     constexpr int kChamberCoolingKeepWarm  = 0;
     constexpr int kChamberCoolingWeak      = 1;
@@ -2832,8 +2920,10 @@ void GCode::_do_export(Print& print, GCodeOutputStream& file, ThumbnailsGenerato
     bool activate_air_filtration        = false;
     int  during_print_exhaust_fan_speed = 0;
     for (const auto& extruder : m_writer.extruders()) {
-        activate_air_filtration |= m_config.activate_air_filtration.get_at(extruder.id());
-        if (m_config.activate_air_filtration.get_at(extruder.id()))
+        // Nozzle (from upstream OrcaSlicer): each filament can switch filtration off during the print.
+        const bool during_print = m_config.activate_air_filtration.get_at(extruder.id()) && m_config.activate_air_filtration_during_print.get_at(extruder.id());
+        activate_air_filtration |= during_print;
+        if (during_print)
             during_print_exhaust_fan_speed = std::max(during_print_exhaust_fan_speed,
                                                       m_config.during_print_exhaust_fan_speed.get_at(extruder.id()));
     }
@@ -3113,14 +3203,17 @@ void GCode::_do_export(Print& print, GCodeOutputStream& file, ThumbnailsGenerato
     if (activate_chamber_temp_control && max_chamber_temp > 0)
         file.write(m_writer.set_chamber_temperature(0, false)); // close chamber_temperature
 
-    if (activate_air_filtration) {
-        int complete_print_exhaust_fan_speed = 0;
-        for (const auto& extruder : m_writer.extruders())
-            if (m_config.activate_air_filtration.get_at(extruder.id()))
-                complete_print_exhaust_fan_speed = std::max(complete_print_exhaust_fan_speed,
-                                                            m_config.complete_print_exhaust_fan_speed.get_at(extruder.id()));
+    // Nozzle (from upstream OrcaSlicer): and after it (activate_air_filtration_on_completion).
+    bool activate_air_filtration_on_completion = false;
+    int  complete_print_exhaust_fan_speed      = 0;
+    for (const auto& extruder : m_writer.extruders())
+        if (m_config.activate_air_filtration.get_at(extruder.id()) && m_config.activate_air_filtration_on_completion.get_at(extruder.id())) {
+            activate_air_filtration_on_completion = true;
+            complete_print_exhaust_fan_speed = std::max(complete_print_exhaust_fan_speed,
+                                                        m_config.complete_print_exhaust_fan_speed.get_at(extruder.id()));
+        }
+    if (activate_air_filtration_on_completion)
         file.write(m_writer.set_exhaust_fan(complete_print_exhaust_fan_speed, true));
-    }
     // adds tags for time estimators
     file.write_format(";%s\n", GCodeProcessor::reserved_tag(GCodeProcessor::ETags::Last_Line_M73_Placeholder).c_str());
     file.write_format("; EXECUTABLE_BLOCK_END\n\n");

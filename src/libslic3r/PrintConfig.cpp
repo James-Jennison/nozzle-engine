@@ -4245,6 +4245,12 @@ void PrintConfigDef::init_fff_params()
     def->max = 18;
     def->set_default_value(new ConfigOptionFloatsNullable { 10. });
 
+    // Nozzle (from upstream OrcaSlicer): the extruder filaments go to by default (1-based; the H2C's is its nozzle rack).
+    def = this->add("master_extruder_id", coInt);
+    def->label = "Master extruder id";
+    def->tooltip = "Default extruder id to place filament.";
+    def->set_default_value(new ConfigOptionInt{ 1 });
+
     def = this->add("extruder_max_nozzle_count", coInts);
     def->label = "Maximum nozzle count";
     def->tooltip = "Nozzles each extruder can hold (a Bambu H2C's nozzle rack).";

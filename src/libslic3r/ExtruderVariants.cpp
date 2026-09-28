@@ -315,13 +315,23 @@ bool collapse_extruder_variants(DynamicPrintConfig &config)
     // value, and this engine's other multi-extruder printers keep their own per-extruder / flow-variant layout.
     if (! support_different_extruders(config, extruder_count))
         return false;
-    // One filament_map entry per filament (missing entries: extruder 1).
+    // One filament_map entry per filament. A map that doesn't name every filament (the request sent none) gets
+    // upstream's rule for printers without its grouping engine: filament i on extruder i while there are extruders, the
+    // rest on the master extruder. Upstream's own default for Bambu printers is its flush-minimising grouping, which is
+    // not ported.
     if (const auto *filament_diameter = config.option<ConfigOptionFloats>("filament_diameter")) {
         auto *filament_map = config.option<ConfigOptionInts>("filament_map", true);
-        filament_map->values.resize(filament_diameter->values.size(), filament_map->values.empty() ? 1 : filament_map->values.front());
+        const size_t filaments = filament_diameter->values.size();
+        const auto  *master    = config.option<ConfigOptionInt>("master_extruder_id");
+        const int    master_extruder = master && master->value >= 1 && master->value <= extruder_count ? master->value : 1;
+        if (filament_map->values.size() != filaments) {
+            filament_map->values.resize(filaments);
+            for (size_t f = 0; f < filaments; ++f)
+                filament_map->values[f] = int(f) < extruder_count ? int(f) + 1 : master_extruder;
+        }
         for (int &extruder : filament_map->values)
             if (extruder < 1 || extruder > extruder_count)
-                extruder = 1;
+                extruder = master_extruder;
     }
     // Variant 2 first: variant 1 halves printer_extruder_id / printer_extruder_variant, which the stride-2 lookup needs.
     collapse_to_extruders(config, extruder_count, printer_options_with_variant_2, "printer_extruder_id", "printer_extruder_variant", 2);

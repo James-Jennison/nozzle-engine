@@ -1450,6 +1450,7 @@ PRINT_CONFIG_CLASS_DERIVED_DEFINE(
     ((ConfigOptionEnumsGeneric,       extruder_type))
     ((ConfigOptionStrings,            extruder_variant_list))
     ((ConfigOptionInts,               extruder_max_nozzle_count))
+    ((ConfigOptionInt,                master_extruder_id))
     ((ConfigOptionFloatsNullable,     hotend_cooling_rate))
     ((ConfigOptionFloatsNullable,     hotend_heating_rate))
     ((ConfigOptionFloatsNullable,     filament_retract_length_nc))

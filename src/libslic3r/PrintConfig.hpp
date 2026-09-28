@@ -1248,6 +1248,8 @@ PRINT_CONFIG_CLASS_DEFINE(
     ((ConfigOptionIntsNullable,        filament_flush_temp))
     ((ConfigOptionInts,                required_nozzle_HRC))
     ((ConfigOptionInts,                filament_map))
+    ((ConfigOptionBoolsNullable,       long_retractions_when_ec))
+    ((ConfigOptionFloatsNullable,      retraction_distances_when_ec))
     ((ConfigOptionStrings,             filament_vendor))
     // BBS
     ((ConfigOptionBool,                scan_first_layer))

@@ -660,6 +660,8 @@ std::string WipeTowerIntegration::append_tcr(GCode& gcodegen, const WipeTower::T
     gcodegen.placeholder_parser().set("retraction_distance_when_cut",
                                       gcodegen.m_config.retraction_distances_when_cut.get_at(new_extruder_id));
     gcodegen.placeholder_parser().set("long_retraction_when_cut", gcodegen.m_config.long_retractions_when_cut.get_at(new_extruder_id));
+    gcodegen.placeholder_parser().set("retraction_distance_when_ec", gcodegen.m_config.retraction_distances_when_ec.get_at(new_extruder_id));
+    gcodegen.placeholder_parser().set("long_retraction_when_ec", gcodegen.m_config.long_retractions_when_ec.get_at(new_extruder_id));
 
     // Process the start filament gcode.
     std::string        start_filament_gcode_str;
@@ -2535,6 +2537,11 @@ void GCode::_do_export(Print& print, GCodeOutputStream& file, ThumbnailsGenerato
     // Orca: set the key for compatibilty
     this->placeholder_parser().set("retraction_distance_when_cut", m_config.retraction_distances_when_cut.get_at(initial_extruder_id));
     this->placeholder_parser().set("long_retraction_when_cut", m_config.long_retractions_when_cut.get_at(initial_extruder_id));
+    // Nozzle (from upstream OrcaSlicer): the same for an extruder change on a multi-extruder printer.
+    this->placeholder_parser().set("retraction_distance_when_ec", m_config.retraction_distances_when_ec.get_at(initial_extruder_id));
+    this->placeholder_parser().set("long_retraction_when_ec", m_config.long_retractions_when_ec.get_at(initial_extruder_id));
+    this->placeholder_parser().set("retraction_distances_when_ec", new ConfigOptionFloatsNullable(m_config.retraction_distances_when_ec));
+    this->placeholder_parser().set("long_retractions_when_ec", new ConfigOptionBoolsNullable(m_config.long_retractions_when_ec));
     ConfigOptionInts temperature;
     ConfigOptionInts first_layer_temperature;
     const size_t filament_count = print.config().filament_type.values.size();
@@ -8952,6 +8959,8 @@ std::string GCode::set_extruder(unsigned int extruder_id, double print_z, bool b
     this->placeholder_parser().set("current_extruder", extruder_id);
     this->placeholder_parser().set("retraction_distance_when_cut", m_config.retraction_distances_when_cut.get_at(extruder_id));
     this->placeholder_parser().set("long_retraction_when_cut", m_config.long_retractions_when_cut.get_at(extruder_id));
+    this->placeholder_parser().set("retraction_distance_when_ec", m_config.retraction_distances_when_ec.get_at(extruder_id));
+    this->placeholder_parser().set("long_retraction_when_ec", m_config.long_retractions_when_ec.get_at(extruder_id));
 
     // Append the filament start G-code.
     const std::string& filament_start_gcode = m_config.filament_start_gcode.get_at(extruder_id);

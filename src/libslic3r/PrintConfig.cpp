@@ -2129,6 +2129,22 @@ void PrintConfigDef::init_fff_params()
 
     //bbs
     // Nozzle (from upstream OrcaSlicer): which extruder (1-based) prints each filament on a multi-extruder printer.
+    // Nozzle (from upstream OrcaSlicer): extended retraction when the next filament prints on the other extruder.
+    def = this->add("long_retractions_when_ec", coBools);
+    def->label = L("Long retraction when extruder change");
+    def->mode = comAdvanced;
+    def->nullable = true;
+    def->set_default_value(new ConfigOptionBoolsNullable {false});
+
+    def = this->add("retraction_distances_when_ec", coFloats);
+    def->label = L("Retraction distance when extruder change");
+    def->mode = comAdvanced;
+    def->nullable = true;
+    def->min = 0;
+    def->max = 10;
+    def->sidetext = L("mm");
+    def->set_default_value(new ConfigOptionFloatsNullable {10});
+
     def = this->add("filament_map", coInts);
     def->label = L("Filament map to extruder");
     def->tooltip = L("Filament map to extruder.");

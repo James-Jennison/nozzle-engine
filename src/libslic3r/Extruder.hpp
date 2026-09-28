@@ -82,14 +82,14 @@ private:
     // Print-wide global ID of this extruder.
     unsigned int m_id;
     // Current state of the extruder axis, may be resetted if use_relative_e_distances.
-    double       m_E;
+    double       m_E { 0. }; // Nozzle: initialised; reset() leaves it alone for shared (SEMM) extruders
     // Current state of the extruder tachometer, used to output the extruded_volume() and used_filament() statistics.
-    double       m_absolute_E;
+    double       m_absolute_E { 0. };
     // Current positive amount of retraction.
-    double       m_retracted;
+    double       m_retracted { 0. }; // Nozzle: initialised, as m_E
     // When retracted, this value stores the extra amount of priming on deretraction.
-    double       m_restart_extra;
-    double       m_e_per_mm3;
+    double       m_restart_extra { 0. };
+    double       m_e_per_mm3 { 0. };
 
     // BBS.
     // Create shared E and retraction data for single extruder multi-material machine

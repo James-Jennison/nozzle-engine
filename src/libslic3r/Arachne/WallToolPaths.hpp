@@ -23,14 +23,17 @@ inline coord_t    meshfix_maximum_extrusion_area_deviation() { return scaled<coo
 class WallToolPathsParams
 {
 public:
-    float   min_bead_width;
-    float   min_feature_size;
-    float   min_length_factor;
-    float   wall_transition_length;
-    float   wall_transition_angle;
-    float   wall_transition_filter_deviation;
-    int     wall_distribution_count;
-    bool    is_top_or_bottom_layer;
+    // Nozzle: zero-initialised. make_paths_params() copies a setting only `if (option)`, and a 0% option tests false,
+    // so a profile with any of these at 0 left the parameter as uninitialised memory (G-code differed between runs).
+    // 0 is what those settings mean (0% of the nozzle diameter).
+    float   min_bead_width { 0.f };
+    float   min_feature_size { 0.f };
+    float   min_length_factor { 0.5f };
+    float   wall_transition_length { 0.f };
+    float   wall_transition_angle { 0.f };
+    float   wall_transition_filter_deviation { 0.f };
+    int     wall_distribution_count { 1 };
+    bool    is_top_or_bottom_layer { false };
 };
 
 WallToolPathsParams make_paths_params(const int layer_id, const PrintObjectConfig &print_object_config, const PrintConfig &print_config);

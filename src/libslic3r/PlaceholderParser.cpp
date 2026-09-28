@@ -381,6 +381,44 @@ namespace client
             default:
                 this->throw_exception("Cannot round a non-numeric value.");
             }
+
+            assert(false);
+            // Suppress compiler warnings.
+            return expr();
+        }
+
+        // Orca (from BambuStudio): floor() and ceil(), as round() but rounding down / up. Bambu H2/P2 G-code uses ceil().
+        expr floor(const Iterator start_pos) const
+        {
+            switch (this->type()) {
+            case TYPE_EMPTY:
+                // Inside an if / else block to be skipped.
+                return expr();
+            case TYPE_INT:
+                return expr(this->i(), start_pos, this->it_range.end());
+            case TYPE_DOUBLE:
+                return expr(static_cast<int>(std::floor(this->d())), start_pos, this->it_range.end());
+            default:
+                this->throw_exception("Cannot floor a non-numeric value.");
+            }
+            assert(false);
+            // Suppress compiler warnings.
+            return expr();
+        }
+
+        expr ceil(const Iterator start_pos) const
+        {
+            switch (this->type()) {
+            case TYPE_EMPTY:
+                // Inside an if / else block to be skipped.
+                return expr();
+            case TYPE_INT:
+                return expr(this->i(), start_pos, this->it_range.end());
+            case TYPE_DOUBLE:
+                return expr(static_cast<int>(std::ceil(this->d())), start_pos, this->it_range.end());
+            default:
+                this->throw_exception("Cannot ceil a non-numeric value.");
+            }
             assert(false);
             // Suppress compiler warnings.
             return expr();
@@ -795,6 +833,18 @@ namespace client
         // Local variables, read / write
         mutable DynamicConfig    config_local;
         size_t                   current_extruder_id    = 0;
+
+        // The extruder (0-based) the current filament prints with: filament_map holds 1-based extruder numbers, one per
+        // filament. Orca and BambuStudio use the 1-based value as the index here, which reads the other nozzle's value on
+        // a two-extruder printer. Extruder 0 when there is no map.
+        size_t get_extruder_id() const {
+            for (const DynamicConfig *cfg : { config_override, external_config, config })
+                if (cfg != nullptr)
+                    if (const ConfigOptionInts *filament_map = cfg->option<ConfigOptionInts>("filament_map"))
+                        return current_extruder_id < filament_map->values.size() && filament_map->values[current_extruder_id] > 0 ?
+                            size_t(filament_map->values[current_extruder_id] - 1) : 0;
+            return 0;
+        }
         // Random number generator and optionally global variables.
         PlaceholderParser::ContextData *context_data    = nullptr;
         // If false, the macro_processor will evaluate a full macro.
@@ -974,10 +1024,11 @@ namespace client
            OptWithPos       &output)
         {
             if (! ctx->skipping()) {
-                if (! opt.opt->is_vector())
-                    ctx->throw_exception("Cannot index a scalar variable", opt.it_range);
+                // Orca (from BambuStudio): a negative index reads the first element, and an index on a scalar is ignored.
                 if (index < 0)
-                    ctx->throw_exception("Referencing a vector variable with a negative index", opt.it_range);
+                    index = 0;
+                if (! opt.opt->is_vector())
+                    index = -1;
                 output = opt;
                 output.index = index;
             } else
@@ -1056,12 +1107,15 @@ namespace client
                 return;
 
             assert(opt.opt->is_vector());
-            if (! opt.has_index())
-                ctx->throw_exception("Referencing a vector variable when scalar is expected", opt.it_range);
             const ConfigOptionVectorBase* vec = static_cast<const ConfigOptionVectorBase*>(opt.opt);
             if (vec->empty())
                 ctx->throw_exception("Indexing an empty vector variable", opt.it_range);
-            size_t idx = (opt.index < 0) ? 0 : (opt.index >= int(vec->size())) ? 0 : size_t(opt.index);
+            // Orca (from BambuStudio): a per-extruder float vector may be read without an index (Bambu's H2 G-code compares
+            // nozzle_diameter to a number). A one-element vector gives that element, otherwise the current filament's extruder.
+            if (! opt.has_index() && opt.opt->type() != coFloats)
+                ctx->throw_exception("Referencing a vector variable when scalar is expected", opt.it_range);
+            size_t idx = ! opt.has_index() ? (vec->size() == 1 ? 0 : std::min(ctx->get_extruder_id(), vec->size() - 1)) :
+                (opt.index < 0) ? 0 : (opt.index >= int(vec->size())) ? 0 : size_t(opt.index);
             if (vec->is_nil(idx))
                 ctx->throw_exception("Trying to reference an undefined (nil) element of vector of optional values", opt.it_range);
             switch (opt.opt->type()) {
@@ -1913,6 +1967,10 @@ namespace client
                 { out = value.unary_integer(out.it_range.begin()); }
         static void round(expr &value, expr &out)
                 { out = value.round(out.it_range.begin()); }
+        static void floor(expr &value, expr &out)
+                { out = value.floor(out.it_range.begin()); }
+        static void ceil(expr &value, expr &out)
+                { out = value.ceil(out.it_range.begin()); }
         // For indicating "no optional parameter".
         static void noexpr(expr &out) { out.reset(); }
     };
@@ -2162,6 +2220,8 @@ namespace client
                                                                     [ px::bind(&expr::digits<true>, _val, _2, _3) ]
                 |   (kw["int"]   > '(' > conditional_expression(_r1) > ')') [ px::bind(&FactorActions::to_int,  _1, _val) ]
                 |   (kw["round"] > '(' > conditional_expression(_r1) > ')') [ px::bind(&FactorActions::round,   _1, _val) ]
+                |   (kw["ceil"]  > '(' > conditional_expression(_r1) > ')') [ px::bind(&FactorActions::ceil,    _1, _val) ]
+                |   (kw["floor"] > '(' > conditional_expression(_r1) > ')') [ px::bind(&FactorActions::floor,   _1, _val) ]
                 |   (kw["is_nil"] > '(' > variable_reference(_r1) > ')') [px::bind(&MyContext::is_nil_test, _r1, _1, _val)]
                 |   (kw["one_of"] > '(' > one_of(_r1) > ')')        [ _val = _1 ]
                 |   (kw["empty"] > '(' > variable_reference(_r1) > ')') [px::bind(&MyContext::is_vector_empty, _r1, _1, _val)]
@@ -2241,6 +2301,8 @@ namespace client
                 ("random")
                 ("repeat")
                 ("round")
+                ("floor")
+                ("ceil")
                 ("not")
                 ("one_of")
                 ("or")

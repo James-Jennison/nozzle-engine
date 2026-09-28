@@ -1,6 +1,7 @@
 #include "MixedFilament.hpp"
 #include "Model.hpp"
 #include "Print.hpp"
+#include "ExtruderVariants.hpp"
 
 #include <boost/log/trivial.hpp>
 #include <algorithm>
@@ -1423,6 +1424,10 @@ Print::ApplyStatus Print::apply(const Model &model, DynamicPrintConfig new_full_
 
         BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ", has_scarf_joint_seam:" << has_scarf_joint_seam;
     }
+
+    // Nozzle (from upstream OrcaSlicer): collapse a Bambu multi-extruder printer's per-variant vectors to one value per
+    // extruder / filament, for the variant each extruder has installed (ExtruderVariants.hpp).
+    collapse_extruder_variants(new_full_config);
 
     // Find modified keys of the various configs. Resolve overrides extruder retract values by filament profiles.
     DynamicPrintConfig   filament_overrides;

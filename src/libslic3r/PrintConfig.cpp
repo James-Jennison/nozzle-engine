@@ -1,4 +1,5 @@
 #include "PrintConfig.hpp"
+#include "ExtruderVariants.hpp"
 #include "ProjectSchemaVersion.hpp"
 #include "ClipperUtils.hpp"
 #include "Config.hpp"
@@ -386,6 +387,12 @@ static const t_config_enum_values s_keys_map_OverhangFanThreshold = {
 CONFIG_OPTION_ENUM_DEFINE_STATIC_MAPS(OverhangFanThreshold)
 
 // BBS
+static const t_config_enum_values s_keys_map_ExtruderType = {
+    { "Direct Drive",   etDirectDrive },
+    { "Bowden",         etBowden }
+};
+CONFIG_OPTION_ENUM_DEFINE_STATIC_MAPS(ExtruderType)
+
 static const t_config_enum_values s_keys_map_BedType = {
     { "Default Plate",      btDefault },
     { "Supertack Plate",    btSuperTack },
@@ -1520,6 +1527,19 @@ void PrintConfigDef::init_fff_params()
     def->mode = comSimple;
     def->set_default_value(new ConfigOptionBools{false});
 
+    // Nozzle (from upstream OrcaSlicer): whether air filtration runs during the print and after it, per filament.
+    def = this->add("activate_air_filtration_during_print", coBools);
+    def->full_label = L("During print");
+    def->tooltip=L("Enable this to override the fan speed set in custom G-code during print.");
+    def->mode = comSimple;
+    def->set_default_value(new ConfigOptionBools{true});
+
+    def = this->add("activate_air_filtration_on_completion", coBools);
+    def->full_label = L("On completion");
+    def->tooltip=L("Enable this to override the fan speed set in custom G-code after print completion.");
+    def->mode = comSimple;
+    def->set_default_value(new ConfigOptionBools{true});
+
     def = this->add("during_print_exhaust_fan_speed", coInts);
     def->label   = L("Fan speed");
     def->tooltip=L("Speed of exhaust fan during printing. This speed will override the speed in filament custom G-code.");
@@ -2108,6 +2128,74 @@ void PrintConfigDef::init_fff_params()
     def->set_default_value(new ConfigOptionStrings { "" });
 
     //bbs
+    // Nozzle (from upstream OrcaSlicer): which extruder (1-based) prints each filament on a multi-extruder printer.
+    // Nozzle (from upstream OrcaSlicer): extended retraction when the next filament prints on the other extruder.
+    def = this->add("long_retractions_when_ec", coBools);
+    def->label = L("Long retraction when extruder change");
+    def->mode = comAdvanced;
+    def->nullable = true;
+    def->set_default_value(new ConfigOptionBoolsNullable {false});
+
+    def = this->add("retraction_distances_when_ec", coFloats);
+    def->label = L("Retraction distance when extruder change");
+    def->mode = comAdvanced;
+    def->nullable = true;
+    def->min = 0;
+    def->max = 10;
+    def->sidetext = L("mm");
+    def->set_default_value(new ConfigOptionFloatsNullable {10});
+
+    // Nozzle (from upstream OrcaSlicer): prime tower settings Bambu's change_filament_gcode reads.
+    def = this->add("filament_cooling_before_tower", coFloats);
+    def->label = L("Cooling before tower");
+    def->tooltip = L("Nozzle temperature drop before printing the prime tower after a filament change.");
+    def->sidetext = u8"°C";
+    def->mode = comDevelop;
+    def->nullable = true;
+    def->set_default_value(new ConfigOptionFloatsNullable { 10. });
+
+    def = this->add("filament_tower_interface_purge_volume", coFloats);
+    def->label = L("Interface purge volume");
+    def->tooltip = L("Purge volume for the prime tower interface layer.");
+    def->sidetext = L("mm³");
+    def->min = 0;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionFloats { 20. });
+
+    def = this->add("filament_tower_interface_print_temp", coInts);
+    def->label = L("Interface print temperature");
+    def->tooltip = L("Print temperature for prime tower interface layer (where different materials meet). If set to -1, use max recommended nozzle temperature.");
+    def->sidetext = u8"°C";
+    def->min = -1;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionInts { -1 });
+
+    // Nozzle (from upstream OrcaSlicer): nozzle cool-down while ramming before an extruder / hotend change, which Bambu's
+    // H2C change_filament_gcode reads. Upstream's wipe tower also applies it while ramming; this engine's does not.
+    def           = this->add("filament_pre_cooling_temperature", coInts);
+    def->label    = L("Extruder change");
+    def->tooltip  = L("To prevent oozing, the nozzle temperature will be cooled during ramming. Therefore, the ramming time must be greater than the cooldown time. 0 means disabled.");
+    def->mode     = comAdvanced;
+    def->sidetext = u8"°C";
+    def->min      = 0;
+    def->nullable = true;
+    def->set_default_value(new ConfigOptionIntsNullable{0});
+
+    def           = this->add("filament_pre_cooling_temperature_nc", coInts);
+    def->label    = L("Hotend change");
+    def->tooltip  = L("To prevent oozing, the nozzle temperature will be cooled during ramming. Note: only a cooldown command and fan activation are triggered, reaching the target temperature is not guaranteed. 0 means disabled.");
+    def->mode     = comAdvanced;
+    def->sidetext = u8"°C";
+    def->min      = 0;
+    def->nullable = true;
+    def->set_default_value(new ConfigOptionIntsNullable{0});
+
+    def = this->add("filament_map", coInts);
+    def->label = L("Filament map to extruder");
+    def->tooltip = L("Filament map to extruder.");
+    def->mode = comDevelop;
+    def->set_default_value(new ConfigOptionInts{1});
+
     def          = this->add("required_nozzle_HRC", coInts);
     def->label   = L("Required nozzle HRC");
     def->tooltip = L("Minimum HRC of nozzle required to print the filament. Zero means no checking of nozzle's HRC.");
@@ -3231,6 +3319,17 @@ void PrintConfigDef::init_fff_params()
     def->mode=comDevelop;
     def->set_default_value(new ConfigOptionBool(true));
 
+    // Nozzle (from upstream OrcaSlicer): printers with a cooling filter instead of air filtration (Bambu H2 series).
+    def = this->add("support_cooling_filter", coBool);
+    def->mode    = comAdvanced;
+    def->set_default_value(new ConfigOptionBool(false));
+
+    def = this->add("cooling_filter_enabled", coBool);
+    def->label = L("Use cooling filter");
+    def->tooltip = L("Enable this if printer support cooling filter");
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionBool(false));
+
     def = this->add("gcode_flavor", coEnum);
     def->label = L("G-code flavor");
     def->tooltip = L("What kind of G-code the printer is compatible with.");
@@ -3970,6 +4069,34 @@ void PrintConfigDef::init_fff_params()
     def->mode = comSimple;
     def->set_default_value(new ConfigOptionFloats { 20 });
 
+    // Nozzle (from upstream OrcaSlicer): the auxiliary fan's first-layers settings, which Bambu's P2/X2 start G-code reads.
+    def = this->add("close_additional_fan_first_x_layers", coInts);
+    def->label = L("For the first");
+    def->tooltip = L("Set special auxiliary cooling fan for the first certain layers.");
+    def->sidetext = L("layers");
+    def->min = 0;
+    def->max = 1000;
+    def->mode = comSimple;
+    def->set_default_value(new ConfigOptionInts { 1 });
+
+    def = this->add("additional_fan_full_speed_layer", coInts);
+    def->label = L("Full fan speed at layer");
+    def->tooltip = L("Auxiliary fan speed will be ramped up linearly from layer \"For the first\" to maximum at layer \"Full fan speed at layer\".\n"
+                     "\"Full fan speed at layer\" will be ignored if lower than \"For the first\", in which case the fan will run at maximum allowed speed at layer \"For the first\" + 1.");
+    def->min = 0;
+    def->max = 1000;
+    def->mode = comSimple;
+    def->set_default_value(new ConfigOptionInts { 0 });
+
+    def = this->add("first_x_layer_fan_speed", coFloats);
+    def->label = L("Fan speed");
+    def->tooltip = L("Special auxiliary cooling fan speed, effective only for the first x layers.");
+    def->sidetext = "%";
+    def->min = 0;
+    def->max = 100;
+    def->mode = comSimple;
+    def->set_default_value(new ConfigOptionFloats { 0 });
+
     def = this->add("additional_cooling_fan_speed", coInts);
     def->label = L("Fan speed");
     def->tooltip = L("Speed of auxiliary part cooling fan. Auxiliary fan will run at this speed during printing except the first several layers "
@@ -4082,6 +4209,86 @@ void PrintConfigDef::init_fff_params()
     // One entry per extruder (listed in extruder_option_keys(), so it is resized together with
     // nozzle_diameter by set_num_extruders()). Shares the standard/high_flow value domain of
     // FilamentVolumeType; unrelated to the device-side NozzleVolumeType (nvtNormal/nvtBigTraffic).
+    // Nozzle (from upstream OrcaSlicer): Bambu's extruder variants (see ExtruderVariants.hpp). Internal, no translation.
+    def = this->add("extruder_type", coEnums);
+    def->label = "Type";
+    def->tooltip = "Extruder type: direct drive or Bowden.";
+    def->enum_keys_map = &ConfigOptionEnum<ExtruderType>::get_enum_values();
+    def->enum_values.push_back("Direct Drive");
+    def->enum_values.push_back("Bowden");
+    def->enum_labels.push_back(L("Direct Drive"));
+    def->enum_labels.push_back(L("Bowden"));
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionEnumsGeneric{ ExtruderType::etDirectDrive });
+
+    // Nozzle (from upstream OrcaSlicer): hotend heating / cooling rates (°C/s) and the retraction before a nozzle change,
+    // which Bambu's H2C G-code reads.
+    def = this->add("hotend_cooling_rate", coFloats);
+    def->label = "Hotend cooling rate";
+    def->tooltip = "Hotend cooling rate, in °C per second.";
+    def->nullable = true;
+    def->set_default_value(new ConfigOptionFloatsNullable{2});
+
+    def = this->add("hotend_heating_rate", coFloats);
+    def->label = "Hotend heating rate";
+    def->tooltip = "Hotend heating rate, in °C per second.";
+    def->nullable = true;
+    def->set_default_value(new ConfigOptionFloatsNullable{2});
+
+    def = this->add("filament_retract_length_nc", coFloats);
+    def->label = L("length when change hotend");
+    def->tooltip = L("Retraction length before the hotend (nozzle) is changed.");
+    def->sidetext = L("mm");
+    def->mode = comDevelop;
+    def->nullable = true;
+    def->min = 0;
+    def->max = 18;
+    def->set_default_value(new ConfigOptionFloatsNullable { 10. });
+
+    def = this->add("extruder_max_nozzle_count", coInts);
+    def->label = "Maximum nozzle count";
+    def->tooltip = "Nozzles each extruder can hold (a Bambu H2C's nozzle rack).";
+    def->set_default_value(new ConfigOptionInts { 1 });
+    def->cli = ConfigOptionDef::nocli;
+
+    def = this->add("extruder_variant_list", coStrings);
+    def->label = "Extruder variant list";
+    def->tooltip = "Extruder variant list.";
+    def->set_default_value(new ConfigOptionStrings { "Direct Drive Standard" });
+    def->cli = ConfigOptionDef::nocli;
+
+    for (const char *scope : { "printer", "print" }) {
+        def = this->add(std::string(scope) + "_extruder_id", coInts);
+        def->label = std::string(scope) + " extruder id";
+        def->tooltip = "Extruder of each variant column.";
+        def->set_default_value(new ConfigOptionInts { 1 });
+        def->cli = ConfigOptionDef::nocli;
+
+        def = this->add(std::string(scope) + "_extruder_variant", coStrings);
+        def->label = std::string(scope) + " extruder variant";
+        def->tooltip = "Extruder variant of each variant column.";
+        def->set_default_value(new ConfigOptionStrings { "Direct Drive Standard" });
+        def->cli = ConfigOptionDef::nocli;
+    }
+
+    def = this->add("filament_extruder_variant", coStrings);
+    def->label = "Filament's extruder variant";
+    def->tooltip = "Filament's extruder variant.";
+    def->set_default_value(new ConfigOptionStrings { "Direct Drive Standard" });
+    def->cli = ConfigOptionDef::nocli;
+
+    def = this->add("filament_self_index", coInts);
+    def->label = "Filament self index";
+    def->tooltip = "Filament self index.";
+    def->set_default_value(new ConfigOptionInts { 1 });
+    def->cli = ConfigOptionDef::nocli;
+
+    def = this->add("physical_extruder_map", coInts);
+    def->label = "Map the logical extruder to physical extruder";
+    def->tooltip = "Map the logical extruder to physical extruder.";
+    def->mode = comDevelop;
+    def->set_default_value(new ConfigOptionInts{0});
+
     def = this->add("nozzle_volume_type", coEnums);
     def->label = L("Nozzle volume type");
     def->tooltip = L("Flow type of the nozzle installed on each extruder "
@@ -7435,6 +7642,13 @@ size_t get_config_idx(const ConfigBase &config, ConfigFlowDomain domain, unsigne
     switch (domain) {
     case ConfigFlowDomain::Process:
     case ConfigFlowDomain::Printer: {
+        // Nozzle: a Bambu multi-extruder / multi-variant printer's per-extruder vectors, collapsed by
+        // collapse_extruder_variants(), hold one value per extruder: the filament's extruder (filament_map, 1-based).
+        if (extruder_variants_collapsed(config)) {
+            const ConfigOptionInts *filament_map = ints_option(config, "filament_map");
+            return filament_map != nullptr && filament_id < filament_map->values.size() && filament_map->values[filament_id] > 0 ?
+                size_t(filament_map->values[filament_id] - 1) : 0;
+        }
         if (volume_types == nullptr || volume_types->values.empty() || flow_support == nullptr)
             return 0;
 
@@ -7630,7 +7844,6 @@ void PrintConfigDef::handle_legacy(t_config_option_key &opt_key, std::string &va
         "can_switch_nozzle_type", "can_add_auxiliary_fan", "extra_flush_volume", "spaghetti_detector", "adaptive_layer_height",
         "z_hop_type", "z_lift_type", "bed_temperature_difference","long_retraction_when_cut",
         "retraction_distance_when_cut",
-        "extruder_type",
         "internal_bridge_support_thickness","extruder_clearance_max_radius", "top_area_threshold", "reduce_wall_solid_infill","filament_load_time","filament_unload_time",
         "smooth_coefficient", "overhang_totally_speed", "silent_mode",
     };

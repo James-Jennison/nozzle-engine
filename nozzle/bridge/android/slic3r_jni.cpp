@@ -310,10 +310,12 @@ static void nativeSliceMultiObject_impl(
 static void nativeSliceMultiObjectBambuBundle_impl(
     JNIEnv* env, jobjectArray jPaint, jobjectArray jVolumes,
     jobjectArray jModelPaths, jdoubleArray jOffsetXMm, jdoubleArray jOffsetYMm,
-    jdoubleArray jRotationZDeg, jdoubleArray jScale,
+    jdoubleArray jRotationZDeg, jdoubleArray jScale, jintArray jToolSlotIndices,
     jstring jOutputBundlePath, jobjectArray jProfilePaths, jobjectArray jOverrideKeys, jobjectArray jOverrideValues) {
     try {
         std::vector<std::string> model_paths = to_string_vector(env, jModelPaths);
+        // 1-based filament (AMS slot) per object; absent (older callers) = all on the default filament.
+        std::vector<int> tool_indices = jToolSlotIndices != nullptr ? to_int_vector(env, jToolSlotIndices) : std::vector<int>(model_paths.size(), 0);
         std::vector<double> offsets_x = to_double_vector(env, jOffsetXMm);
         std::vector<double> offsets_y = to_double_vector(env, jOffsetYMm);
         std::vector<double> rotations_z = to_double_vector(env, jRotationZDeg);
@@ -325,7 +327,12 @@ static void nativeSliceMultiObjectBambuBundle_impl(
             return;
         }
 
-        std::vector<std::pair<std::string, engine::ModelTransform>> objects;
+        if (tool_indices.size() != model_paths.size()) {
+            throw_java_exception(env, "Model paths and tool slot arrays must be the same length.");
+            return;
+        }
+
+        std::vector<std::tuple<std::string, engine::ModelTransform, int>> objects;
         objects.reserve(model_paths.size());
         for (size_t i = 0; i < model_paths.size(); ++i) {
             engine::ModelTransform transform;
@@ -333,7 +340,7 @@ static void nativeSliceMultiObjectBambuBundle_impl(
             transform.offset_y_mm = offsets_y[i];
             transform.rotation_z_deg = rotations_z[i];
             transform.scale = scales[i];
-            objects.emplace_back(model_paths[i], transform);
+            objects.emplace_back(model_paths[i], transform, tool_indices[i]);
         }
 
         const std::string output_path = jstring_to_string(env, jOutputBundlePath);
@@ -529,7 +536,7 @@ Java_org_orcaslicer_engine_NativeEngine_nativeSliceMultiObjectBambuBundle(
     JNIEnv* env, jclass, jobjectArray jModelPaths, jdoubleArray jOffsetXMm, jdoubleArray jOffsetYMm,
     jdoubleArray jRotationZDeg, jdoubleArray jScale,
     jstring jOutputBundlePath, jobjectArray jProfilePaths, jobjectArray jOverrideKeys, jobjectArray jOverrideValues) {
-    nativeSliceMultiObjectBambuBundle_impl(env, nullptr, nullptr, jModelPaths, jOffsetXMm, jOffsetYMm, jRotationZDeg, jScale,
+    nativeSliceMultiObjectBambuBundle_impl(env, nullptr, nullptr, jModelPaths, jOffsetXMm, jOffsetYMm, jRotationZDeg, jScale, nullptr,
                                            jOutputBundlePath, jProfilePaths, jOverrideKeys, jOverrideValues);
 }
 
@@ -539,6 +546,18 @@ Java_org_orcaslicer_engine_NativeEngine_nativeSliceMultiObjectBambuBundleEx(
     jdoubleArray jRotationZDeg, jdoubleArray jScale,
     jstring jOutputBundlePath, jobjectArray jProfilePaths, jobjectArray jOverrideKeys, jobjectArray jOverrideValues,
     jobjectArray jPaintStrokes, jobjectArray jVolumeSpecs) {
-    nativeSliceMultiObjectBambuBundle_impl(env, jPaintStrokes, jVolumeSpecs, jModelPaths, jOffsetXMm, jOffsetYMm, jRotationZDeg, jScale,
+    nativeSliceMultiObjectBambuBundle_impl(env, jPaintStrokes, jVolumeSpecs, jModelPaths, jOffsetXMm, jOffsetYMm, jRotationZDeg, jScale, nullptr,
+                                           jOutputBundlePath, jProfilePaths, jOverrideKeys, jOverrideValues);
+}
+
+// Multi-colour Bambu bundles: nativeSliceMultiObjectBambuBundleEx plus a 1-based filament (AMS slot) per object, as
+// nativeSliceMultiObjectEx takes. A new name, so an app built against the older signature keeps working.
+extern "C" JNIEXPORT void JNICALL
+Java_org_orcaslicer_engine_NativeEngine_nativeSliceMultiObjectBambuBundleTools(
+    JNIEnv* env, jclass, jobjectArray jModelPaths, jdoubleArray jOffsetXMm, jdoubleArray jOffsetYMm,
+    jdoubleArray jRotationZDeg, jdoubleArray jScale, jintArray jToolSlotIndices,
+    jstring jOutputBundlePath, jobjectArray jProfilePaths, jobjectArray jOverrideKeys, jobjectArray jOverrideValues,
+    jobjectArray jPaintStrokes, jobjectArray jVolumeSpecs) {
+    nativeSliceMultiObjectBambuBundle_impl(env, jPaintStrokes, jVolumeSpecs, jModelPaths, jOffsetXMm, jOffsetYMm, jRotationZDeg, jScale, jToolSlotIndices,
                                            jOutputBundlePath, jProfilePaths, jOverrideKeys, jOverrideValues);
 }

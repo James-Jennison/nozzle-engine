@@ -377,6 +377,20 @@ void slice_model(Slic3r::Model& model, Slic3r::DynamicPrintConfig& config, const
 // slice_model()'s own single-vs-multi-object sharing above. See slice_bambu_bundle()'s own
 // header comment (this file, below) for why each PlateData/StoreParams field is set the way it
 // is - that reasoning is unchanged here, just factored out so it isn't duplicated per caller.
+// Prints an object with filament (tool) `tool_index`, 1-based; 0 leaves the default. The per-feature filament keys are
+// what region_config_from_model_volume() reads (see slice_multi_object()'s comment on why "extruder" alone is inert).
+// Snapmaker Orca names these wall_filament / sparse_infill_filament / solid_infill_filament; upstream Orca uses the six
+// *_filament_id keys. Whichever this engine defines is set, so the bridge builds on both.
+void assign_object_filament(Slic3r::ModelObject* object, int tool_index) {
+    if (tool_index == 0)
+        return;
+    for (const char* key : {"outer_wall_filament_id", "inner_wall_filament_id", "sparse_infill_filament_id",
+                             "internal_solid_filament_id", "top_surface_filament_id", "bottom_surface_filament_id",
+                             "wall_filament", "sparse_infill_filament", "solid_infill_filament"}) {
+        if (Slic3r::print_config_def.get(key) != nullptr) object->config.set(key, tool_index);
+    }
+}
+
 void bundle_model(Slic3r::Model& model, Slic3r::DynamicPrintConfig& config, const std::string& output_bundle_path) {
     using namespace Slic3r;
 
@@ -415,6 +429,19 @@ void bundle_model(Slic3r::Model& model, Slic3r::DynamicPrintConfig& config, cons
         plate_data.plate_thumbnail.load_from(thumbnails.front());
     }
     plate_data.parse_filament_info(&gcode_result);
+    // Each used filament's type, colour and catalogue id, as upstream's Plater fills them before writing slice_info
+    // (Plater::export_3mf); the printer shows them and maps AMS trays by them. The id is the preset's filament_ids entry
+    // when the request sets one (upstream converts Orca ids to Bambu's with its network plugin, which this has not).
+    {
+        const auto* types  = config.option<ConfigOptionStrings>("filament_type");
+        const auto* colors = config.option<ConfigOptionStrings>("filament_colour");
+        const auto* ids    = config.option<ConfigOptionStrings>("filament_ids");
+        for (FilamentInfo& info : plate_data.slice_filaments_info) {
+            info.type        = types && ! types->values.empty() ? types->get_at(info.id) : std::string();
+            info.color       = colors && ! colors->values.empty() ? colors->get_at(info.id) : std::string("#FFFFFF");
+            info.filament_id = ids && info.id < int(ids->values.size()) ? ids->values[info.id] : std::string();
+        }
+    }
 
     PlateDataPtrs plate_data_list = {&plate_data};
     std::vector<Preset*> project_presets; // deliberately empty - see slice_bambu_bundle()'s own header comment
@@ -671,6 +698,18 @@ void slice_multi_object_bambu_bundle(const std::vector<std::pair<std::string, Mo
                                       const std::vector<std::string>& profile_paths,
                                       const std::vector<std::pair<std::string, std::string>>& config_overrides,
                                       const std::vector<ObjectExtras>& extras) {
+    std::vector<std::tuple<std::string, ModelTransform, int>> with_tools;
+    with_tools.reserve(objects.size());
+    for (const auto& [path, transform] : objects)
+        with_tools.emplace_back(path, transform, 0);
+    slice_multi_object_bambu_bundle(with_tools, output_bundle_path, profile_paths, config_overrides, extras);
+}
+
+void slice_multi_object_bambu_bundle(const std::vector<std::tuple<std::string, ModelTransform, int>>& objects,
+                                      const std::string& output_bundle_path,
+                                      const std::vector<std::string>& profile_paths,
+                                      const std::vector<std::pair<std::string, std::string>>& config_overrides,
+                                      const std::vector<ObjectExtras>& extras) {
     using namespace Slic3r;
 
     if (objects.empty()) {
@@ -696,10 +735,11 @@ void slice_multi_object_bambu_bundle(const std::vector<std::pair<std::string, Mo
 
     Model combined;
     size_t object_index = 0;
-    for (const auto& [path, transform] : objects) {
+    for (const auto& [path, transform, tool_index] : objects) {
         Model loaded = load_and_place_model(path, config, transform);
         const size_t first_object_of_file = combined.objects.size();
         for (ModelObject* object : loaded.objects) {
+            assign_object_filament(object, tool_index);
             combined.add_object(*object);
         }
         if (object_index < extras.size() && combined.objects.size() > first_object_of_file)
@@ -778,13 +818,7 @@ void slice_multi_object(const std::vector<std::tuple<std::string, ModelTransform
             // matching slice_bambu_bundle's existing convention keeps this one code shape.
             // Snapmaker Orca names these wall_filament / sparse_infill_filament / solid_infill_filament; upstream Orca
             // uses the six *_filament_id keys. Whichever this engine defines is set, so the bridge builds on both.
-            if (tool_index != 0) {
-                for (const char* key : {"outer_wall_filament_id", "inner_wall_filament_id", "sparse_infill_filament_id",
-                                         "internal_solid_filament_id", "top_surface_filament_id", "bottom_surface_filament_id",
-                                         "wall_filament", "sparse_infill_filament", "solid_infill_filament"}) {
-                    if (print_config_def.get(key) != nullptr) object->config.set(key, tool_index);
-                }
-            }
+            assign_object_filament(object, tool_index);
             combined.add_object(*object);
         }
         // Applied to the copy inside `combined` (Model::add_object clones the object), which is what gets sliced.

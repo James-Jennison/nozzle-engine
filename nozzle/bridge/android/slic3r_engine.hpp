@@ -5,6 +5,7 @@
 #pragma once
 #include <stdexcept>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -69,6 +70,12 @@ void slice_multi_object_bambu_bundle(const std::vector<std::pair<std::string, Mo
                                       const std::vector<std::string>& profile_paths,
                                       const std::vector<std::pair<std::string, std::string>>& config_overrides = {},
                                       const std::vector<ObjectExtras>& extras = {});
+// The same with a 1-based filament (AMS slot / tool) per object, 0 = the default, as slice_multi_object() takes.
+void slice_multi_object_bambu_bundle(const std::vector<std::tuple<std::string, ModelTransform, int>>& objects,
+                                      const std::string& output_bundle_path,
+                                      const std::vector<std::string>& profile_paths,
+                                      const std::vector<std::pair<std::string, std::string>>& config_overrides,
+                                      const std::vector<ObjectExtras>& extras);
 
 // Phase 1 (Consumer Slicer Plan §16): slices a real multi-object build plate - each (model path,
 // placement, tool_index) triple loaded and placed exactly the way slice_file()'s single-object

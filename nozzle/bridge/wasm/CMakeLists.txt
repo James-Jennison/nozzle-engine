@@ -1,5 +1,5 @@
 # Nozzle It All browser engine: libslic3r + the shared slicing pipeline Android uses
-# (app/src/main/cpp/bridge/slic3r_engine.cpp), exposed to a Web Worker through a small C API (wasm_engine.cpp).
+# (nozzle/bridge/android/slic3r_engine.cpp), exposed to a Web Worker through a small C API (wasm_engine.cpp).
 # Hooked into the patched OrcaSlicer CMake project through its ANDROID_JNI_BRIDGE_DIR hook
 # (engine/android-headless-engine.patch), exactly like the Android bridge, so libslic3r's full link graph is reused.
 cmake_minimum_required(VERSION 3.13)

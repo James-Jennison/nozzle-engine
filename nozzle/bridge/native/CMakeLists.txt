@@ -1,5 +1,5 @@
 # Nozzle It All Desktop engine: libslic3r + the shared slicing pipeline Android and the Web App use
-# (app/src/main/cpp/bridge/slic3r_engine.cpp), as a native Linux executable (native_cli.cpp) that Nozzle It All Desktop
+# (nozzle/bridge/android/slic3r_engine.cpp), as a native Linux executable (native_cli.cpp) that Nozzle It All Desktop
 # runs once per slice. Hooked into the patched OrcaSlicer CMake project through its ANDROID_JNI_BRIDGE_DIR hook
 # (engine/android-headless-engine.patch), exactly like the Android and browser bridges, so libslic3r's full link graph
 # is reused.

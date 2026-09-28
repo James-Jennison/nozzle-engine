@@ -2,7 +2,7 @@
 // Copyright (c) Prusa Research s.r.o. and the PrusaSlicer contributors; licensed under the GNU Affero General Public
 // License v3.0 or later, as PrusaSlicer and this file are.
 //
-// The mixing engine itself is libslic3r's port of PrusaSlicer 2.9.6 (engine/snapmaker/nozzle-engine.patch:
+// The mixing engine itself is libslic3r's port of PrusaSlicer 2.9.6 (in this repository:
 // src/libslic3r/Feature/FullSpectrum/VirtualExtruder.{hpp,cpp} and deps_src/prusa_fdm_mixer), called unchanged here:
 //   deserialize_virtual_extruders_from_json, normalize_virtual_extruders, filter_virtual_extruders_for_physical_count,
 //   VirtualExtruder::effective_color / build_sequence, build_canonical_cycle, build_gradient_bands (the band loop of

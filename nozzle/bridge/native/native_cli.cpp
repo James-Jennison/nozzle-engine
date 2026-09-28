@@ -1,5 +1,5 @@
 // Nozzle It All Desktop's slicing engine: a native command-line front end over the shared slicing pipeline
-// (app/src/main/cpp/bridge/slic3r_engine.cpp) that Android (JNI) and the Web App (engine/wasm/bridge/wasm_engine.cpp)
+// (nozzle/bridge/android/slic3r_engine.cpp) that Android (JNI) and the Web App (nozzle/bridge/wasm/wasm_engine.cpp)
 // also call, so all three platforms slice identically.
 //
 //   nozzle-engine <request.txt>      slice; prints "progress <0-100>" lines on stdout, exits 0 on success
@@ -67,7 +67,7 @@ struct Request {
     std::string virtual_extruders_path;
 };
 
-// Same parser as engine/wasm/bridge/wasm_engine.cpp, so a request written for one engine works for the other.
+// Same parser as nozzle/bridge/wasm/wasm_engine.cpp, so a request written for one engine works for the other.
 Request parse(const std::string& text) {
     Request r;
     std::istringstream in(text);

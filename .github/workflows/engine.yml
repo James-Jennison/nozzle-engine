@@ -75,11 +75,6 @@ jobs:
           NOZZLE_WASM_WORK: ${{ env.CI_CACHE }}/wasm
         run: tools/nozzle/build_wasm_engine.sh
 
-      - name: Bridge drift from Nozzle It All
-        working-directory: engine
-        continue-on-error: true
-        run: tools/nozzle/bridge_drift.sh
-
       - name: Upload engines
         uses: actions/upload-artifact@v7
         with:

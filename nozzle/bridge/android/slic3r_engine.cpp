@@ -32,7 +32,7 @@
 #include "libslic3r/Arrange.hpp"
 #include "libslic3r/ModelArrange.hpp"
 #include "libslic3r/Orient.hpp"
-// PrusaSlicer 2.9.6 virtual extruders exist only in the desktop engine (Snapmaker Orca + engine/snapmaker patch); the
+// PrusaSlicer 2.9.6 virtual extruders exist only in the desktop engine (Snapmaker Orca + Nozzle's changes); the
 // same bridge still builds against upstream OrcaSlicer (Android, Web), where they are refused.
 #if __has_include("libslic3r/Feature/FullSpectrum/VirtualExtruder.hpp")
 #include "libslic3r/Feature/FullSpectrum/VirtualExtruder.hpp"

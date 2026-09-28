@@ -1,5 +1,5 @@
 // `nozzle-engine --plate <request.json>`: the plate tools of Orca's workspace, run by libslic3r itself through the shared
-// bridge (app/src/main/cpp/bridge/slic3r_engine.cpp):
+// bridge (nozzle/bridge/android/slic3r_engine.cpp):
 //   {"op":"arrange","profiles":[paths],"overrides":{key:value},"objects":[{"model":stl,"x":mm,"y":mm,"rotation":deg,"scale":f}],
 //    "distance":mm (0 = Orca's auto spacing),"rotate":bool,"alignY":bool}
 //        -> {"objects":[{"dx":mm,"dy":mm,"rotation":deg,"plate":n}]}  (x/y relative to the bed centre, as for slicing)

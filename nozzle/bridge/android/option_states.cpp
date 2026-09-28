@@ -10,6 +10,8 @@
 #include "option_states.hpp"
 
 #include <algorithm>
+#include <cctype>
+#include <cstdlib>
 
 namespace engine {
 using namespace Slic3r;
@@ -382,6 +384,247 @@ OptionStates print_option_states(const DynamicPrintConfig& input, const OptionCo
 
     toggle_line("infill_overhang_angle", config->opt_enum<InfillPattern>("sparse_infill_pattern") == InfillPattern::ipLateralHoneycomb);
 
+    return out;
+}
+
+
+namespace {
+// The printer and filament rules read some settings that a full print configuration may lack (printer-only flags);
+// a missing or empty option reads as its default, as an unset option does in the GUI.
+bool get_bool(const DynamicPrintConfig& c, const char* key, int idx = -1) {
+    if (const ConfigOption* o = c.option(key)) {
+        if (auto* v = dynamic_cast<const ConfigOptionBools*>(o)) return !v->values.empty() && v->get_at(size_t(std::max(idx, 0)));
+        if (auto* b = dynamic_cast<const ConfigOptionBool*>(o)) return b->value;
+    }
+    return false;
+}
+double get_float(const DynamicPrintConfig& c, const char* key, int idx = -1) {
+    if (const ConfigOption* o = c.option(key)) {
+        if (auto* v = dynamic_cast<const ConfigOptionFloats*>(o)) return v->values.empty() ? 0. : v->get_at(size_t(std::max(idx, 0)));
+        if (auto* f = dynamic_cast<const ConfigOptionFloat*>(o)) return f->value;
+    }
+    return 0.;
+}
+int get_int(const DynamicPrintConfig& c, const char* key, int idx = -1) {
+    if (const ConfigOption* o = c.option(key)) {
+        if (auto* v = dynamic_cast<const ConfigOptionInts*>(o)) return v->values.empty() ? 0 : v->get_at(size_t(std::max(idx, 0)));
+        if (auto* i = dynamic_cast<const ConfigOptionInt*>(o)) return i->value;
+        if (auto* e = dynamic_cast<const ConfigOptionEnumsGeneric*>(o)) return e->values.empty() ? 0 : e->get_at(size_t(std::max(idx, 0)));
+    }
+    return 0;
+}
+} // namespace
+// ---- Printer settings: TabPrinter::toggle_options (src/slic3r/GUI/Tab.cpp), every page ------------------------------
+OptionStates printer_option_states(const DynamicPrintConfig& input, const OptionContext& context) {
+    OptionStates out;
+    DynamicPrintConfig cfg = input;
+    DynamicPrintConfig* m_config = &cfg;
+    const bool is_BBL_printer = context.is_bbl_printer;
+    auto key_at = [](const std::string& key, int i) { return i < 0 ? key : key + "#" + std::to_string(i); };
+    auto toggle_option = [&](const std::string& key, bool on, int i = -1) { out.states[key_at(key, i)].enabled = on; };
+    auto toggle_line = [&](const std::string& key, bool on) { out.states[key].visible = on; };
+    auto force = [&](const std::string& key, ConfigOption* value) {
+        m_config->set_key_value(key, value);
+        out.forced.emplace_back(key, m_config->option(key)->serialize());
+    };
+
+    bool have_multiple_extruders = true;
+
+    // Basic information
+    // SoftFever: hide BBL specific settings
+    for (auto el : {"scan_first_layer", "bbl_calib_mark_logo", "bbl_use_printhost"})
+        toggle_line(el, is_BBL_printer);
+    // SoftFever: hide non-BBL settings
+    for (auto el : {"use_firmware_retraction", "use_relative_e_distances", "support_multi_bed_types", "pellet_modded_printer", "bed_mesh_max", "bed_mesh_min", "bed_mesh_probe_distance", "adaptive_bed_mesh_margin", "thumbnails"})
+        toggle_line(el, !is_BBL_printer);
+
+    // Multimaterial
+    // SoftFever: hide specific settings for BBL printer
+    for (auto el : {"enable_filament_ramming", "cooling_tube_retraction", "cooling_tube_length", "parking_pos_retraction",
+                    "extra_loading_move", "high_current_on_filament_swap"})
+        toggle_option(el, !is_BBL_printer);
+    auto bSEMM = get_bool(*m_config, "single_extruder_multi_material");
+    if (!bSEMM && get_bool(*m_config, "manual_filament_change"))
+        force("manual_filament_change", new ConfigOptionBool(false));
+    toggle_option("extruders_count", !bSEMM);
+    toggle_option("manual_filament_change", bSEMM);
+    toggle_option("purge_in_prime_tower", bSEMM && !is_BBL_printer);
+
+    // Extruder pages
+    const int extruders = int(m_config->option<ConfigOptionFloats>("nozzle_diameter")->values.size());
+    bool wipe_with_firmware_retraction = false;
+    for (int i = 0; i < extruders; ++i) {
+        bool have_retract_length = get_float(*m_config, "retraction_length", int(i)) > 0;
+        // when using firmware retraction, firmware decides retraction length
+        bool use_firmware_retraction = get_bool(*m_config, "use_firmware_retraction");
+        toggle_option("retract_length", !use_firmware_retraction, i);
+        // user can customize travel length if we have retraction length or we"re using firmware retraction
+        toggle_option("retraction_minimum_travel", have_retract_length || use_firmware_retraction, i);
+        // user can customize other retraction options if retraction is enabled
+        bool retraction = have_retract_length || use_firmware_retraction;
+        for (auto el : {"z_hop", "retract_when_changing_layer"})
+            toggle_option(el, retraction, i);
+        // retract lift above / below + enforce only applies if using retract lift
+        for (auto el : {"retract_lift_above", "retract_lift_below", "retract_lift_enforce"})
+            toggle_option(el, retraction && (get_float(*m_config, "z_hop", int(i)) > 0), i);
+        // some options only apply when not using firmware retraction
+        for (auto el : {"retraction_speed", "deretraction_speed", "retract_before_wipe", "retract_length", "retract_restart_extra", "wipe", "wipe_distance"})
+            toggle_option(el, retraction && !use_firmware_retraction, i);
+        bool wipe = retraction && get_bool(*m_config, "wipe", int(i));
+        toggle_option("retract_before_wipe", wipe, i);
+        if (use_firmware_retraction && wipe) wipe_with_firmware_retraction = true;
+        toggle_option("wipe_distance", wipe, i);
+        toggle_option("retract_length_toolchange", have_multiple_extruders, i);
+        bool toolchange_retraction = get_float(*m_config, "retract_length_toolchange", int(i)) > 0;
+        toggle_option("retract_restart_extra_toolchange", have_multiple_extruders && toolchange_retraction, i);
+        toggle_option("long_retractions_when_cut", !use_firmware_retraction && get_int(*m_config, "enable_long_retraction_when_cut"), i);
+        toggle_line(key_at("retraction_distances_when_cut", i), get_bool(*m_config, "long_retractions_when_cut", int(i)));
+        toggle_option("travel_slope", get_int(*m_config, "z_hop_types", i) != ZHopType::zhtNormal, i);
+    }
+    if (wipe_with_firmware_retraction) {
+        // Orca asks with a dialog; the caller asks in its own UI.
+        OptionConflict c;
+        c.id = "wipe_with_firmware_retraction";
+        c.message = "The Wipe option is not available when using the Firmware Retraction mode.";
+        OptionConflict::Choice no_wipe { "Disable Wipe", {} };
+        std::string wipes;
+        for (int i = 0; i < extruders; ++i) wipes += (i ? ",0" : "0");
+        no_wipe.changes.emplace_back("wipe", wipes);
+        c.choices.push_back(no_wipe);
+        c.choices.push_back({ "Disable Firmware Retraction", {{"use_firmware_retraction", "0"}} });
+        out.conflicts.push_back(c);
+    }
+
+    // Motion ability
+    auto gcf = m_config->option<ConfigOptionEnum<GCodeFlavor>>("gcode_flavor")->value;
+    bool silent_mode = get_bool(*m_config, "silent_mode");
+    int  max_field   = silent_mode ? 2 : 1;
+    for (int i = 0; i < max_field; ++i)
+        toggle_option("machine_max_acceleration_travel", gcf != gcfMarlinLegacy && gcf != gcfKlipper, i);
+    toggle_line("machine_max_acceleration_travel", gcf != gcfMarlinLegacy && gcf != gcfKlipper);
+    for (int i = 0; i < max_field; ++i)
+        toggle_option("machine_max_junction_deviation", gcf == gcfMarlinFirmware, i);
+    toggle_line("machine_max_junction_deviation", gcf == gcfMarlinFirmware);
+    bool resonance_avoidance = get_bool(*m_config, "resonance_avoidance");
+    toggle_option("min_resonance_avoidance_speed", resonance_avoidance);
+    toggle_option("max_resonance_avoidance_speed", resonance_avoidance);
+    return out;
+}
+
+namespace {
+// Preset::get_default_bed_type without the preset bundle: the printer's default_bed_type, else the vendor model id.
+BedType default_bed_type(const DynamicPrintConfig& cfg, const std::string& model_id) {
+    if (cfg.has("default_bed_type") && !cfg.opt_string("default_bed_type").empty()) {
+        const int value = std::atoi(cfg.opt_string("default_bed_type").c_str());
+        if (value != 0) return BedType(value);
+    }
+    if (model_id == "BL-P001" || model_id == "BL-P002" || model_id == "C13") return BedType::btPC;
+    if (model_id == "C11") return BedType::btPEI;
+    if (model_id == "SM_U1") return BedType::btPTE;
+    return BedType::btPEI;
+}
+bool contains_nocase(std::string haystack, std::string needle) {
+    for (auto& c : haystack) c = char(std::tolower((unsigned char) c));
+    for (auto& c : needle) c = char(std::tolower((unsigned char) c));
+    return haystack.find(needle) != std::string::npos;
+}
+} // namespace
+
+// ---- Filament settings: TabFilament::toggle_options (src/slic3r/GUI/Tab.cpp), every page -----------------------------
+OptionStates filament_option_states(const DynamicPrintConfig& input, const OptionContext& context) {
+    OptionStates out;
+    const DynamicPrintConfig& cfg = input;   // the printer's settings are part of the full configuration
+    const DynamicPrintConfig* m_config = &input;
+    const bool is_BBL_printer = context.is_bbl_printer;
+    auto toggle_option = [&](const std::string& key, bool on) { out.states[key].enabled = on; };
+    auto toggle_line = [&](const std::string& key, bool on) { out.states[key].visible = on; };
+
+    // Cooling
+    bool has_enable_overhang_bridge_fan = get_bool(*m_config, "enable_overhang_bridge_fan", int(0));
+    for (auto el : {"overhang_fan_speed", "overhang_fan_threshold", "internal_bridge_fan_speed"}) // ORCA: Add support for separate internal bridge fan speed control
+        toggle_option(el, has_enable_overhang_bridge_fan);
+    toggle_option("additional_cooling_fan_speed", get_bool(cfg, "auxiliary_fan"));
+    // Orca: toggle dont slow down for external perimeters if
+    bool has_slow_down_for_layer_cooling = get_bool(*m_config, "slow_down_for_layer_cooling", int(0));
+    toggle_option("dont_slow_down_outer_wall", has_slow_down_for_layer_cooling);
+
+    // Filament
+    const size_t flow_index = context.flow_variant_index;
+    {
+        const auto* pa_opt = m_config->option<ConfigOptionBools>("enable_pressure_advance");
+        bool pa = pa_opt != nullptr && !pa_opt->values.empty() && pa_opt->get_at(std::min(flow_index, pa_opt->values.size() - 1));
+        toggle_option("pressure_advance", pa);
+    }
+    // BBS: bed temperature rows per plate type
+    auto support_multi_bed_types = is_BBL_printer || get_bool(cfg, "support_multi_bed_types");
+    bool is_snapmaker_u1 = contains_nocase(context.printer_name, "Snapmaker U1");
+    if (auto printer_model_opt = cfg.option<ConfigOptionString>("printer_model")) {
+        const std::string& printer_model = printer_model_opt->value;
+        is_snapmaker_u1 = is_snapmaker_u1 || (contains_nocase(printer_model, "Snapmaker") && contains_nocase(printer_model, "U1"));
+    }
+    if (is_snapmaker_u1 && !support_multi_bed_types) {
+        // U1 default show 3 plates; Cool Steel Plate only appears with support_multi_bed_types
+        for (auto el : {"supertack_plate_temp_initial_layer", "supertack_plate_temp", "cool_plate_temp_initial_layer", "cool_plate_temp",
+                        "textured_cool_plate_temp_initial_layer", "textured_cool_plate_temp", "eng_plate_temp_initial_layer", "eng_plate_temp"})
+            toggle_line(el, false);
+        for (auto el : {"hot_plate_temp_initial_layer", "hot_plate_temp", "textured_plate_temp_initial_layer", "textured_plate_temp",
+                        "graphic_effect_plate_temp_initial_layer", "graphic_effect_plate_temp"})
+            toggle_line(el, true);
+    } else if (support_multi_bed_types) {
+        for (auto el : {"supertack_plate_temp_initial_layer", "cool_plate_temp", "cool_plate_temp_initial_layer",
+                        "textured_cool_plate_temp_initial_layer", "textured_cool_plate_temp", "eng_plate_temp_initial_layer", "eng_plate_temp",
+                        "hot_plate_temp_initial_layer", "hot_plate_temp", "textured_plate_temp_initial_layer", "textured_plate_temp"})
+            toggle_line(el, true);
+        toggle_line("graphic_effect_plate_temp_initial_layer", is_snapmaker_u1);
+        toggle_line("graphic_effect_plate_temp", is_snapmaker_u1);
+    } else {
+        BedType curr_bed_type = default_bed_type(cfg, context.printer_model_id);
+        toggle_line("supertack_plate_temp_initial_layer", curr_bed_type == btSuperTack);
+        toggle_line("supertack_plate_temp", curr_bed_type == btSuperTack);
+        toggle_line("cool_plate_temp_initial_layer", curr_bed_type == btPC);
+        toggle_line("cool_plate_temp", curr_bed_type == btPC);
+        toggle_line("textured_cool_plate_temp_initial_layer", curr_bed_type == btPCT);
+        toggle_line("textured_cool_plate_temp", curr_bed_type == btPCT);
+        toggle_line("eng_plate_temp_initial_layer", curr_bed_type == btEP);
+        toggle_line("eng_plate_temp", curr_bed_type == btEP);
+        toggle_line("hot_plate_temp_initial_layer", curr_bed_type == btPEI);
+        toggle_line("hot_plate_temp", curr_bed_type == btPEI);
+        toggle_line("textured_plate_temp_initial_layer", curr_bed_type == btPTE);
+        toggle_line("textured_plate_temp", curr_bed_type == btPTE);
+        toggle_line("graphic_effect_plate_temp_initial_layer", curr_bed_type == btGESP);
+        toggle_line("graphic_effect_plate_temp", curr_bed_type == btGESP);
+    }
+    bool is_pellet_printer = get_bool(cfg, "pellet_modded_printer");
+    toggle_line("pellet_flow_coefficient", is_pellet_printer);
+    toggle_line("filament_diameter", !is_pellet_printer);
+    bool support_chamber_temp_control = get_bool(cfg, "support_chamber_temp_control");
+    toggle_line("chamber_temperatures", support_chamber_temp_control);
+
+    // Multimaterial
+    // Orca: hide specific settings for BBL printers
+    for (auto el : {"filament_minimal_purge_on_wipe_tower", "filament_loading_speed_start", "filament_loading_speed",
+                    "filament_unloading_speed_start", "filament_unloading_speed", "filament_toolchange_delay", "filament_cooling_moves",
+                    "filament_cooling_initial_speed", "filament_cooling_final_speed"})
+        toggle_option(el, !is_BBL_printer);
+    {
+        const auto* ramming = m_config->option<ConfigOptionBools>("filament_multitool_ramming");
+        bool multitool_ramming = ramming != nullptr && !ramming->values.empty() && ramming->get_at(std::min(flow_index, ramming->values.size() - 1));
+        toggle_option("filament_multitool_ramming_volume", multitool_ramming);
+        toggle_option("filament_multitool_ramming_flow", multitool_ramming);
+    }
+    return out;
+}
+
+OptionStates all_option_states(const DynamicPrintConfig& config, const OptionContext& context) {
+    OptionStates out = printer_option_states(config, context);
+    // Printer rules may force values (manual_filament_change) that the others then read.
+    DynamicPrintConfig applied = config;
+    for (const auto& [key, value] : out.forced) applied.set_deserialize_strict(key, value);
+    for (OptionStates part : { filament_option_states(applied, context), print_option_states(applied, context) }) {
+        for (auto& [key, state] : part.states) out.states[key] = state;
+        for (auto& f : part.forced) out.forced.push_back(f);
+        for (auto& c : part.conflicts) out.conflicts.push_back(c);
+    }
     return out;
 }
 

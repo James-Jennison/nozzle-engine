@@ -27,13 +27,29 @@ int run_option_states(const std::string& request, std::string& response) {
         context.is_bbl_printer = req.value("bblPrinter", false);
         context.is_global_config = req.value("global", true);
         context.flow_variant_index = req.value("flowVariant", 0);
-        const engine::OptionStates result = engine::print_option_states(config, context);
+        context.printer_name = req.value("printerName", std::string());
+        context.printer_model_id = req.value("printerModelId", std::string());
+        const std::string scope = req.value("scope", std::string("all"));
+        const engine::OptionStates result = scope == "process"  ? engine::print_option_states(config, context)
+                                          : scope == "printer"  ? engine::printer_option_states(config, context)
+                                          : scope == "filament" ? engine::filament_option_states(config, context)
+                                                                : engine::all_option_states(config, context);
         json out;
         out["states"] = json::object();
         for (const auto& [key, state] : result.states)
             out["states"][key] = {{"enabled", state.enabled}, {"visible", state.visible}};
         out["forced"] = json::object();
         for (const auto& [key, value] : result.forced) out["forced"][key] = value;
+        out["conflicts"] = json::array();
+        for (const auto& c : result.conflicts) {
+            json choices = json::array();
+            for (const auto& ch : c.choices) {
+                json changes = json::object();
+                for (const auto& [k, v] : ch.changes) changes[k] = v;
+                choices.push_back({{"label", ch.label}, {"changes", changes}});
+            }
+            out["conflicts"].push_back({{"id", c.id}, {"message", c.message}, {"choices", choices}});
+        }
         response = out.dump();
         return 0;
     } catch (const std::exception& e) {

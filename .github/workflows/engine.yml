@@ -1,7 +1,8 @@
 name: Engine
 
-# Builds the engine for all three Nozzle It All platforms and proves the desktop engine still produces the same
-# settings schema and G-code as the reference engine on every bundled printer profile (tools/nozzle/equivalence.sh).
+# Builds the engine for all three Nozzle It All platforms and checks that the desktop engine's settings schema and
+# G-code on every bundled printer profile match tools/nozzle/golden/outputs.sha256 (tools/nozzle/golden.sh). A change
+# that alters output on purpose updates that file in the same commit.
 # Runs on the self-hosted build machine, which keeps the prebuilt dependency prefixes in $CI_CACHE.
 
 on:
@@ -50,9 +51,11 @@ jobs:
           SNAPMAKER_DEPS: ${{ env.CI_CACHE }}/desktop-deps
         run: tools/nozzle/build_desktop_engine.sh
 
-      - name: Equivalence with the reference engine
+      - name: Golden outputs (schema + G-code on every bundled printer profile)
         working-directory: engine
-        run: tools/nozzle/equivalence.sh "$CI_CACHE/reference/nozzle-engine" "$ENGINE_WORK/dist/nozzle-engine"
+        env:
+          GOLDEN_JOBS: 16
+        run: tools/nozzle/golden.sh "$ENGINE_WORK/dist/nozzle-engine"
 
       - name: Android engine (arm64-v8a)
         working-directory: engine

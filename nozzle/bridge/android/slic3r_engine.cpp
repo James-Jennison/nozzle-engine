@@ -347,7 +347,7 @@ void slice_model(Slic3r::Model& model, Slic3r::DynamicPrintConfig& config, const
     // own embedded "; THUMBNAIL_BLOCK" comments; without a thumbnail_cb here, print.export_gcode()
     // silently skips writing them even though the default "thumbnails" config value already asks
     // for 48x48 and 300x300 PNGs.
-    ThumbnailsGeneratorCallback thumbnail_cb = make_thumbnail_callback(model.mesh());
+    ThumbnailsGeneratorCallback thumbnail_cb = make_thumbnail_callback(model, config);
 
     Print print;
     for (ModelObject* object : model.objects) {
@@ -397,7 +397,7 @@ void assign_object_filament(Slic3r::ModelObject* object, int tool_index) {
 void bundle_model(Slic3r::Model& model, Slic3r::DynamicPrintConfig& config, const std::string& output_bundle_path) {
     using namespace Slic3r;
 
-    ThumbnailsGeneratorCallback thumbnail_cb = make_thumbnail_callback(model.mesh());
+    ThumbnailsGeneratorCallback thumbnail_cb = make_thumbnail_callback(model, config);
     // The last field (use_plate_box, upstream Orca only) is left at its default of true, so this compiles on both engine bases.
     ThumbnailsParams thumb_params{Vec2ds{Vec2d(512, 512)}, true, false, false, true, 0};
     ThumbnailsList thumbnails = thumbnail_cb(thumb_params);

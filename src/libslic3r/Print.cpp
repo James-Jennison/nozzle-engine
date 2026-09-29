@@ -3238,6 +3238,8 @@ void Print::_make_wipe_tower()
 
         // wipe_tower.set_retract();
         // wipe_tower.set_zhop();
+        // Nozzle: a non-Bambu Type1 printer's G-code processor reads the compatible comment tags.
+        wipe_tower.set_is_bbl_printer(is_BBL_printer());
 
         // Set the extruder & material properties at the wipe tower object.
         for (size_t i = 0; i < number_of_extruders; ++i)

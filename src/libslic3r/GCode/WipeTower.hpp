@@ -146,6 +146,9 @@ public:
 	// Set the extruder properties.
     void set_extruder(size_t idx, const PrintConfig& config);
 
+    // Nozzle: G-code comment-tag dialect for the tower block (BBL tags for Bambu, compatible tags otherwise).
+    void set_is_bbl_printer(bool is_bbl_printer) { m_is_bbl_printer = is_bbl_printer; }
+
 	// Appends into internal structure m_plan containing info about the future wipe tower
 	// to be used before building begins. The entries must be added ordered in z.
 	void plan_toolchange(float z_par, float layer_height_par, unsigned int old_tool, unsigned int new_tool, float wipe_volume = 0.f, float prime_volume = 0.f);
@@ -315,6 +318,7 @@ private:
     bool            m_set_extruder_trimpot      = false;
     bool            m_adhesion                  = true;
     GCodeFlavor     m_gcode_flavor;
+    bool            m_is_bbl_printer            = true; // Nozzle: see set_is_bbl_printer()
 
     // Bed properties
     enum {

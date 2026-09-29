@@ -11,6 +11,7 @@
 
 #include "libslic3r/Point.hpp"
 #include "libslic3r/Polygon.hpp"
+#include "libslic3r/BoundingBox.hpp"
 #include "WipeTower.hpp"
 namespace Slic3r
 {
@@ -60,6 +61,17 @@ public:
 	std::vector<std::pair<float, float>> get_z_and_depth_pairs() const;
     std::vector<std::vector<WipeTower::box_coordinates>> get_local_z_reserve_boxes() const;
     float get_brim_width() const { return m_wipe_tower_brim_width_real; }
+    // Nozzle (from upstream OrcaSlicer): the tower's real first-layer bounding box (outermost brim loop, or the wall when
+    // there is no brim) in tower-local coordinates, before the rib offset. Before generate() runs, the nominal rectangle.
+    BoundingBoxf get_bbx() const {
+        if (m_first_layer_bbx.defined)
+            return m_first_layer_bbx;
+        const float brim = m_wipe_tower_brim_width_real;
+        return BoundingBoxf(Vec2d(-brim, -brim), Vec2d(double(m_wipe_tower_width) + brim, double(m_wipe_tower_depth) + brim));
+    }
+    // Nozzle (from upstream OrcaSlicer): the tower-local shift that puts a rib wall's protruding first-layer min corner at
+    // the configured tower position. Zero unless the rib wall is used.
+    Vec2f get_rib_offset() const { return m_rib_offset; }
 	float get_wipe_tower_height() const { return m_wipe_tower_height; }
 
 
@@ -220,6 +232,8 @@ private:
     bool   m_used_fillet                  = true;
     bool   m_use_gap_wall                 = true;
     float  m_rib_width                    = 10;
+    BoundingBoxf m_first_layer_bbx;              // Nozzle: actual first-layer bounding box (incl. brim and ribs)
+    Vec2f  m_rib_offset                   = Vec2f::Zero(); // Nozzle: see get_rib_offset()
     float  m_extra_rib_length             = 0;
     std::vector<std::vector<Vec2f>> m_wall_skip_points;
     float  m_rib_length                   = 0;

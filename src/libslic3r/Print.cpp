@@ -1460,7 +1460,10 @@ static StringObjectException layered_print_cleareance_valid(const Print &print, 
     //float        brim_width                = print.wipe_tower_data(filaments_count).brim_width;
 
     Polygons convex_hulls_temp;
-    if (print.has_wipe_tower()) {
+    if (print.has_wipe_tower() && print.is_step_done(psWipeTower) && print.wipe_tower_data(filaments_count).bbx.defined) {
+        // Nozzle: the generated tower's real footprint (rib wall and brim included, placed and rotated as printed).
+        convex_hulls_temp.push_back(Geometry::convex_hull(print.first_layer_wipe_tower_corners(false)));
+    } else if (print.has_wipe_tower()) {
         Polygon wipe_tower_convex_hull;
         wipe_tower_convex_hull.points.emplace_back(scale_(x), scale_(y));
         wipe_tower_convex_hull.points.emplace_back(scale_(x + width), scale_(y));
@@ -2979,6 +2982,13 @@ Points Print::first_layer_wipe_tower_corners(bool check_wipe_tower_existance) co
         double width = m_config.prime_tower_width + 2*m_wipe_tower_data.brim_width;
         double depth = m_wipe_tower_data.depth + 2*m_wipe_tower_data.brim_width;
         Vec2d pt0(-m_wipe_tower_data.brim_width, -m_wipe_tower_data.brim_width);
+        // Nozzle (from upstream OrcaSlicer): once the tower is generated, its real first-layer box (brim included), placed
+        // by the rib offset as the G-code places it. A rib wall's footprint is not the prime_tower_width rectangle.
+        if (m_wipe_tower_data.bbx.defined) {
+            width = m_wipe_tower_data.bbx.size().x();
+            depth = m_wipe_tower_data.bbx.size().y();
+            pt0   = m_wipe_tower_data.bbx.min + m_wipe_tower_data.rib_offset.cast<double>();
+        }
         
         // First the corners.
         std::vector<Vec2d> pts = { pt0,
@@ -3426,6 +3436,8 @@ void Print::_make_wipe_tower()
         m_wipe_tower_data.local_z_reserve_boxes = wipe_tower.get_local_z_reserve_boxes();
         m_wipe_tower_data.brim_width        = wipe_tower.get_brim_width();
         m_wipe_tower_data.height            = wipe_tower.get_wipe_tower_height();
+        m_wipe_tower_data.bbx               = wipe_tower.get_bbx();
+        m_wipe_tower_data.rib_offset        = wipe_tower.get_rib_offset();
 
         // Unload the current filament over the purge tower.
         coordf_t layer_height = m_objects.front()->config().layer_height.value;
@@ -3449,7 +3461,10 @@ void Print::_make_wipe_tower()
         m_wipe_tower_data.used_filament         = wipe_tower.get_used_filament();
         m_wipe_tower_data.number_of_toolchanges = wipe_tower.get_number_of_toolchanges();
         const Vec3d origin                      = Vec3d::Zero();
-        m_fake_wipe_tower.set_fake_extrusion_data(wipe_tower.position(), wipe_tower.width(), wipe_tower.get_wipe_tower_height(),
+        // Nozzle (from upstream OrcaSlicer): WipeTowerIntegration::append_tcr2 adds the rib offset before rotating.
+        m_fake_wipe_tower.rib_offset = Eigen::Rotation2Df(Geometry::deg2rad((float) config().wipe_tower_rotation_angle.value)) *
+                                       wipe_tower.get_rib_offset();
+        m_fake_wipe_tower.set_fake_extrusion_data(wipe_tower.position() + m_fake_wipe_tower.rib_offset, wipe_tower.width(), wipe_tower.get_wipe_tower_height(),
                                                   config().initial_layer_print_height, m_wipe_tower_data.depth,
                                                   m_wipe_tower_data.z_and_depth_pairs, m_wipe_tower_data.brim_width,
                                                   config().wipe_tower_rotation_angle, config().wipe_tower_cone_angle,

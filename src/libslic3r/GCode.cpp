@@ -835,8 +835,9 @@ std::string WipeTowerIntegration::append_tcr2(GCode& gcodegen, const WipeTower::
     // We want to rotate and shift all extrusions (gcode postprocessing) and starting and ending position
     float alpha = m_wipe_tower_rotation / 180.f * float(M_PI);
 
+    // Nozzle (from upstream OrcaSlicer): the rib offset is added before rotating.
     auto transform_wt_pt = [&alpha, this](const Vec2f& pt) -> Vec2f {
-        Vec2f out = Eigen::Rotation2Df(alpha) * pt;
+        Vec2f out = Eigen::Rotation2Df(alpha) * (pt + m_rib_offset);
         out += m_wipe_tower_pos;
         return out;
     };
@@ -848,7 +849,7 @@ std::string WipeTowerIntegration::append_tcr2(GCode& gcodegen, const WipeTower::
         end_pos   = transform_wt_pt(end_pos);
     }
 
-    Vec2f wipe_tower_offset   = tcr.priming ? Vec2f::Zero() : m_wipe_tower_pos;
+    Vec2f wipe_tower_offset   = tcr.priming ? Vec2f::Zero() : Vec2f(m_wipe_tower_pos + Eigen::Rotation2Df(alpha) * m_rib_offset);
     float wipe_tower_rotation = tcr.priming ? 0.f : alpha;
     Vec2f plate_origin_2d(m_plate_origin(0), m_plate_origin(1));
 
@@ -1242,7 +1243,7 @@ std::string WipeTowerIntegration::tool_change(GCode& gcodegen, int extruder_id, 
 
         const float alpha = m_wipe_tower_rotation / 180.f * float(M_PI);
         auto transform_wt_pt = [&alpha, this](const Vec2f& pt) -> Vec2f {
-            return Eigen::Rotation2Df(alpha) * pt + m_wipe_tower_pos;
+            return Eigen::Rotation2Df(alpha) * (pt + m_rib_offset) + m_wipe_tower_pos;
         };
         const Vec2f plate_origin_2d(m_plate_origin(0), m_plate_origin(1));
         const Vec2f start_pos = transform_wt_pt(local_path.front());
@@ -2968,15 +2969,20 @@ void GCode::_do_export(Print& print, GCodeOutputStream& file, ThumbnailsGenerato
         this->placeholder_parser().set("nozzle_diameter_at_nozzle_id", new ConfigOptionFloats(m_nozzle_layout.diameters));
         this->placeholder_parser().set("nozzle_volume_types", new ConfigOptionStrings(m_nozzle_layout.volume_types));
 
-        // A point just beside the wipe tower, toward the bed centre (upstream: the tower's bounding box). This engine keeps
-        // no tower bounding box, so its footprint (position, width, depth; unrotated), clamped to the printable area
-        // (upstream: the area every extruder can reach).
+        // A point just beside the wipe tower, toward the bed centre, from the tower's bounding box as upstream does
+        // (placed by the rib offset; unrotated), clamped to the printable area (upstream: the area every extruder can
+        // reach). Before the tower is generated, its nominal footprint (position, width, depth).
         Vec2f wipe_tower_center(0.f, 0.f);
         bool  wipe_tower_center_valid = false;
         if (has_wipe_tower) {
             const int   plate = print.get_plate_index();
-            const float x0 = float(m_config.wipe_tower_x.get_at(plate)), y0 = float(m_config.wipe_tower_y.get_at(plate));
-            const float x1 = x0 + float(m_config.prime_tower_width.value), y1 = y0 + float(print.wipe_tower_data().depth);
+            float x0 = float(m_config.wipe_tower_x.get_at(plate)), y0 = float(m_config.wipe_tower_y.get_at(plate));
+            float x1 = x0 + float(m_config.prime_tower_width.value), y1 = y0 + float(print.wipe_tower_data().depth);
+            if (const BoundingBoxf& bbx = print.wipe_tower_data().bbx; bbx.defined) {
+                const Vec2f rib = print.wipe_tower_data().rib_offset;
+                x1 = x0 + rib.x() + float(bbx.max.x()); y1 = y0 + rib.y() + float(bbx.max.y());
+                x0 = x0 + rib.x() + float(bbx.min.x()); y0 = y0 + rib.y() + float(bbx.min.y());
+            }
             const BoundingBoxf bed(m_config.printable_area.values);
             wipe_tower_center = (x0 + x1) / 2.f < float(bed.center().x()) ? Vec2f(x1 + 2.f, (y0 + y1) / 2.f) : Vec2f(x0 - 2.f, (y0 + y1) / 2.f);
             wipe_tower_center.x() = std::clamp(wipe_tower_center.x(), float(bed.min.x()), float(bed.max.x()));
@@ -3255,6 +3261,7 @@ void GCode::_do_export(Print& print, GCodeOutputStream& file, ThumbnailsGenerato
                                                             print.wipe_tower_data().local_z_tool_changes,
                                                             print.wipe_tower_data().local_z_reserve_boxes,
                                                             *print.wipe_tower_data().final_purge.get()));
+                m_wipe_tower->set_rib_offset(print.wipe_tower_data().rib_offset);
                 // BBS
                 file.write(m_writer.travel_to_z(initial_layer_print_height + m_config.z_offset.value, "Move to the first layer height"));
 
@@ -6664,7 +6671,9 @@ LayerResult GCode::process_layer(const Print& print,
                                 (print.config().print_sequence == PrintSequence::ByObject && print.objects().size() == 1));
         if (has_prime_tower) {
             int   plate_idx = print.get_plate_index();
-            Point wt_pos(print.config().wipe_tower_x.get_at(plate_idx), print.config().wipe_tower_y.get_at(plate_idx));
+            // Nozzle: plus the rib wall's placement shift, as the tower is printed.
+            Point wt_pos(print.config().wipe_tower_x.get_at(plate_idx) + print.wipe_tower_data().rib_offset.x(),
+                         print.config().wipe_tower_y.get_at(plate_idx) + print.wipe_tower_data().rib_offset.y());
 
             std::vector<GCode::ObjectByExtruder>& objects_by_extruder = objects_by_extruder_it->second;
             std::vector<const PrintObject*>       print_objects;
@@ -9225,21 +9234,22 @@ std::string GCode::set_object_info(Print* print)
         // layer was too high to stick. Only defined, never started: its moves are not wrapped in EXCLUDE_OBJECT_START/END,
         // because the tool change macros run inside the tower and must never be skipped, so excluding it does nothing.
         // The area is the hull of the tower's own extrusions on every layer (half an extrusion width wider), placed as
-        // WipeTowerIntegration places them. Print::first_layer_wipe_tower_corners() assumes a prime_tower_width wide
-        // rectangle, which misses a rib wall's footprint (upstream Orca tracks the real one as WipeTowerData::bbx).
+        // WipeTowerIntegration::append_tcr2 places them (the rib offset added before rotating). Every layer counts, not
+        // just the first-layer box first_layer_wipe_tower_corners() uses.
         if (gflavor == gcfKlipper && print->has_wipe_tower()) {
             const auto&  config = print->config();
             const size_t plate  = print->get_plate_index();
             const float  alpha  = float(Geometry::deg2rad(config.wipe_tower_rotation_angle.value));
             const Vec2f  offset = Vec2f(float(config.wipe_tower_x.get_at(plate)), float(config.wipe_tower_y.get_at(plate))) +
                                   print->get_plate_origin().head<2>().cast<float>();
+            const Vec2f  rib_offset = print->wipe_tower_data().rib_offset;
             Points footprint;
             for (const std::vector<WipeTower::ToolChangeResult>& layer : print->wipe_tower_data().tool_changes)
                 for (const WipeTower::ToolChangeResult& tcr : layer) {
                     if (tcr.priming)
                         continue;
                     for (const WipeTower::Extrusion& extrusion : tcr.extrusions) {
-                        const Vec2f  pt   = Eigen::Rotation2Df(alpha) * extrusion.pos + offset;
+                        const Vec2f  pt   = Eigen::Rotation2Df(alpha) * (extrusion.pos + rib_offset) + offset;
                         const double half = std::max(0.5 * extrusion.width, 0.25);
                         for (const Vec2d& d : {Vec2d(-half, -half), Vec2d(half, -half), Vec2d(half, half), Vec2d(-half, half)})
                             footprint.emplace_back(Point(scale_(pt.x() + d.x()), scale_(pt.y() + d.y())));

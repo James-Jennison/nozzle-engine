@@ -56,6 +56,13 @@ enum class NoiseType {
     Voronoi,
 };
 
+// Nozzle (from upstream OrcaSlicer): wipe tower implementation selector.
+// Type1 = BBS WipeTower + append_tcr (Bambu, Qidi cutter printers), Type2 = Prusa-style WipeTower2 + append_tcr2.
+enum class WipeTowerType {
+    Type1,
+    Type2,
+};
+
 enum PrintHostType {
     htPrusaLink, htPrusaConnect, htOctoPrint, htDuet, htFlashAir, htAstroBox, htRepetier, htMKS, htESP3D, htCrealityPrint, htObico, htFlashforge, htSimplyPrint, htElegooLink, htMoonRaker_mqtt, htMoonRaker, 
 };
@@ -523,6 +530,7 @@ CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(ExtruderType)
 CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(FuzzySkinType)
 CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(FuzzySkinMode)
 CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(NoiseType)
+CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(WipeTowerType)
 CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(InfillPattern)
 CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(IroningType)
 CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(SlicingMode)
@@ -1346,6 +1354,7 @@ PRINT_CONFIG_CLASS_DEFINE(
     ((ConfigOptionFloats,              filament_multitool_ramming_flow))
     ((ConfigOptionFloats,              filament_stamping_loading_speed))
     ((ConfigOptionFloats,              filament_stamping_distance))
+    ((ConfigOptionEnum<WipeTowerType>, wipe_tower_type))
     ((ConfigOptionBool,                purge_in_prime_tower))
     ((ConfigOptionBool,                enable_filament_ramming))
     ((ConfigOptionFloat,                ramming_line_width_ratio))

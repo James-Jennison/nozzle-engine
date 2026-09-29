@@ -795,6 +795,7 @@ bool Print::invalidate_state_by_config_options(const ConfigOptionResolver & /* n
             || opt_key == "dithering_local_z_infill"
             || opt_key == "enable_filament_ramming"
             || opt_key == "purge_in_prime_tower"
+            || opt_key == "wipe_tower_type"
             || opt_key == "z_offset"
             || opt_key == "support_multi_bed_types"
             ) {

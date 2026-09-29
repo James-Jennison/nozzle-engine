@@ -818,6 +818,9 @@ struct WipeTowerData
         depth = 0.f;
         local_z_reserve_boxes.clear();
         brim_width = 0.f;
+        // Nozzle (from upstream OrcaSlicer): reset the tower height too. The Type1 (BBS) tower never sets it, and
+        // first_layer_wipe_tower_corners() reads it for the cone radius; 0 collapses the cone term as upstream intends.
+        height = 0.f;
         bbx        = BoundingBoxf();
         rib_offset = Vec2f::Zero();
     }
@@ -1073,6 +1076,9 @@ public:
     //SoftFever
     bool &is_BBL_printer() { return m_isBBLPrinter; }
     const bool is_BBL_printer() const { return m_isBBLPrinter; }
+    // Nozzle (from upstream OrcaSlicer): which wipe tower implementation this print uses. Bambu printers are always
+    // Type1 (BBS WipeTower); other printers follow the printer's wipe_tower_type option (default Type2, WipeTower2).
+    WipeTowerType wipe_tower_type() const { return is_BBL_printer() ? WipeTowerType::Type1 : m_config.wipe_tower_type.value; }
     CalibMode& calib_mode() { return m_calib_params.mode; }
     const CalibMode calib_mode() const { return m_calib_params.mode; }
     void set_calib_params(const Calib_Params& params);

@@ -137,6 +137,13 @@ static t_config_enum_values s_keys_map_NoiseType {
 };
 CONFIG_OPTION_ENUM_DEFINE_STATIC_MAPS(NoiseType)
 
+// Nozzle (from upstream OrcaSlicer): keys for wipe_tower_type.
+static t_config_enum_values s_keys_map_WipeTowerType {
+    { "type1",          int(WipeTowerType::Type1) },
+    { "type2",          int(WipeTowerType::Type2) }
+};
+CONFIG_OPTION_ENUM_DEFINE_STATIC_MAPS(WipeTowerType)
+
 static t_config_enum_values s_keys_map_FuzzySkinMode {
     { "displacement",   int(FuzzySkinMode::Displacement) },
     { "extrusion",      int(FuzzySkinMode::Extrusion) },
@@ -5438,6 +5445,19 @@ void PrintConfigDef::init_fff_params()
                     "This is useful for manual multi-material printing, where we use M600/PAUSE to trigger the manual filament change action.");
     def->mode = comAdvanced;
     def->set_default_value(new ConfigOptionBool(false));
+
+    // Nozzle (from upstream OrcaSlicer): printer-level wipe tower implementation. Bambu printers always resolve
+    // to Type1 (see Print::wipe_tower_type()); every other printer defaults to Type2.
+    def = this->add("wipe_tower_type", coEnum);
+    def->label = L("Wipe tower type");
+    def->tooltip = L("Choose the wipe tower implementation for multi-material prints. Type 1 is recommended for Bambu and Qidi printers with a filament cutter. Type 2 offers better compatibility with multi-tool and MMU printers and provide overall better compatibility.");
+    def->enum_keys_map = &ConfigOptionEnum<WipeTowerType>::get_enum_values();
+    def->enum_values.emplace_back("type1");
+    def->enum_values.emplace_back("type2");
+    def->enum_labels.emplace_back(L("Type 1"));
+    def->enum_labels.emplace_back(L("Type 2"));
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionEnum<WipeTowerType>(WipeTowerType::Type2));
 
     def = this->add("purge_in_prime_tower", coBool);
     def->label = L("Purge in prime tower");

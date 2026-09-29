@@ -2362,6 +2362,13 @@ WipeTower::ToolChangeResult WipeTower2::finish_layer()
         }
     }
 
+    // Nozzle (from upstream OrcaSlicer): the actual first-layer bounding box, from the outermost brim loop (or the wall
+    // when there is no brim). The real first layer only: first_layer above also covers later layers without sparse infill.
+    if (is_first_layer()) {
+        BoundingBox first_layer_box = get_extents(poly);
+        m_first_layer_bbx           = BoundingBoxf(unscale(first_layer_box.min), unscale(first_layer_box.max));
+    }
+
     // Now prepare future wipe.
     int i = poly.closest_point_index(Point::new_scale(writer.x(), writer.y()));
     writer.add_wipe_point(writer.pos());
@@ -2983,10 +2990,12 @@ Polygon WipeTower2::generate_support_rib_wall(WipeTowerWriter2&                 
         insert_skip_polygon = wall_polygon;
     }
     writer.generate_path(result_wall, feedrate, retract_length, retract_speed, m_used_fillet);
-    // if (m_cur_layer_id == 0) {
-    //     BoundingBox bbox = get_extents(result_wall);
-    //     m_rib_offset     = Vec2f(-unscaled<float>(bbox.min.x()), -unscaled<float>(bbox.min.y()));
-    // }
+    // Nozzle (from upstream OrcaSlicer): the tower-local shift that puts the rib wall's protruding first-layer min corner
+    // at the configured tower position. Measured on the un-gapped outline, so a wall gap cannot shift the tower.
+    if (rib_wall && is_first_layer()) {
+        BoundingBox bbox = get_extents(wall_polygon);
+        m_rib_offset     = Vec2f(-unscaled<float>(bbox.min.x()), -unscaled<float>(bbox.min.y()));
+    }
 
     return insert_skip_polygon;
 }

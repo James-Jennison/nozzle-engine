@@ -674,7 +674,9 @@ struct FakeWipeTower
         cone_angle = ca;
         plate_origin = o;
     }
-    void set_pos(Vec2f p) { pos = p; }
+    // Nozzle (from upstream OrcaSlicer): the rib wall's placement shift, already rotated.
+    Vec2f rib_offset{0.f, 0.f};
+    void set_pos(Vec2f p) { pos = p + rib_offset; }
     void set_pos_and_rotation(const Vec2f& p, float rotation) { pos = p; rotation_angle = rotation; }
 
     std::vector<ExtrusionPaths> getFakeExtrusionPathsFromWipeTower() const
@@ -801,6 +803,10 @@ struct WipeTowerData
     std::vector<std::vector<WipeTower::box_coordinates>>  local_z_reserve_boxes;
     float                                                 brim_width;
     float                                                 height;
+    // Nozzle (from upstream OrcaSlicer): the tower's real first-layer bounding box in tower-local coordinates, and the
+    // rib wall's placement shift (WipeTower2::get_bbx(), get_rib_offset()). Undefined / zero for the BBL tower.
+    BoundingBoxf                                          bbx;
+    Vec2f                                                 rib_offset = Vec2f::Zero();
 
     void clear() {
         priming.reset(nullptr);
@@ -812,6 +818,8 @@ struct WipeTowerData
         depth = 0.f;
         local_z_reserve_boxes.clear();
         brim_width = 0.f;
+        bbx        = BoundingBoxf();
+        rib_offset = Vec2f::Zero();
     }
 
 private:

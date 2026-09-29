@@ -141,9 +141,12 @@ BoundingBoxf get_wipe_tower_extrusions_extents(const Print &print, const coordf_
     Vec3d plate_origin = print.get_plate_origin();
     double wipe_tower_x = print.config().wipe_tower_x.get_at(plate_idx) + plate_origin(0);
     double wipe_tower_y = print.config().wipe_tower_y.get_at(plate_idx) + plate_origin(1);
+    // Nozzle: a rib wall tower is shifted by its rib offset before rotating, as WipeTowerIntegration::append_tcr2 does.
+    const Vec2d rib_offset = print.wipe_tower_data().rib_offset.cast<double>();
     Transform2d trafo =
         Eigen::Translation2d(wipe_tower_x, wipe_tower_y) *
-        Eigen::Rotation2Dd(Geometry::deg2rad(print.config().wipe_tower_rotation_angle.value));
+        Eigen::Rotation2Dd(Geometry::deg2rad(print.config().wipe_tower_rotation_angle.value)) *
+        Eigen::Translation2d(rib_offset.x(), rib_offset.y());
 
     BoundingBoxf bbox;
     for (const std::vector<WipeTower::ToolChangeResult> &tool_changes : print.wipe_tower_data().tool_changes) {

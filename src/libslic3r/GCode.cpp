@@ -9219,6 +9219,20 @@ std::string GCode::set_object_info(Print* print)
                 }
             }
         }
+        // Nozzle: on Klipper, the wipe tower is defined as an object too. Klipper's adaptive bed mesh
+        // (BED_MESH_CALIBRATE ADAPTIVE=1, used by COSMOS and KAMP-style start macros) probes only under the defined
+        // objects, so the tower was printed with the mesh clamped from the objects' area: on an unlevel bed its first
+        // layer was too high to stick. Only defined, never started: its moves are not wrapped in EXCLUDE_OBJECT_START/END,
+        // because the tool change macros run inside the tower and must never be skipped, so excluding it does nothing.
+        if (gflavor == gcfKlipper) {
+            const Points corners = print->first_layer_wipe_tower_corners();
+            if (!corners.empty()) {
+                const Polygon tower = Geometry::convex_hull(corners);
+                const Vec2d   center = print->translate_to_print_space(tower.bounding_box().center());
+                gcode << "EXCLUDE_OBJECT_DEFINE NAME=wipe_tower CENTER=" << center.x() << "," << center.y()
+                      << " POLYGON=" << polygon_to_string(tower, print) << "\n";
+            }
+        }
     }
 
     return gcode.str();

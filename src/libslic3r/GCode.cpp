@@ -752,6 +752,21 @@ std::string WipeTowerIntegration::append_tcr(GCode& gcodegen, const WipeTower::T
         // unretract before wiping
         toolchange_gcode_str += gcodegen.unretract();
         check_add_eol(toolchange_gcode_str);
+    } else {
+        // Nozzle (from upstream OrcaSlicer): upstream's newer append_tcr always emits the toolchange retract/lift and
+        // the matching unretract, whether or not change_filament_gcode is empty. Our older copy computed the retract
+        // above (so the writer thought the filament was retracted) but dropped it when the template was empty, which
+        // left the nozzle crossing from the object to the tower with no retract or lift and an unbalanced unretract
+        // later. Non-Bambu Type1 printers (7 of the 12 Qidi packs) have an empty template; every Bambu pack has one,
+        // so their output is unchanged. We also travel to the tower start while lifted, as the template branch does,
+        // so the lift is kept until the nozzle is over the tower. The Tn command is appended below as usual.
+        toolchange_gcode_str = toolchange_retract_str;
+        std::string start_pos_str = gcodegen.travel_to(wipe_tower_point_to_object_point(gcodegen, start_pos + plate_origin_2d), erMixed,
+                                                       "Move to start pos");
+        check_add_eol(start_pos_str);
+        toolchange_gcode_str += start_pos_str;
+        toolchange_gcode_str += gcodegen.unretract();
+        check_add_eol(toolchange_gcode_str);
     }
 
     std::string toolchange_command;

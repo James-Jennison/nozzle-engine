@@ -1065,7 +1065,9 @@ Vec2d WipeTowerIntegration::extruder_offset_at(size_t extruder_id) const
 std::string WipeTowerIntegration::prime(GCode& gcodegen)
 {
     std::string gcode;
-    if (!gcodegen.is_BBL_Printer()) {
+    // Nozzle (from upstream OrcaSlicer): only the Type2 tower (WipeTower2) produces priming extrusions; the Type1
+    // tower leaves WipeTowerData::priming empty.
+    if (gcodegen.wipe_tower_type() == WipeTowerType::Type2) {
         for (const WipeTower::ToolChangeResult& tcr : m_priming) {
             if (!tcr.extrusions.empty())
                 gcode += append_tcr2(gcodegen, tcr, tcr.new_tool);
@@ -1133,8 +1135,9 @@ std::string WipeTowerIntegration::tool_change(GCode& gcodegen, int extruder_id, 
                                              << " layer_idx=" << m_layer_idx
                                              << " extruder_id=" << extruder_id
                                              << " local_z_tool_change_idx=" << (local_z_tool_change_idx - 1);
-                    return gcodegen.is_BBL_Printer() ? append_tcr(gcodegen, local_z_tcr, extruder_id, tower_z) :
-                                                       append_tcr2(gcodegen, local_z_tcr, extruder_id, tower_z);
+                    // Nozzle: emit with the integration matching the tower type (Type1 = BBS WipeTower).
+                    return gcodegen.wipe_tower_type() == WipeTowerType::Type1 ? append_tcr(gcodegen, local_z_tcr, extruder_id, tower_z) :
+                                                                                append_tcr2(gcodegen, local_z_tcr, extruder_id, tower_z);
                 }
 
                 BOOST_LOG_TRIVIAL(warning) << "Local-Z preplanned wipe tower sequence mismatch, falling back"
@@ -1201,8 +1204,9 @@ std::string WipeTowerIntegration::tool_change(GCode& gcodegen, int extruder_id, 
                                      << " layer_idx=" << m_layer_idx
                                      << " extruder_id=" << extruder_id
                                      << " reserve_slot=" << (slot_idx - 1);
-            return gcodegen.is_BBL_Printer() ? append_tcr(gcodegen, local_z_tcr, extruder_id, tower_z) :
-                                               append_tcr2(gcodegen, local_z_tcr, extruder_id, tower_z);
+            // Nozzle: emit with the integration matching the tower type (Type1 = BBS WipeTower).
+            return gcodegen.wipe_tower_type() == WipeTowerType::Type1 ? append_tcr(gcodegen, local_z_tcr, extruder_id, tower_z) :
+                                                                        append_tcr2(gcodegen, local_z_tcr, extruder_id, tower_z);
         }
 
         const float nozzle_diameter = float(gcodegen.config().nozzle_diameter.get_at(size_t(extruder_id)));
@@ -1340,7 +1344,8 @@ std::string WipeTowerIntegration::tool_change(GCode& gcodegen, int extruder_id, 
     assert(m_layer_idx >= 0);
     if (m_layer_idx >= (int) m_tool_changes.size())
         return gcode;
-    if (!gcodegen.is_BBL_Printer()) {
+    // Nozzle (from upstream OrcaSlicer): Type2 (WipeTower2) -> append_tcr2, Type1 (BBS WipeTower) -> append_tcr.
+    if (gcodegen.wipe_tower_type() == WipeTowerType::Type2) {
         if (gcodegen.writer().need_toolchange(extruder_id) || finish_layer) {
             if (m_layer_idx < (int) m_tool_changes.size()) {
                 if (!(size_t(m_tool_change_idx) < m_tool_changes[m_layer_idx].size()))
@@ -1434,7 +1439,8 @@ bool WipeTowerIntegration::is_empty_wipe_tower_gcode(GCode& gcodegen, int extrud
 std::string WipeTowerIntegration::finalize(GCode& gcodegen)
 {
     std::string gcode;
-    if (!gcodegen.is_BBL_Printer()) {
+    // Nozzle (from upstream OrcaSlicer): only the Type2 tower emits its final purge.
+    if (gcodegen.wipe_tower_type() == WipeTowerType::Type2) {
         if (std::abs(gcodegen.writer().get_position().z() - m_final_purge.print_z) > EPSILON)
             gcode += gcodegen.change_layer(m_final_purge.print_z);
         gcode += append_tcr2(gcodegen, m_final_purge, -1);
@@ -1879,6 +1885,15 @@ bool GCode::is_BBL_Printer()
     return false;
 }
 
+// Nozzle (from upstream OrcaSlicer): wipe tower decisions key on the tower type, not on is_BBL_Printer(), so a
+// non-Bambu printer with wipe_tower_type = type1 takes the BBS WipeTower / append_tcr path.
+WipeTowerType GCode::wipe_tower_type()
+{
+    if (m_curr_print)
+        return m_curr_print->wipe_tower_type();
+    return WipeTowerType::Type2;
+}
+
 void GCode::do_export(Print* print, const char* path, GCodeProcessorResult* result, ThumbnailsGeneratorCallback thumbnail_cb)
 {
     PROFILE_CLEAR();
@@ -2283,6 +2298,9 @@ void GCode::_do_export(Print& print, GCodeOutputStream& file, ThumbnailsGenerato
     // modifies m_silent_time_estimator_enabled
     DoExport::init_gcode_processor(print.config(), m_processor, m_silent_time_estimator_enabled);
     const bool is_bbl_printers = print.is_BBL_printer();
+    // Nozzle (from upstream OrcaSlicer): wipe tower decisions below use the tower type, other BBL behaviour keeps
+    // is_bbl_printers.
+    const WipeTowerType wipe_tower_type = print.wipe_tower_type();
     m_calib_config.clear();
     // resets analyzer's tracking data
     m_last_height  = 0.f;
@@ -2562,7 +2580,9 @@ void GCode::_do_export(Print& print, GCodeOutputStream& file, ThumbnailsGenerato
             throw Slic3r::SlicingError(_(L("No object can be printed. Maybe too small")));
         has_wipe_tower = print.has_wipe_tower() && tool_ordering.has_wipe_tower();
         // Orca: support all extruder priming
-        initial_extruder_id = (!is_bbl_printers && has_wipe_tower && !print.config().single_extruder_multi_material_priming) ?
+        // Nozzle (from upstream OrcaSlicer): must agree with Print::_make_wipe_tower(), which plans the Type1 tower
+        // from tool_ordering.first_extruder().
+        initial_extruder_id = (wipe_tower_type == WipeTowerType::Type2 && has_wipe_tower && !print.config().single_extruder_multi_material_priming) ?
                                   // The priming towers will be skipped.
                                   tool_ordering.all_extruders().back() :
                                   // Don't skip the priming towers.
@@ -2672,7 +2692,7 @@ void GCode::_do_export(Print& print, GCodeOutputStream& file, ThumbnailsGenerato
     // For the start / end G-code to do the priming and final filament pull in case there is no wipe tower provided.
     this->placeholder_parser().set("has_wipe_tower", has_wipe_tower);
     this->placeholder_parser().set("has_single_extruder_multi_material_priming",
-                                   !is_bbl_printers && has_wipe_tower && print.config().single_extruder_multi_material_priming);
+                                   wipe_tower_type == WipeTowerType::Type2 && has_wipe_tower && print.config().single_extruder_multi_material_priming);
     this->placeholder_parser()
         .set("total_toolchanges",
              std::max(0,
@@ -3123,7 +3143,7 @@ void GCode::_do_export(Print& print, GCodeOutputStream& file, ThumbnailsGenerato
     }
 
     // Orca: support extruder priming
-    if (is_bbl_printers || !(has_wipe_tower && print.config().single_extruder_multi_material_priming)) {
+    if (wipe_tower_type != WipeTowerType::Type2 || !(has_wipe_tower && print.config().single_extruder_multi_material_priming)) {
         // Set initial extruder only after custom start G-code.
         // Ugly hack: Do not set the initial extruder if the extruder is primed using the MMU priming towers at the edge of the print bed.
         file.write(this->set_extruder(initial_extruder_id, 0.));
@@ -3256,8 +3276,13 @@ void GCode::_do_export(Print& print, GCodeOutputStream& file, ThumbnailsGenerato
             std::vector<std::pair<coordf_t, std::vector<LayerToPrint>>> layers_to_print = collect_layers_to_print(print);
             // Prusa Multi-Material wipe tower.
             if (has_wipe_tower && !layers_to_print.empty()) {
+                // Nozzle: the Type1 (BBS) tower leaves priming null; bind the integration's priming reference to an
+                // empty list instead of dereferencing a null pointer (upstream only guards the reads in prime()).
+                static const std::vector<WipeTower::ToolChangeResult> s_no_priming;
+                const std::vector<WipeTower::ToolChangeResult> &priming = print.wipe_tower_data().priming ?
+                                                                              *print.wipe_tower_data().priming : s_no_priming;
                 m_wipe_tower.reset(new WipeTowerIntegration(print.config(), print.get_plate_index(), print.get_plate_origin(),
-                                                            *print.wipe_tower_data().priming.get(), print.wipe_tower_data().tool_changes,
+                                                            priming, print.wipe_tower_data().tool_changes,
                                                             print.wipe_tower_data().local_z_tool_changes,
                                                             print.wipe_tower_data().local_z_reserve_boxes,
                                                             *print.wipe_tower_data().final_purge.get()));
@@ -3265,7 +3290,7 @@ void GCode::_do_export(Print& print, GCodeOutputStream& file, ThumbnailsGenerato
                 // BBS
                 file.write(m_writer.travel_to_z(initial_layer_print_height + m_config.z_offset.value, "Move to the first layer height"));
 
-                if (!is_bbl_printers && print.config().single_extruder_multi_material_priming) {
+                if (wipe_tower_type == WipeTowerType::Type2 && print.config().single_extruder_multi_material_priming) {
                     file.write(m_wipe_tower->prime(*this));
                     // Verify, whether the print overaps the priming extrusions.
                     BoundingBoxf bbox_print(get_print_extrusions_extents(print));
@@ -9235,7 +9260,8 @@ std::string GCode::set_object_info(Print* print)
         // because the tool change macros run inside the tower and must never be skipped, so excluding it does nothing.
         // The area is the hull of the tower's own extrusions on every layer (half an extrusion width wider), placed as
         // WipeTowerIntegration::append_tcr2 places them (the rib offset added before rotating). Every layer counts, not
-        // just the first-layer box first_layer_wipe_tower_corners() uses.
+        // just the first-layer box first_layer_wipe_tower_corners() uses. The Type1 (BBS) tower of a non-Bambu printer
+        // with wipe_tower_type = type1 has a zero rib offset, so append_tcr places its extrusions the same way.
         if (gflavor == gcfKlipper && print->has_wipe_tower()) {
             const auto&  config = print->config();
             const size_t plate  = print->get_plate_index();

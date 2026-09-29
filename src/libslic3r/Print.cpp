@@ -3173,9 +3173,11 @@ void Print::_make_wipe_tower()
     for (unsigned int i = 0; i<number_of_extruders; ++i)
         wipe_volumes.push_back(std::vector<float>(flush_matrix.begin()+i*number_of_extruders, flush_matrix.begin()+(i+1)*number_of_extruders));
 
-    const auto bUseWipeTower2 = is_BBL_printer() ? false : true;
+    // Nozzle (from upstream OrcaSlicer): pick the tower implementation from wipe_tower_type() (Bambu is always Type1)
+    // instead of is_BBL_printer(), so non-Bambu Type1 printers (Qidi cutter packs) get the BBS WipeTower.
+    const bool bUseWipeTower2 = this->wipe_tower_type() == WipeTowerType::Type2;
     // Orca: itertate over wipe_volumes and change the non-zero values to the prime_volume
-    if ((!m_config.purge_in_prime_tower || !m_config.single_extruder_multi_material) && !is_BBL_printer()) {
+    if ((!m_config.purge_in_prime_tower || !m_config.single_extruder_multi_material) && bUseWipeTower2) {
         for (unsigned int i = 0; i < number_of_extruders; ++i) {
             for (unsigned int j = 0; j < number_of_extruders; ++j) {
                 if (wipe_volumes[i][j] > 0) {

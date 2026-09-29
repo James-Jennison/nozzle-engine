@@ -243,7 +243,9 @@ private:
     const DynamicPrintConfig*  m_print_full_config = nullptr;
     const PrintConfig*         m_print_config_ptr = nullptr;
     const PrintObject*         m_print_object_ptr = nullptr;
-    bool                       m_is_BBL_printer = false;
+    // Nozzle (from upstream OrcaSlicer): true when the print uses the Type1 (BBS) wipe tower, i.e.
+    // Print::wipe_tower_type() == WipeTowerType::Type1 (always the case for Bambu printers).
+    bool                       m_is_wipe_tower_type1 = false;
     // Mixed filament support: pointer to manager (owned by Print) and
     // number of physical extruders.
     const MixedFilamentManager* m_mixed_mgr    = nullptr;

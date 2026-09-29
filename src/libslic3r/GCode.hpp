@@ -273,6 +273,8 @@ public:
     std::string     unretract() { return m_writer.unlift() + m_writer.unretract(); }
     std::string     set_extruder(unsigned int extruder_id, double print_z, bool by_object=false);
     bool is_BBL_Printer();
+    // Nozzle (from upstream OrcaSlicer): the current print's wipe tower implementation (Type2 when there is no print).
+    WipeTowerType wipe_tower_type();
 
     // SoftFever
     std::string set_object_info(Print* print);

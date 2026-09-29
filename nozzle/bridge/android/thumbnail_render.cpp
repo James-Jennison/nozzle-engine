@@ -54,6 +54,16 @@ Rgb filament_colour(const DynamicPrintConfig& config, int extruder) {
     return parse_colour(colours->values.front()).value_or(kFallbackColour);
 }
 
+// Lifts a very dark colour to a dark grey (as OrcaSlicer draws black filament), so a black part doesn't vanish into
+// the dark background most printer screens show thumbnails on.
+Rgb visible(Rgb rgb) {
+    constexpr float kMinLuma = 70.f;
+    const float luma = 0.299f * rgb[0] + 0.587f * rgb[1] + 0.114f * rgb[2];
+    if (luma < kMinLuma)
+        for (float& c : rgb) c = std::min(c + (kMinLuma - luma), 255.f);
+    return rgb;
+}
+
 struct ColouredPart {
     indexed_triangle_set its; // world/bed coordinates
     Rgb colour;
@@ -76,7 +86,7 @@ std::vector<ColouredPart> coloured_parts(const Model& model, const DynamicPrintC
                 by_state.push_back(volume->mesh().its);
             for (size_t state = 0; state < by_state.size(); ++state) {
                 if (by_state[state].indices.empty()) continue;
-                const Rgb colour = filament_colour(config, state == 0 ? volume_extruder : int(state));
+                const Rgb colour = visible(filament_colour(config, state == 0 ? volume_extruder : int(state)));
                 for (const ModelInstance* instance : object->instances) {
                     const Transform3d matrix = instance->get_matrix() * volume->get_matrix();
                     ColouredPart part{by_state[state], colour};
@@ -156,7 +166,7 @@ Slic3r::ThumbnailsGeneratorCallback make_thumbnail_callback(const Slic3r::Model&
                     // enough to trust for backface culling, and the z-buffer below already handles
                     // hidden-surface removal correctly regardless of a face's winding direction.
                     float shade = std::clamp(0.35f + 0.65f * std::abs(normal.dot(light)), 0.35f, 1.0f);
-                    // A small highlight on the lit faces, so a black or very dark filament still shows its shape.
+                    // A small highlight on the lit faces, so a dark filament still shows its shape.
                     float highlight = 32.f * (shade - 0.35f) / 0.65f;
                     unsigned char r = (unsigned char)std::clamp(base[0] * shade + highlight, 0.f, 255.f);
                     unsigned char g = (unsigned char)std::clamp(base[1] * shade + highlight, 0.f, 255.f);

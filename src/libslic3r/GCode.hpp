@@ -72,6 +72,8 @@ public:
 
 class WipeTowerIntegration {
 public:
+    // Nozzle (from upstream OrcaSlicer): the rib wall's placement shift (WipeTowerData::rib_offset), tower-local.
+    void set_rib_offset(const Vec2f& rib_offset) { m_rib_offset = rib_offset; }
     WipeTowerIntegration(
         const PrintConfig                                           &print_config,
         // BBS: add partplate logic
@@ -133,8 +135,6 @@ private:
     // Left / right edges of the wipe tower, for the planning of wipe moves.
 
     Vec2d extruder_offset_at(size_t extruder_id) const;
-    // Nozzle (from upstream OrcaSlicer): the rib wall's placement shift (WipeTowerData::rib_offset), tower-local.
-    void set_rib_offset(const Vec2f& rib_offset) { m_rib_offset = rib_offset; }
 
 private:
     Vec2f                                                        m_rib_offset{Vec2f(0, 0)};

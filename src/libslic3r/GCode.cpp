@@ -9219,6 +9219,39 @@ std::string GCode::set_object_info(Print* print)
                 }
             }
         }
+        // Nozzle: on Klipper, the wipe tower is defined as an object too. Klipper's adaptive bed mesh
+        // (BED_MESH_CALIBRATE ADAPTIVE=1, used by COSMOS and KAMP-style start macros) probes only under the defined
+        // objects, so the tower was printed with the mesh clamped from the objects' area: on an unlevel bed its first
+        // layer was too high to stick. Only defined, never started: its moves are not wrapped in EXCLUDE_OBJECT_START/END,
+        // because the tool change macros run inside the tower and must never be skipped, so excluding it does nothing.
+        // The area is the hull of the tower's own extrusions on every layer (half an extrusion width wider), placed as
+        // WipeTowerIntegration places them. Print::first_layer_wipe_tower_corners() assumes a prime_tower_width wide
+        // rectangle, which misses a rib wall's footprint (upstream Orca tracks the real one as WipeTowerData::bbx).
+        if (gflavor == gcfKlipper && print->has_wipe_tower()) {
+            const auto&  config = print->config();
+            const size_t plate  = print->get_plate_index();
+            const float  alpha  = float(Geometry::deg2rad(config.wipe_tower_rotation_angle.value));
+            const Vec2f  offset = Vec2f(float(config.wipe_tower_x.get_at(plate)), float(config.wipe_tower_y.get_at(plate))) +
+                                  print->get_plate_origin().head<2>().cast<float>();
+            Points footprint;
+            for (const std::vector<WipeTower::ToolChangeResult>& layer : print->wipe_tower_data().tool_changes)
+                for (const WipeTower::ToolChangeResult& tcr : layer) {
+                    if (tcr.priming)
+                        continue;
+                    for (const WipeTower::Extrusion& extrusion : tcr.extrusions) {
+                        const Vec2f  pt   = Eigen::Rotation2Df(alpha) * extrusion.pos + offset;
+                        const double half = std::max(0.5 * extrusion.width, 0.25);
+                        for (const Vec2d& d : {Vec2d(-half, -half), Vec2d(half, -half), Vec2d(half, half), Vec2d(-half, half)})
+                            footprint.emplace_back(Point(scale_(pt.x() + d.x()), scale_(pt.y() + d.y())));
+                    }
+                }
+            if (footprint.size() >= 3) {
+                const Polygon tower  = Geometry::convex_hull(std::move(footprint));
+                const Vec2d   center = print->translate_to_print_space(tower.bounding_box().center());
+                gcode << "EXCLUDE_OBJECT_DEFINE NAME=wipe_tower CENTER=" << center.x() << "," << center.y()
+                      << " POLYGON=" << polygon_to_string(tower, print) << "\n";
+            }
+        }
     }
 
     return gcode.str();

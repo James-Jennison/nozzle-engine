@@ -377,13 +377,16 @@ void slice_model(Slic3r::Model& model, Slic3r::DynamicPrintConfig& config, const
 // slice_model()'s own single-vs-multi-object sharing above. See slice_bambu_bundle()'s own
 // header comment (this file, below) for why each PlateData/StoreParams field is set the way it
 // is - that reasoning is unchanged here, just factored out so it isn't duplicated per caller.
-// Prints an object with filament (tool) `tool_index`, 1-based; 0 leaves the default. The per-feature filament keys are
-// what region_config_from_model_volume() reads (see slice_multi_object()'s comment on why "extruder" alone is inert).
-// Snapmaker Orca names these wall_filament / sparse_infill_filament / solid_infill_filament; upstream Orca uses the six
-// *_filament_id keys. Whichever this engine defines is set, so the bridge builds on both.
+// Prints an object with filament (tool) `tool_index`, 1-based; 0 leaves the default. Sets the object's "extruder", as
+// upstream's object list does (GUI_ObjectList): Print::apply counts the used filaments from it before regions exist
+// (Print::extruders -> ModelVolume::get_extruders), and with a count of 1 DynamicPrintConfig::normalize_fdm_2 switches
+// the prime tower off. apply_to_print_region_config copies a non-zero "extruder" into the per-feature keys. Those keys
+// are set as well: Snapmaker Orca names them wall_filament / sparse_infill_filament / solid_infill_filament; upstream
+// Orca uses the six *_filament_id keys. Whichever this engine defines is set, so the bridge builds on both.
 void assign_object_filament(Slic3r::ModelObject* object, int tool_index) {
     if (tool_index == 0)
         return;
+    object->config.set("extruder", tool_index);
     for (const char* key : {"outer_wall_filament_id", "inner_wall_filament_id", "sparse_infill_filament_id",
                              "internal_solid_filament_id", "top_surface_filament_id", "bottom_surface_filament_id",
                              "wall_filament", "sparse_infill_filament", "solid_infill_filament"}) {
@@ -797,27 +800,8 @@ void slice_multi_object(const std::vector<std::tuple<std::string, ModelTransform
         Model loaded = load_and_place_model(path, config, transform);
         const size_t first_object_of_file = combined.objects.size();
         for (ModelObject* object : loaded.objects) {
-            // Phase 8 follow-up (§11, WO-25): real per-object tool assignment - root-caused via a
-            // temporary __android_log_print diagnostic (since removed) after the generic
-            // per-object "extruder" config key alone was confirmed to reach ModelObject::config
-            // correctly (has()=true, extruder()=the real requested value) but produced zero
-            // observable effect on the sliced G-code. Read PrintApply.cpp/PrintObject.cpp
-            // directly to find why: region_config_from_model_volume() (PrintObject.cpp), the
-            // real function that turns a ModelObject's config into the per-region config the
-            // GCode generator actually reads tool selection from, only looks at the concrete
-            // per-feature filament-id keys below - "extruder" itself is normally translated into
-            // those by DynamicPrintConfig::normalize_fdm(), but that call is commented out in
-            // this vendored engine's own PrintApply.cpp (line ~1226) - so "extruder" alone is
-            // silently inert here, a real, verified fact about this specific engine build, not
-            // assumed from upstream OrcaSlicer documentation. Setting the six real per-feature
-            // keys directly (normalize_fdm's own real behavior, reproduced by hand) is what
-            // actually reaches GCode's tool ordering. Must be set *before* combined.add_object()
-            // below - Model::add_object's own real implementation (Model.cpp) force-sets
-            // "extruder" (only) to 1 on its clone when the source lacks a real nonzero value;
-            // it doesn't touch these keys, so order matters less for them specifically, but
-            // matching slice_bambu_bundle's existing convention keeps this one code shape.
-            // Snapmaker Orca names these wall_filament / sparse_infill_filament / solid_infill_filament; upstream Orca
-            // uses the six *_filament_id keys. Whichever this engine defines is set, so the bridge builds on both.
+            // Per-object tool assignment (see assign_object_filament: "extruder" plus the per-feature filament keys). Set
+            // before combined.add_object(), which clones the object.
             assign_object_filament(object, tool_index);
             combined.add_object(*object);
         }

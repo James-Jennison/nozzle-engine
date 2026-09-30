@@ -42,5 +42,8 @@ target_link_options(nozzle-engine PRIVATE -static-libstdc++ -static-libgcc)
 # nozzle-engine CLI, without adb or a device. Same full_spectrum.cpp/color_mix.cpp/nanosvg_impl.cpp composition as
 # nozzle-engine above, for the same reasons.
 add_executable(slic3r_cli_test ${NOZZLE_SHARED_BRIDGE}/cli_test.cpp full_spectrum.cpp color_mix.cpp ${NOZZLE_SHARED_BRIDGE}/nanosvg_impl.cpp)
+# cli_test.cpp lives under android/ but includes "full_spectrum.hpp"/"color_mix.hpp" from this (native/) directory -
+# the same #include lines the Android build resolves via its own CMakeLists.txt's NOZZLE_NATIVE_BRIDGE include dir.
+target_include_directories(slic3r_cli_test PRIVATE ${CMAKE_CURRENT_LIST_DIR})
 target_link_libraries(slic3r_cli_test PRIVATE slic3r_engine)
 target_link_options(slic3r_cli_test PRIVATE -static-libstdc++ -static-libgcc)

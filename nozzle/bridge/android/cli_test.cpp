@@ -31,6 +31,8 @@
 #include <tuple>
 #include <vector>
 
+#include <unistd.h>
+
 #include "slic3r_engine.hpp"
 #include "full_spectrum.hpp"
 #include "color_mix.hpp"
@@ -38,6 +40,21 @@
 namespace {
 
 struct BadRequest : std::runtime_error { using std::runtime_error::runtime_error; };
+
+// Same fd-1 hold/restore trick native_cli.cpp uses (see its own comment): libslic3r's Boost.Log static initialisers
+// (Snapmaker Orca's PrintConfig.cpp) run before main and write to fd 1, which would otherwise interleave a trace line
+// into the --full-spectrum/--color-mix JSON or --slice's own stdout - exactly the noise this tool exists to keep out,
+// since its whole point is a byte-for-byte comparison against the desktop CLI's stdout for the same request.
+int g_stdout = -1;
+__attribute__((constructor(101))) void hold_stdout() {
+    std::fflush(stdout);
+    g_stdout = dup(STDOUT_FILENO);
+    if (g_stdout >= 0) dup2(STDERR_FILENO, STDOUT_FILENO);
+}
+void restore_stdout() {
+    std::fflush(stdout);
+    if (g_stdout >= 0) dup2(g_stdout, STDOUT_FILENO);
+}
 
 std::string read_file(const std::string& path) {
     std::ifstream f(path, std::ios::binary);
@@ -93,9 +110,11 @@ int run_full_spectrum_mode(const std::string& request_path) {
     try {
         code = nozzle_fs::run_full_spectrum(read_file(request_path), response);
     } catch (const BadRequest& ex) {
+        restore_stdout();
         std::printf("{\"error\":\"%s\"}\n", ex.what());
         return 2;
     }
+    restore_stdout();
     std::printf("%s\n", response.c_str());
     return code;
 }
@@ -106,9 +125,11 @@ int run_color_mix_mode(const std::string& request_path) {
     try {
         code = nozzle_cm::run_color_mix(read_file(request_path), response);
     } catch (const BadRequest& ex) {
+        restore_stdout();
         std::printf("{\"error\":\"%s\"}\n", ex.what());
         return 2;
     }
+    restore_stdout();
     std::printf("%s\n", response.c_str());
     return code;
 }
@@ -124,6 +145,7 @@ int run_slice_mode(const std::string& request_path) {
                 throw BadRequest("Bad virtual extruders file " + r.virtual_extruders_path + ": " + why);
         }
         engine::slice_multi_object(r.objects, r.out, r.profiles, r.overrides, {}, virtual_extruders_json);
+        restore_stdout();
         std::printf("OK: sliced -> %s\n", r.out.c_str());
         return 0;
     } catch (const BadRequest& ex) {
@@ -159,6 +181,7 @@ int main(int argc, char** argv) {
         // printer profile supplies that in its start/layer gcode; this is
         // the minimal fix for a config with no such profile at all.
         engine::slice_file(argv[1], argv[2], {}, {{"use_relative_e_distances", "0"}});
+        restore_stdout();
         std::printf("OK: sliced %s -> %s\n", argv[1], argv[2]);
         return 0;
     } catch (const std::exception& ex) {

@@ -61,6 +61,10 @@ jobs:
         working-directory: engine
         run: tools/nozzle/contract_test.py "$ENGINE_WORK/dist/nozzle-engine"
 
+      - name: Colour mixing through the Android bridge (Full Spectrum, ColorMix, virtual-extruder slice = desktop CLI)
+        working-directory: engine
+        run: tools/nozzle/colourmix_test.sh "$ENGINE_WORK/dist/nozzle-engine" "$ENGINE_WORK/slic3r_cli_test"
+
       - name: Android engine (arm64-v8a)
         working-directory: engine
         env:

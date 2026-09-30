@@ -20,8 +20,10 @@ cmake -S "$ROOT" -B "$BDIR" -GNinja -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_B
   -DBoost_USE_STATIC_LIBS=ON -DBoost_ROOT="$PREFIX" -DTBB_DIR="$PREFIX/lib/cmake/TBB" -DOpenCV_DIR="$PREFIX/lib/cmake/opencv4" \
   -DCGAL_DIR="$PREFIX/lib/cmake/CGAL" -DOPENSSL_ROOT_DIR="$PREFIX" -DOPENSSL_USE_STATIC_LIBS=ON \
   "-DANDROID_JNI_BRIDGE_DIR=$BRIDGE"
-cmake --build "$BDIR" -j"$JOBS" --target nozzle-engine
+cmake --build "$BDIR" -j"$JOBS" --target nozzle-engine slic3r_cli_test
 mkdir -p "$DIST"; cp "$BDIR/android_jni/nozzle-engine" "$DIST/"; strip "$DIST/nozzle-engine"
+# The Android bridge's mixing entry points, run on this machine (tools/nozzle/colourmix_test.sh); a test tool, not shipped.
+cp "$BDIR/android_jni/slic3r_cli_test" "$WORK/slic3r_cli_test"
 { echo "nozzle-engine built $(date -u +%FT%TZ) from $(git -C "$ROOT" rev-parse HEAD)$(git -C "$ROOT" diff --quiet || echo ' (dirty)')"
   echo "bridge: $BRIDGE"; echo "deps: $PREFIX"
   (cd "$DIST" && sha256sum nozzle-engine); } | tee "$DIST/PROVENANCE.txt"

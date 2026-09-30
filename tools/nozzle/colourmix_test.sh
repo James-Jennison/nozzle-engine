@@ -100,12 +100,14 @@ EOF
             elif [ "$distinct_tools_cli" -lt 2 ]; then
                 fail "expected at least 2 distinct tools in the blend's tool-change sequence, got: $tool_sequence_cli"
             else
-                # "Alternate layer by layer": consecutive tool-change commands (after de-duplicating immediate repeats
-                # via `uniq` above) must not repeat the same tool twice in a row.
-                if echo "$tool_sequence_cli" | awk 'NR>1 && $0==prev{bad=1} {prev=$0} END{exit bad?1:0}'; then
-                    pass "50/50 blend: CLI and bridge agree, tool changes alternate ($(echo "$tool_sequence_cli" | tr '\n' ' '))"
+                # "Alternate layer by layer": a 50/50 blend's layer cycle is A,B,A,B..., so the tool changes (runs of
+                # the same tool collapsed by `uniq` above) must come about once per layer, not just once or twice.
+                layers="$(grep -c '^;LAYER_CHANGE' "$cli_gcode")"
+                changes="$(( $(echo "$tool_sequence_cli" | wc -l) - 1 ))"
+                if [ "$layers" -ge 10 ] && [ "$changes" -ge $(( layers * 8 / 10 )) ]; then
+                    pass "50/50 blend: CLI and bridge agree, $changes tool changes over $layers layers"
                 else
-                    fail "tool changes did not alternate: $tool_sequence_cli"
+                    fail "tool changes did not alternate layer by layer: $changes changes over $layers layers"
                 fi
             fi
         fi

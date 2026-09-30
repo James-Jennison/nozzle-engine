@@ -15,6 +15,7 @@
 // Print's own cancel flag (the slice call then throws CancellationException), and
 // nativeSliceProgress() reads the engine's latest status percent.
 #include <jni.h>
+#include <cstdio>
 #include <string>
 #include <vector>
 #include <new>
@@ -23,6 +24,16 @@
 #include "slic3r_engine.hpp"
 #include "libslic3r/libslic3r.h"
 #include "libslic3r/PrintConfig.hpp"
+
+// The two colour-mixing systems desktop reaches through nozzle-engine's `--full-spectrum`/`--color-mix` CLI modes
+// (nozzle/bridge/native/native_cli.cpp): Snapmaker Orca's Full Spectrum colour mixing (full_spectrum.hpp,
+// nozzle_fs::run_full_spectrum) and PrusaSlicer 2.9.6's ColorMix virtual extruders (color_mix.hpp,
+// nozzle_cm::run_color_mix / check_virtual_extruders_file). Both are plain string-in/string-out functions with no
+// process or temp-file involved even on desktop, so exposing them to Android is a direct call, not a re-implementation
+// - see CMakeLists.txt for how their two .cpp files (shared with the desktop build, not duplicated) get built into
+// this bridge's slic3r_engine static library.
+#include "full_spectrum.hpp"
+#include "color_mix.hpp"
 
 namespace {
 
@@ -96,6 +107,27 @@ std::vector<int> to_int_vector(JNIEnv* env, jintArray array) {
     return result;
 }
 
+// Same escaping native_cli.cpp's own json_string() uses, for the one path below that has to build an error object by
+// hand: nozzle_fs::run_full_spectrum/nozzle_cm::run_color_mix already return a well-formed {"error": "..."} response
+// string on failure (see their own header comments - they catch every std::exception internally and never throw),
+// so this is only reached if something outside them (JNI string marshalling itself) throws.
+std::string json_error(const std::string& message) {
+    std::string escaped = "\"";
+    for (unsigned char c : message) {
+        switch (c) {
+            case '"': escaped += "\\\""; break;
+            case '\\': escaped += "\\\\"; break;
+            case '\n': escaped += "\\n"; break;
+            case '\r': escaped += "\\r"; break;
+            case '\t': escaped += "\\t"; break;
+            default:
+                if (c < 0x20) { char b[8]; std::snprintf(b, sizeof b, "\\u%04x", c); escaped += b; } else escaped += static_cast<char>(c);
+        }
+    }
+    escaped += "\"";
+    return "{\"error\":" + escaped + "}";
+}
+
 } // namespace
 
 extern "C" JNIEXPORT jstring JNICALL
@@ -121,6 +153,50 @@ Java_org_orcaslicer_engine_NativeEngine_nativeDiagnoseConfigDef(JNIEnv* env, jcl
     result += "; has(\"machine_end_gcode\")=";
     result += (placeholders.find("machine_end_gcode") != placeholders.end()) ? "true" : "false";
     return env->NewStringUTF(result.c_str());
+}
+
+// Snapmaker Orca's Full Spectrum colour mixing (Color Mixing list / Color Mixing Match): the same request/response
+// JSON `nozzle-engine --full-spectrum <request.json>` takes/prints (see native_cli.cpp's usage comment and
+// full_spectrum.hpp), run directly against nozzle_fs::run_full_spectrum - no temp files, no subprocess, since this
+// bridge already links the same full_spectrum.cpp the CLI does. Unlike nativeSliceFile and friends, this never throws
+// a Java exception for an ordinary failure: run_full_spectrum() itself never throws (see its own header comment - it
+// catches every std::exception and always returns a JSON response), so a failed request comes back as this same
+// string, just with an "error" key, exactly as the CLI's own stdout does on exit code 1 or 2:
+//   {"error": "<message>"}
+// A RuntimeException is only possible here if the JNI string marshalling itself fails (e.g. cannot allocate the
+// returned jstring, or requestJson is null) - genuinely exceptional, not a normal "bad request" outcome.
+extern "C" JNIEXPORT jstring JNICALL
+Java_org_orcaslicer_engine_NativeEngine_nativeFullSpectrum(JNIEnv* env, jclass, jstring jRequestJson) {
+    std::string response;
+    try {
+        std::string ignored_code_carrier; // run_full_spectrum's int return is the CLI's process exit code (0/1/2);
+        (void) nozzle_fs::run_full_spectrum(jstring_to_string(env, jRequestJson), response); // the response JSON already says which.
+    } catch (const std::exception& ex) {
+        response = json_error(ex.what());
+    } catch (...) {
+        response = json_error("Unknown native error during full spectrum mixing");
+    }
+    jstring result = env->NewStringUTF(response.c_str());
+    if (result == nullptr) throw_java_exception(env, "Could not allocate the full spectrum response string.");
+    return result;
+}
+
+// PrusaSlicer 2.9.6 ColorMix (virtual extruders): the same contract as nativeFullSpectrum above, calling
+// nozzle_cm::run_color_mix directly - same request/response JSON as `nozzle-engine --color-mix <request.json>`,
+// same {"error": "..."} shape on failure, same "never throws for an ordinary bad request" behaviour.
+extern "C" JNIEXPORT jstring JNICALL
+Java_org_orcaslicer_engine_NativeEngine_nativeColorMix(JNIEnv* env, jclass, jstring jRequestJson) {
+    std::string response;
+    try {
+        (void) nozzle_cm::run_color_mix(jstring_to_string(env, jRequestJson), response);
+    } catch (const std::exception& ex) {
+        response = json_error(ex.what());
+    } catch (...) {
+        response = json_error("Unknown native error during colour mix");
+    }
+    jstring result = env->NewStringUTF(response.c_str());
+    if (result == nullptr) throw_java_exception(env, "Could not allocate the colour mix response string.");
+    return result;
 }
 
 // Slices inputModelPath (STL/3MF/OBJ) to outputGcodePath. profilePaths is an
@@ -255,11 +331,19 @@ static std::vector<engine::ObjectExtras> extras_from(JNIEnv* env, jobjectArray j
     return extras;
 }
 
+// jVirtualExtruders (added for Full Spectrum / ColorMix support, see nativeSliceMultiObjectMix below) is null for
+// every caller that existed before virtual extruders did (nativeSliceMultiObject, nativeSliceMultiObjectEx) -
+// treated the same as "no virtual extruders", exactly like the desktop CLI's plain slice mode when its request has
+// no `virtual_extruders` line (native_cli.cpp). When non-empty it is validated with the same
+// nozzle_cm::check_virtual_extruders_file() the CLI itself calls, before it ever reaches engine::slice_multi_object,
+// so a malformed file is reported the same way here as there (a BadRequest-shaped message via throw_java_exception,
+// not a silent no-op).
 static void nativeSliceMultiObject_impl(
     JNIEnv* env, jobjectArray jPaint, jobjectArray jVolumes,
     jobjectArray jModelPaths, jdoubleArray jOffsetXMm, jdoubleArray jOffsetYMm,
     jdoubleArray jRotationZDeg, jdoubleArray jScale, jintArray jToolSlotIndices,
-    jstring jOutputGcodePath, jobjectArray jProfilePaths, jobjectArray jOverrideKeys, jobjectArray jOverrideValues) {
+    jstring jOutputGcodePath, jobjectArray jProfilePaths, jobjectArray jOverrideKeys, jobjectArray jOverrideValues,
+    jstring jVirtualExtruders = nullptr) {
     try {
         std::vector<std::string> model_paths = to_string_vector(env, jModelPaths);
         std::vector<double> offsets_x = to_double_vector(env, jOffsetXMm);
@@ -296,7 +380,16 @@ static void nativeSliceMultiObject_impl(
             config_overrides.emplace_back(keys[i], values[i]);
         }
 
-        engine::slice_multi_object(objects, output_path, profile_paths, config_overrides, extras_from(env, jPaint, jVolumes, objects.size()));
+        std::string virtual_extruders_json = jVirtualExtruders != nullptr ? jstring_to_string(env, jVirtualExtruders) : std::string{};
+        if (!virtual_extruders_json.empty()) {
+            std::string why;
+            if (!nozzle_cm::check_virtual_extruders_file(virtual_extruders_json, why)) {
+                throw_java_exception(env, "Bad virtual extruders JSON: " + why);
+                return;
+            }
+        }
+
+        engine::slice_multi_object(objects, output_path, profile_paths, config_overrides, extras_from(env, jPaint, jVolumes, objects.size()), virtual_extruders_json);
     } catch (const std::exception& ex) {
         throw_java_exception(env, ex);
     } catch (...) {
@@ -472,6 +565,42 @@ Java_org_orcaslicer_engine_NativeEngine_nativeSlicePaintSession(
     }
 }
 
+// Everything nativeSlicePaintSession takes, plus jVirtualExtruders (same JSON-text convention as
+// nativeSliceMultiObjectMix above, "" or null for none). Painted multi-colour models are the main use case for
+// PrusaSlicer-style virtual extruders on this platform - an enforced region's painted facets carry a virtual tool id
+// the same way an object's whole-object tool slot does in nativeSliceMultiObjectMix - so this is the paint-session
+// counterpart Prepare needs alongside it. See engine::slice_paint_session's own comment (slic3r_engine.cpp) for why
+// this has to live on the Model rather than in config_overrides.
+extern "C" JNIEXPORT void JNICALL
+Java_org_orcaslicer_engine_NativeEngine_nativeSlicePaintSessionMix(
+    JNIEnv* env, jclass, jlong handle, jstring jOutputGcodePath, jobjectArray jProfilePaths, jobjectArray jOverrideKeys, jobjectArray jOverrideValues,
+    jstring jVirtualExtruders) {
+    try {
+        std::vector<std::pair<std::string, std::string>> config_overrides;
+        std::vector<std::string> keys = to_string_vector(env, jOverrideKeys);
+        std::vector<std::string> values = to_string_vector(env, jOverrideValues);
+        for (size_t i = 0; i < keys.size() && i < values.size(); ++i) {
+            config_overrides.emplace_back(keys[i], values[i]);
+        }
+
+        std::string virtual_extruders_json = jVirtualExtruders != nullptr ? jstring_to_string(env, jVirtualExtruders) : std::string{};
+        if (!virtual_extruders_json.empty()) {
+            std::string why;
+            if (!nozzle_cm::check_virtual_extruders_file(virtual_extruders_json, why)) {
+                throw_java_exception(env, "Bad virtual extruders JSON: " + why);
+                return;
+            }
+        }
+
+        engine::slice_paint_session(static_cast<engine::PaintSessionHandle>(handle), jstring_to_string(env, jOutputGcodePath),
+            to_string_vector(env, jProfilePaths), config_overrides, virtual_extruders_json);
+    } catch (const std::exception& ex) {
+        throw_java_exception(env, ex);
+    } catch (...) {
+        throw_java_exception(env, "Unknown native error while slicing the paint session");
+    }
+}
+
 extern "C" JNIEXPORT void JNICALL
 Java_org_orcaslicer_engine_NativeEngine_nativeClosePaintSession(JNIEnv*, jclass, jlong handle) {
     engine::close_paint_session(static_cast<engine::PaintSessionHandle>(handle));
@@ -529,6 +658,22 @@ Java_org_orcaslicer_engine_NativeEngine_nativeSliceMultiObjectEx(
     jobjectArray jPaintStrokes, jobjectArray jVolumeSpecs) {
     nativeSliceMultiObject_impl(env, jPaintStrokes, jVolumeSpecs, jModelPaths, jOffsetXMm, jOffsetYMm, jRotationZDeg, jScale, jToolSlotIndices,
                                 jOutputGcodePath, jProfilePaths, jOverrideKeys, jOverrideValues);
+}
+
+// Everything nativeSliceMultiObjectEx takes, plus jVirtualExtruders: the same Full Spectrum / ColorMix
+// virtual-extruders JSON the desktop CLI's plain slice mode reads from its request's `virtual_extruders\t<path>`
+// line (see native_cli.cpp and nozzle_cm::check_virtual_extruders_file), here passed as the JSON text itself rather
+// than a path since Android has no equivalent request-file convention. Pass "" (or null) for no virtual extruders -
+// identical to calling nativeSliceMultiObjectEx. This is what Prepare should call for a painted-or-arranged plate
+// that uses PrusaSlicer-style blend/gradient virtual tools, since nativeSliceMultiObjectEx has no way to supply them.
+extern "C" JNIEXPORT void JNICALL
+Java_org_orcaslicer_engine_NativeEngine_nativeSliceMultiObjectMix(
+    JNIEnv* env, jclass, jobjectArray jModelPaths, jdoubleArray jOffsetXMm, jdoubleArray jOffsetYMm,
+    jdoubleArray jRotationZDeg, jdoubleArray jScale, jintArray jToolSlotIndices,
+    jstring jOutputGcodePath, jobjectArray jProfilePaths, jobjectArray jOverrideKeys, jobjectArray jOverrideValues,
+    jobjectArray jPaintStrokes, jobjectArray jVolumeSpecs, jstring jVirtualExtruders) {
+    nativeSliceMultiObject_impl(env, jPaintStrokes, jVolumeSpecs, jModelPaths, jOffsetXMm, jOffsetYMm, jRotationZDeg, jScale, jToolSlotIndices,
+                                jOutputGcodePath, jProfilePaths, jOverrideKeys, jOverrideValues, jVirtualExtruders);
 }
 
 extern "C" JNIEXPORT void JNICALL

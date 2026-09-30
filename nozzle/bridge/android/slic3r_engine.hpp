@@ -163,9 +163,15 @@ std::vector<float> get_painted_facets(PaintSessionHandle handle);
 // Slices using the session's own already-loaded (and possibly painted) in-memory model directly -
 // no re-load from disk, no serialization round-trip for the painted state. Does not close the
 // session; the caller closes it explicitly once done.
+//
+// virtual_extruders_json: same PrusaSlicer 2.9.6 virtual extruders slice_multi_object() takes (empty = none). A
+// painted area whose enforcer state equals a virtual id then prints by PrusaSlicer's layer cycle - the main reason
+// this parameter exists on the paint path at all, since a painted multi-colour model is how a mixed-filament blend
+// actually gets assigned to part of an object today (there being no per-triangle "tool_index" outside painting).
 void slice_paint_session(PaintSessionHandle handle, const std::string& output_gcode_path,
                           const std::vector<std::string>& profile_paths,
-                          const std::vector<std::pair<std::string, std::string>>& config_overrides = {});
+                          const std::vector<std::pair<std::string, std::string>>& config_overrides = {},
+                          const std::string& virtual_extruders_json = {});
 
 void close_paint_session(PaintSessionHandle handle);
 

@@ -11,12 +11,22 @@ project(slic3r_android_jni)
 
 find_library(ANDROID_LOG_LIB log)
 
+# Full Spectrum (Snapmaker Orca colour mixing) and ColorMix (PrusaSlicer 2.9.6 virtual extruders): the same two
+# mixing-system source files the desktop CLI builds (nozzle/bridge/native/CMakeLists.txt), shared rather than
+# duplicated so Android's mixing behaviour cannot drift from desktop's. See full_spectrum.hpp/color_mix.hpp for
+# what each exposes; nozzle_fs::run_full_spectrum / nozzle_cm::run_color_mix are called directly by slic3r_jni.cpp
+# (nativeFullSpectrum/nativeColorMix), no temp files or subprocess involved on this platform either.
+set(NOZZLE_NATIVE_BRIDGE "${CMAKE_CURRENT_LIST_DIR}/../native")
+
 add_library(slic3r_engine STATIC
     slic3r_engine.cpp
     thumbnail_render.cpp
     nanosvg_impl.cpp
     option_states.cpp
+    ${NOZZLE_NATIVE_BRIDGE}/full_spectrum.cpp
+    ${NOZZLE_NATIVE_BRIDGE}/color_mix.cpp
 )
+target_include_directories(slic3r_engine PUBLIC ${NOZZLE_NATIVE_BRIDGE})
 target_link_libraries(slic3r_engine PUBLIC
     libslic3r
     cereal::cereal

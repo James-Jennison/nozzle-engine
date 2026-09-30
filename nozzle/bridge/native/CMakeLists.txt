@@ -33,3 +33,14 @@ endif ()
 target_link_libraries(nozzle-engine PRIVATE slic3r_engine)
 # Keep the C++ runtime inside the binary so it runs on desktops older than the build host.
 target_link_options(nozzle-engine PRIVATE -static-libstdc++ -static-libgcc)
+
+# Host (x86_64) build of the same cli_test.cpp the Android build compiles as an on-device smoke test
+# (../android/CMakeLists.txt's slic3r_cli_test target) - lets its Full Spectrum/ColorMix/virtual-extruders modes run
+# directly on the build machine, proving the Android JNI bridge's mixing entry points (nativeFullSpectrum,
+# nativeColorMix, nativeSliceMultiObjectMix, nativeSlicePaintSessionMix in slic3r_jni.cpp all call the same
+# nozzle_fs::run_full_spectrum/nozzle_cm::run_color_mix/engine::slice_multi_object this does) agree with the desktop
+# nozzle-engine CLI, without adb or a device. Same full_spectrum.cpp/color_mix.cpp/nanosvg_impl.cpp composition as
+# nozzle-engine above, for the same reasons.
+add_executable(slic3r_cli_test ${NOZZLE_SHARED_BRIDGE}/cli_test.cpp full_spectrum.cpp color_mix.cpp ${NOZZLE_SHARED_BRIDGE}/nanosvg_impl.cpp)
+target_link_libraries(slic3r_cli_test PRIVATE slic3r_engine)
+target_link_options(slic3r_cli_test PRIVATE -static-libstdc++ -static-libgcc)

@@ -65,6 +65,27 @@ expect("extrusion fuzzy skin without Arachne asks", any(c["id"] == "fuzzy_skin_n
 r = call("--config-checks", "generic_klipper")
 expect("a stock profile has no conflicts", r["conflicts"] == [])
 
+# Which process presets a printer offers (Orca's is_compatible_with_printer): its name in compatible_printers, else
+# compatible_printers_condition evaluated against the printer, else every printer.
+with tempfile.TemporaryDirectory() as t:
+    def write(name, data):
+        path = os.path.join(t, name + ".json")
+        json.dump(data, open(path, "w"))
+        return path
+    printer = write("printer", {"printer_notes": "PRINTER_VENDOR_PRUSA3D PRINTER_MODEL_COREONE HF_NOZZLE", "nozzle_diameter": ["0.4"]})
+    presets = [write("listed", {"compatible_printers": ["Test Printer 0.4 nozzle"]}),
+               write("other", {"compatible_printers": ["Some Other Printer"]}),
+               write("cond_yes", {"compatible_printers": [], "compatible_printers_condition":
+                                  "printer_notes=~/.*PRINTER_MODEL_COREONE[^_a-zA-Z0-9].*/ and nozzle_diameter[0]==0.4 and printer_notes=~/.*HF_NOZZLE.*/"}),
+               write("cond_no", {"compatible_printers": [], "compatible_printers_condition": "nozzle_diameter[0]==0.6"}),
+               write("cond_preset", {"compatible_printers_condition": "printer_preset==\"Test Printer 0.4 nozzle\" and num_extruders==1"}),
+               write("everyone", {})]
+    with open(os.path.join(t, "req.json"), "w") as f:
+        json.dump({"printer": printer, "printerName": "Test Printer 0.4 nozzle", "type": "print", "presets": presets}, f)
+    out = subprocess.run([ENGINE, "--compatible-presets", f.name], capture_output=True, text=True, timeout=60)
+    got = json.loads(out.stdout).get("compatible") if out.returncode == 0 else out.stdout
+    expect(f"compatible presets: list, condition and no-restriction rules (got {got})", got == [True, False, True, False, True, True])
+
 # Aliases name only real settings and choice values.
 schema = json.loads(subprocess.run([ENGINE, "--schema"], capture_output=True, text=True).stdout)
 opts = {o["key"]: o for o in schema["options"]}

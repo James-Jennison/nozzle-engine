@@ -8,6 +8,8 @@
 # also compiles on-device (see nozzle/bridge/native/CMakeLists.txt's slic3r_cli_test target and
 # nozzle/bridge/android/CMakeLists.txt's own copy) - and diffs its output against nozzle-engine's.
 #
+# It also proves the G-code thumbnail draws a part printed with a mix in the mix's color (steps 3 and 4).
+#
 # Usage: colourmix_test.sh <nozzle-engine> <slic3r_cli_test>
 set -uo pipefail
 NOZZLE_ENGINE="$1"
@@ -20,6 +22,21 @@ FAIL=0
 
 fail() { echo "FAIL: $1"; FAIL=1; }
 pass() { echo "PASS: $1"; }
+
+# thumbnail_shows <file.gcode> <#RRGGBB> <what>: the G-code's thumbnail draws the model in that color (and so not in
+# pure red, filament 1's color in every slice here).
+thumbnail_shows() {
+    local checker; checker="$(dirname "${BASH_SOURCE[0]}")/thumbnail_color.py"
+    if [ -z "$2" ]; then
+        fail "$3: no expected color"
+    elif ! python3 "$checker" "$1" "$2" >"$JOB/thumbnail.log" 2>&1; then
+        fail "$3 is not drawn in $2: $(cat "$JOB/thumbnail.log")"
+    elif python3 "$checker" "$1" "#FF0000" >/dev/null 2>&1; then
+        fail "$3 cannot be told apart from filament 1's color"
+    else
+        pass "$3 is drawn in $2 ($(cat "$JOB/thumbnail.log"))"
+    fi
+}
 
 # --- 1. Full Spectrum: same request, same response, through both entry points ------------------------------------
 cat > "$JOB/fs_request.json" <<'EOF'
@@ -109,8 +126,49 @@ EOF
                 else
                     fail "tool changes did not alternate layer by layer: $changes changes over $layers layers"
                 fi
+                # The thumbnail draws the cube in the blend's color (what --color-mix answers for the same mix in
+                # step 2), not in a physical filament's: a mixed tool id used to be drawn as filament 1.
+                blend_color="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["color"])' "$JOB/cm_cli.json" 2>/dev/null)"
+                thumbnail_shows "$cli_gcode" "$blend_color" "50/50 blend thumbnail"
             fi
         fi
+    fi
+fi
+
+# --- 4. A Full Spectrum mix (mixed_filament_definitions, the path a Snapmaker U1 slice takes): the cube on mixed ------
+#        filament 6 (the second custom row, filaments 3 + 4) prints with tools T2 and T3 only, and its thumbnail shows
+#        the color the Color Mixing panel shows for that row, not filament 1's (as it did on a real U1 color
+#        reference print, 2026-10-01, whose six mixes all came out in one color).
+if [ -f "$PACK/machine.json" ] && [ -f "$CUBE" ]; then
+    definitions='1,2,1,1,50,0,g,w,m2,z0,xa0,xb0,d0,o0,u1,cm0;3,4,1,1,50,0,g,w,m2,z0,xa0,xb0,d0,o0,u2,cm0'
+    printf '{"op":"display","physical":["#ff0000","#00ff00","#0000ff","#ffff00"],"definitions":"%s"}\n' "$definitions" > "$JOB/mix_display.json"
+    mix_color="$("$NOZZLE_ENGINE" --full-spectrum "$JOB/mix_display.json" 2>/dev/null |
+        python3 -c 'import json,sys; print(next(r["display"] for r in json.load(sys.stdin)["rows"] if r["id"] == 6 and r["a"] == 3 and r["b"] == 4))' 2>/dev/null)"
+    {
+        printf 'out\t%s\n' "$JOB/mix.gcode"
+        printf 'profile\t%s\n' "$PACK/machine.json" "$PACK/process.json" "$PACK/filament.json"
+        printf 'set\tlayer_height\t0.2\n'
+        printf 'set\tfilament_diameter\t1.75,1.75,1.75,1.75\n'
+        printf 'set\tfilament_colour\t#FF0000;#00FF00;#0000FF;#FFFF00\n'
+        printf 'set\tfilament_type\tPLA;PLA;PLA;PLA\n'
+        printf 'set\tnozzle_temperature\t210,210,210,210\n'
+        printf 'set\tnozzle_temperature_initial_layer\t210,210,210,210\n'
+        printf 'set\tmixed_filament_definitions\t%s\n' "$definitions"
+        printf 'object\t%s\t0\t0\t0\t1\t6\n' "$CUBE"
+    } > "$JOB/mix_request.txt"
+    "$CLI_TEST" --slice "$JOB/mix_request.txt" >"$JOB/mix_bridge.log" 2>&1; mix_code=$?
+    if [ "$mix_code" != 0 ] || [ ! -s "$JOB/mix.gcode" ]; then
+        fail "bridge (slic3r_cli_test) failed to slice the Full Spectrum mix (exit $mix_code); see $JOB/mix_bridge.log"
+    elif [ -z "$mix_color" ]; then
+        fail "the Color Mixing panel has no row 6 (filaments 3 + 4) for $definitions"
+    else
+        mix_tools="$(grep -oE '^T[0-9]+' "$JOB/mix.gcode" | sort -u | tr '\n' ' ')"
+        if [ "$mix_tools" = "T2 T3 " ]; then
+            pass "Full Spectrum mix: mixed filament 6 prints with $mix_tools"
+        else
+            fail "mixed filament 6 (filaments 3 + 4) should print with T2 and T3 only, got: $mix_tools"
+        fi
+        thumbnail_shows "$JOB/mix.gcode" "$mix_color" "Full Spectrum mix thumbnail"
     fi
 fi
 

@@ -1,6 +1,7 @@
 #include "contract_cli.hpp"
 #include "option_states.hpp"
 
+#include <libslic3r/Preset.hpp>
 #include <libslic3r/PrintConfig.hpp>
 #include <nlohmann/json.hpp>
 
@@ -60,6 +61,36 @@ static int run_contract(const std::string& request, std::string& response, bool 
             out["notices"].push_back({{"id", n.id}, {"message", n.message}, {"changes", changes}});
         }
         response = out.dump();
+        return 0;
+    } catch (const std::exception& e) {
+        response = json{{"error", e.what()}}.dump();
+        return 1;
+    }
+}
+int run_compatible_presets(const std::string& request, std::string& response) {
+    using namespace Slic3r;
+    try {
+        const json req = json::parse(request);
+        const std::string type = req.value("type", std::string("print"));
+        if (type != "print" && type != "filament") throw std::runtime_error("type must be print or filament");
+        // As PresetBundle keeps them: each preset's config is the full default config with the profile applied.
+        Preset printer(Preset::TYPE_PRINTER, req.at("printerName").get<std::string>());
+        printer.is_system = true;
+        printer.config = DynamicPrintConfig::full_print_config();
+        DynamicPrintConfig machine;
+        machine.load(req.at("printer").get<std::string>(), ForwardCompatibilitySubstitutionRule::Enable);
+        printer.config.apply(machine);
+        const PresetWithVendorProfile active_printer(printer, nullptr);
+        json compatible = json::array();
+        for (const auto& path : req.at("presets")) {
+            Preset preset(type == "print" ? Preset::TYPE_PRINT : Preset::TYPE_FILAMENT, path.get<std::string>());
+            preset.config = DynamicPrintConfig::full_print_config();
+            DynamicPrintConfig loaded;
+            loaded.load(path.get<std::string>(), ForwardCompatibilitySubstitutionRule::Enable);
+            preset.config.apply(loaded);
+            compatible.push_back(is_compatible_with_printer(PresetWithVendorProfile(preset, nullptr), active_printer));
+        }
+        response = json{{"compatible", compatible}}.dump();
         return 0;
     } catch (const std::exception& e) {
         response = json{{"error", e.what()}}.dump();

@@ -242,7 +242,7 @@ int main(int argc, char** argv) {
         std::cout << "nozzle-engine 1 (libslic3r, shared Android pipeline, native)" << std::endl;
         return 0;
     }
-    if (argc == 3 && (std::string(argv[1]) == "--full-spectrum" || std::string(argv[1]) == "--color-mix" || std::string(argv[1]) == "--plate" || std::string(argv[1]) == "--option-states" || std::string(argv[1]) == "--config-checks")) {
+    if (argc == 3 && (std::string(argv[1]) == "--full-spectrum" || std::string(argv[1]) == "--color-mix" || std::string(argv[1]) == "--plate" || std::string(argv[1]) == "--option-states" || std::string(argv[1]) == "--config-checks" || std::string(argv[1]) == "--compatible-presets")) {
         const std::string mode = argv[1];
         const bool color_mix = mode == "--color-mix";
         std::string request, response;
@@ -253,6 +253,7 @@ int main(int argc, char** argv) {
             request = ss.str();
             code = mode == "--option-states" ? nozzle_contract::run_option_states(request, response)
                  : mode == "--config-checks" ? nozzle_contract::run_config_checks(request, response)
+                 : mode == "--compatible-presets" ? nozzle_contract::run_compatible_presets(request, response)
                  : mode == "--plate" ? nozzle_plate::run_plate(request, response)
                  : color_mix ? nozzle_cm::run_color_mix(request, response) : nozzle_fs::run_full_spectrum(request, response);
         } else {
@@ -263,7 +264,7 @@ int main(int argc, char** argv) {
         return code;
     }
     if (argc != 2) {
-        std::cerr << "usage: nozzle-engine <request.txt> | --version | --schema | --full-spectrum <request.json> | --color-mix <request.json> | --plate <request.json> | --option-states <request.json> | --config-checks <request.json>" << std::endl;
+        std::cerr << "usage: nozzle-engine <request.txt> | --version | --schema | --full-spectrum <request.json> | --color-mix <request.json> | --plate <request.json> | --option-states <request.json> | --config-checks <request.json> | --compatible-presets <request.json>" << std::endl;
         return 2;
     }
     Request req;

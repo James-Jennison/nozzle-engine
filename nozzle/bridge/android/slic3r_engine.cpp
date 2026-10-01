@@ -463,6 +463,38 @@ Slic3r::Vec2d prime_tower_overrun(const Slic3r::Print& print, const Slic3r::Mode
     return move;
 }
 
+// The flushing volumes hold a value for every pair of filaments: the engine sizes its tool-change tables from
+// flush_volumes_matrix and indexes them by filament, so a matrix smaller than the filament count (the default is 4 x 4)
+// is read out of bounds: a five-filament slice without its own matrix crashed or never finished. Upstream's GUI keeps
+// the matrix in step with the filament list; this is its resize (PresetBundle::update_multi_material_filament_presets),
+// growing only: a pair the matrix lacks gets the two filaments' flush_volumes_vector volumes, and that vector is
+// padded from its first filament.
+void grow_flush_volumes(Slic3r::DynamicPrintConfig& config) {
+    using namespace Slic3r;
+    const auto* diameters = config.option<ConfigOptionFloats>("filament_diameter");
+    auto* matrix = config.option<ConfigOptionFloats>("flush_volumes_matrix");
+    auto* per_filament = config.option<ConfigOptionFloats>("flush_volumes_vector");
+    if (diameters == nullptr || matrix == nullptr || per_filament == nullptr) return;
+    const size_t filaments = diameters->values.size();
+    const size_t old_filaments = size_t(std::sqrt(double(matrix->values.size())) + EPSILON);
+    if (filaments <= old_filaments) return;
+
+    std::vector<double>& volumes = per_filament->values;
+    while (volumes.size() < 2 * filaments) {
+        volumes.push_back(volumes.size() > 1 ? volumes[0] : 140.); // copy the values from the first extruder
+        volumes.push_back(volumes.size() > 1 ? volumes[1] : 140.);
+    }
+    const std::vector<double> old_matrix = matrix->values;
+    std::vector<double> new_matrix;
+    new_matrix.reserve(filaments * filaments);
+    for (size_t i = 0; i < filaments; ++i)
+        for (size_t j = 0; j < filaments; ++j) {
+            if (i < old_filaments && j < old_filaments) new_matrix.push_back(old_matrix[i * old_filaments + j]);
+            else new_matrix.push_back(i == j ? 0. : volumes[2 * i] + volumes[2 * j + 1]);
+        }
+    matrix->values = std::move(new_matrix);
+}
+
 void validate_print(const Slic3r::Print& print) {
     Slic3r::StringObjectException validation_error = print.validate();
     if (!validation_error.string.empty()) {
@@ -470,8 +502,9 @@ void validate_print(const Slic3r::Print& print) {
     }
 }
 
-// print.apply() with the prime tower placed, then the engine's own validation.
+// print.apply() with the flushing volumes sized and the prime tower placed, then the engine's own validation.
 void apply_and_validate(Slic3r::Print& print, Slic3r::Model& model, Slic3r::DynamicPrintConfig& config) {
+    grow_flush_volumes(config);
     print.apply(model, config);
     if (place_prime_tower(print, model, config)) print.apply(model, config);
     assign_print_object_ids(print);

@@ -11,6 +11,8 @@
 #   3. Creality Ender-3 (220 mm bed slinger), two filaments: the tower starts at the bed slinger corner and its skirt,
 #      which goes around the tower, stays on the bed too.
 #   4. A position the caller sets is kept.
+#   5. Five and six filaments with no flushing volumes of their own: the default flush_volumes_matrix is 4 x 4, which the
+#      tower's tool-change tables were read past (a crash, or a slice that never finished), so the bridge grows it.
 #
 # Usage: prime_tower_test.sh <nozzle-engine>
 set -uo pipefail
@@ -39,13 +41,13 @@ slice() {
         for i in "$@"; do printf 'set\t%s\n' "$i"; done
         for ((i = 1; i <= n; i++)); do printf 'object\t%s\t%s\t0\t0\t1\t%s\n' "$CUBE" $(( (i - 1) * 30 - (n - 1) * 15 )) "$i"; done
     } > "$JOB/$name.txt"
-    "$ENGINE" "$JOB/$name.txt" > "$JOB/$name.log" 2>&1
+    timeout 600 "$ENGINE" "$JOB/$name.txt" > "$JOB/$name.log" 2>&1
 }
 
 # on_bed <name> <what>: the slice succeeded and prints inside the printable area
 on_bed() {
     if [ ! -s "$JOB/$1.gcode" ]; then
-        fail "$2: the slice failed: $(grep -v -E '^\[|^progress' "$JOB/$1.log" | tail -1)"
+        fail "$2: the slice failed or did not finish: $(grep -v -E '^\[|^progress' "$JOB/$1.log" | tail -1)"
     elif ! python3 "$CHECK" "$JOB/$1.gcode" > "$JOB/$1.check" 2>&1; then
         fail "$2: $(cat "$JOB/$1.check")"
     else
@@ -72,6 +74,15 @@ else
     if [ -s "$JOB/placed.gcode" ]; then
         at="$(setting placed wipe_tower_x) $(setting placed wipe_tower_y)"
         if [ "$at" = "150 30" ] || [ "$at" = "150.000 30.000" ]; then pass "the caller's tower position is kept ($at)"; else fail "the caller's tower position (150, 30) became $at"; fi
+    fi
+
+    slice five elegoo_centauri_carbon_cosmos_afc 5
+    on_bed five "Centauri Carbon, five filaments and the default flushing volumes"
+    slice six prusa_mk4s_mmu3 6 $'layer_height\t0.1'
+    on_bed six "Prusa MK4S MMU3, six filaments at 0.1 mm and the default flushing volumes"
+    if [ -s "$JOB/six.gcode" ]; then
+        pairs="$(setting six flush_volumes_matrix | tr ',' '\n' | wc -l)"
+        if [ "$pairs" = 36 ]; then pass "six filaments get a 6 x 6 flushing matrix"; else fail "six filaments have $pairs flushing volumes, expected 36"; fi
     fi
 fi
 

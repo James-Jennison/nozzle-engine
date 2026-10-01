@@ -8,6 +8,7 @@
 #include "slic3r_engine.hpp"
 
 #include <atomic>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <set>
@@ -28,6 +29,7 @@
 #include "libslic3r/TriangleSelector.hpp"
 #include "libslic3r/Format/bbs_3mf.hpp"
 #include "libslic3r/GCode/GCodeProcessor.hpp"
+#include "libslic3r/GCode/WipeTower.hpp"
 #include "libslic3r/Utils.hpp"
 #include "libslic3r/TriangleMesh.hpp"
 #include "libslic3r/TriangleMeshSlicer.hpp"
@@ -335,6 +337,163 @@ void assign_print_object_ids(Slic3r::Print& print) {
     for (Slic3r::PrintObject* object : print.objects_mutable()) object->set_id(next_id++);
 }
 
+// The prime tower's place on the bed. libslic3r never decides it: its wipe_tower_x / wipe_tower_y default (15, 220) is a
+// stand-in that upstream's GUI and CLI always replace, and a deep tower at that corner overruns a 256 mm bed (four
+// filaments at 0.1 mm layers on a Centauri Carbon: its brim reached Y 258.8). Ported from Snapmaker Orca's GUI:
+//  - the default corner: PartPlate.cpp's WIPE_TOWER_DEFAULT_X_POS / _Y_POS, and the I3_ pair for a bed slinger
+//    (PartPlateList::set_default_wipe_tower_pos_for_plate). A position the caller set, anything but libslic3r's
+//    default, is the starting corner instead, as the GUI starts from the project's.
+//  - the size before slicing: PartPlate::estimate_wipe_tower_size over Print::wipe_tower_data's depth.
+//  - the clamp into the plate, a margin and the brim inside its edges: GLCanvas3D::reload_scene.
+const double PRIME_TOWER_DEFAULT_X = 13., PRIME_TOWER_DEFAULT_Y = 214.5;
+const double PRIME_TOWER_I3_DEFAULT_X = 0., PRIME_TOWER_I3_DEFAULT_Y = 250.;
+
+// The rectangle the tower may stand in: the printable area's box, or on a bed that is not a rectangle (a delta's round
+// bed is a many-sided polygon, whose box has corners off the bed) the square inside the circle inside that box.
+Slic3r::BoundingBoxf prime_tower_area(const Slic3r::DynamicPrintConfig& config) {
+    using namespace Slic3r;
+    const auto* area = config.option<ConfigOptionPoints>("printable_area");
+    if (area == nullptr || area->values.empty()) return BoundingBoxf();
+    const BoundingBoxf box(area->values);
+    auto on_edge = [](double v, double lo, double hi) { return std::abs(v - lo) < EPSILON || std::abs(v - hi) < EPSILON; };
+    if (std::all_of(area->values.begin(), area->values.end(), [&](const Vec2d& p) {
+            return on_edge(p.x(), box.min.x(), box.max.x()) && on_edge(p.y(), box.min.y(), box.max.y()); }))
+        return box;
+    const double half = std::min(box.size().x(), box.size().y()) / 2. * M_SQRT1_2;
+    return BoundingBoxf(Vec2d(box.center() - Vec2d(half, half)), Vec2d(box.center() + Vec2d(half, half)));
+}
+
+// Returns whether the position changed (the print then needs apply() again).
+bool move_prime_tower(Slic3r::DynamicPrintConfig& config, double x, double y) {
+    auto* tower_x = config.option<Slic3r::ConfigOptionFloats>("wipe_tower_x", true);
+    auto* tower_y = config.option<Slic3r::ConfigOptionFloats>("wipe_tower_y", true);
+    if (tower_x->values == std::vector<double>{x} && tower_y->values == std::vector<double>{y}) return false;
+    tower_x->values = {x};
+    tower_y->values = {y};
+    return true;
+}
+
+// WipeTower::min_depth_per_height, interpolated over the print's height as PartPlate::estimate_wipe_tower_size does.
+double min_prime_tower_depth(double height) {
+    const std::map<float, float>& table = Slic3r::WipeTower::min_depth_per_height;
+    auto above = table.lower_bound(float(height));
+    if (above == table.begin()) return above->second;
+    auto below = std::prev(above);
+    if (above == table.end()) return below->second;
+    return below->second + (height - below->first) / (above->first - below->first) * (above->second - below->second);
+}
+
+bool place_prime_tower(const Slic3r::Print& print, const Slic3r::Model& model, Slic3r::DynamicPrintConfig& config) {
+    using namespace Slic3r;
+    const auto* timelapse = config.option<ConfigOptionEnum<TimelapseType>>("timelapse_type");
+    const bool smooth_timelapse = timelapse != nullptr && timelapse->value == TimelapseType::tlSmooth;
+    const size_t filaments = print.extruders().size();
+    const BoundingBoxf bed = prime_tower_area(config);
+    if (!print.has_wipe_tower() || !(smooth_timelapse || filaments > 1) || !bed.defined) return false;
+
+    const auto* tower_x = config.option<ConfigOptionFloats>("wipe_tower_x");
+    const auto* tower_y = config.option<ConfigOptionFloats>("wipe_tower_y");
+    double x = tower_x->get_at(0), y = tower_y->get_at(0);
+    if (*tower_x == *print_config_def.get("wipe_tower_x")->default_value && *tower_y == *print_config_def.get("wipe_tower_y")->default_value) {
+        const auto* structure = config.option<ConfigOptionEnum<PrinterStructure>>("printer_structure");
+        const bool bed_slinger = structure != nullptr && structure->value == PrinterStructure::psI3;
+        x = bed_slinger ? PRIME_TOWER_I3_DEFAULT_X : PRIME_TOWER_DEFAULT_X;
+        y = bed_slinger ? PRIME_TOWER_I3_DEFAULT_Y : PRIME_TOWER_DEFAULT_Y;
+    }
+
+    const double width = config.opt_float("prime_tower_width");
+    double depth = filaments == 1 ? 0. : print.wipe_tower_data(filaments).depth;
+    if (smooth_timelapse || depth > EPSILON) {
+        double height = 0.;
+        for (const ModelObject* object : model.objects) height = std::max(height, object->bounding_box_exact().size().z());
+        depth = std::max(depth, min_prime_tower_depth(height));
+    }
+
+    const double margin = WIPE_TOWER_MARGIN + config.opt_float("prime_tower_brim_width");
+    if (x + margin + width > bed.max.x()) x = bed.max.x() - width - margin;
+    else if (x < bed.min.x() + margin) x = bed.min.x() + margin;
+    if (y + margin + depth > bed.max.y()) y = bed.max.y() - depth - margin;
+    else if (y < bed.min.y() + margin) y = bed.min.y() + margin;
+    return move_prime_tower(config, x, y);
+}
+
+// The generated tower can be larger than that estimate, which takes 0.2 mm layers and the prime_tower_width rectangle
+// (a rib wall's footprint is neither): the GUI then shows it past the plate's edge for the user to drag back. Here the
+// tower's real first-layer footprint, brim included, goes back inside the bed by as much as it reaches past the edge:
+// this returns that move, zero when the tower is where it can stay. With `with_skirt`, the skirt counts on the sides
+// where the tower is the outermost thing on the bed, as the skirt goes around the tower too (Print::_make_skirt).
+// Throws when the tower is larger than the bed.
+Slic3r::Vec2d prime_tower_overrun(const Slic3r::Print& print, const Slic3r::Model& model, const Slic3r::DynamicPrintConfig& config, bool with_skirt) {
+    using namespace Slic3r;
+    if (!print.has_wipe_tower()) return Vec2d::Zero();
+    const Points corners = print.first_layer_wipe_tower_corners(); // none without a tool change
+    BoundingBoxf bed = prime_tower_area(config);
+    if (corners.empty() || !bed.defined) return Vec2d::Zero();
+    bed.offset(-WIPE_TOWER_MARGIN);
+    // The box's four corners come first, then the base of the stabilization cone, which only a cone wall prints.
+    const auto* wall = config.option<ConfigOptionEnum<WipeTowerWallType>>("wipe_tower_wall_type");
+    const size_t count = wall != nullptr && wall->value == WipeTowerWallType::wtwCone ? corners.size() : std::min<size_t>(4, corners.size());
+    BoundingBoxf tower;
+    for (size_t i = 0; i < count; ++i) tower.merge(unscale(corners[i]));
+    if (tower.size().x() > bed.size().x() || tower.size().y() > bed.size().y())
+        throw std::runtime_error("The prime tower is larger than the bed. Use fewer filaments, thicker layers or a smaller prime volume.");
+
+    Polylines skirt;
+    if (with_skirt) print.skirt().collect_polylines(skirt);
+    if (!skirt.empty()) {
+        BoundingBoxf objects;
+        for (const ModelObject* object : model.objects) {
+            const BoundingBoxf3& box = object->bounding_box_exact();
+            objects.merge(Vec2d(box.min.x(), box.min.y()));
+            objects.merge(Vec2d(box.max.x(), box.max.y()));
+        }
+        const BoundingBox extents = get_extents(skirt);
+        const Vec2d skirt_min = unscale(extents.min), skirt_max = unscale(extents.max);
+        for (int axis = 0; axis < 2; ++axis) {
+            if (tower.min[axis] <= objects.min[axis]) tower.min[axis] = std::min(tower.min[axis], skirt_min[axis]);
+            if (tower.max[axis] >= objects.max[axis]) tower.max[axis] = std::max(tower.max[axis], skirt_max[axis]);
+        }
+    }
+
+    Vec2d move = Vec2d::Zero();
+    for (int axis = 0; axis < 2; ++axis) {
+        if (tower.max[axis] > bed.max[axis] + EPSILON) move[axis] = bed.max[axis] - tower.max[axis];
+        else if (tower.min[axis] < bed.min[axis] - EPSILON) move[axis] = bed.min[axis] - tower.min[axis];
+    }
+    return move;
+}
+
+void validate_print(const Slic3r::Print& print) {
+    Slic3r::StringObjectException validation_error = print.validate();
+    if (!validation_error.string.empty()) {
+        throw std::runtime_error("Validation failed: " + validation_error.string);
+    }
+}
+
+// print.apply() with the prime tower placed, then the engine's own validation.
+void apply_and_validate(Slic3r::Print& print, Slic3r::Model& model, Slic3r::DynamicPrintConfig& config) {
+    print.apply(model, config);
+    if (place_prime_tower(print, model, config)) print.apply(model, config);
+    assign_print_object_ids(print);
+    validate_print(print);
+}
+
+// print.process(), and again when the generated prime tower had to be moved back onto the bed (only the steps that
+// depend on its position run twice). The moved tower is validated, as its real footprint may now meet an exclusion area.
+void process_with_tower_on_bed(Slic3r::Print& print, Slic3r::Model& model, Slic3r::DynamicPrintConfig& config) {
+    using namespace Slic3r;
+    print.process();
+    const Vec2d move = prime_tower_overrun(print, model, config, true);
+    if (move == Vec2d::Zero()) return;
+    move_prime_tower(config, config.option<ConfigOptionFloats>("wipe_tower_x")->get_at(0) + move.x(),
+                     config.option<ConfigOptionFloats>("wipe_tower_y")->get_at(0) + move.y());
+    print.apply(model, config);
+    assign_print_object_ids(print);
+    validate_print(print);
+    print.process();
+    if (prime_tower_overrun(print, model, config, false) != Vec2d::Zero()) throw std::runtime_error("The prime tower does not fit on the bed.");
+}
+
 // The actual process/export tail, shared by slice_file() (fresh load from disk) and
 // slice_paint_session() (an already-loaded, possibly support-painted in-memory model) - both end
 // the same way, just start from a different Model.
@@ -354,19 +513,13 @@ void slice_model(Slic3r::Model& model, Slic3r::DynamicPrintConfig& config, const
         print.auto_assign_extruders(object);
     }
     mark_bambu_printer(print, config);
-    print.apply(model, config);
-    assign_print_object_ids(print);
-
-    StringObjectException validation_error = print.validate();
-    if (!validation_error.string.empty()) {
-        throw std::runtime_error("Validation failed: " + validation_error.string);
-    }
+    apply_and_validate(print, model, config);
 
     // A real result object, never nullptr: Snapmaker Orca's Print::export_gcode() writes result->conflict_result
     // unconditionally. The G-code file written is the same either way.
     GCodeProcessorResult gcode_result;
     run_cancellable(print, output_gcode_path, [&] {
-        print.process();
+        process_with_tower_on_bed(print, model, config);
         print.export_gcode(output_gcode_path, &gcode_result, thumbnail_cb);
     });
 }
@@ -407,18 +560,12 @@ void bundle_model(Slic3r::Model& model, Slic3r::DynamicPrintConfig& config, cons
         print.auto_assign_extruders(object);
     }
     mark_bambu_printer(print, config);
-    print.apply(model, config);
-    assign_print_object_ids(print);
-
-    StringObjectException validation_error = print.validate();
-    if (!validation_error.string.empty()) {
-        throw std::runtime_error("Validation failed: " + validation_error.string);
-    }
+    apply_and_validate(print, model, config);
 
     std::string temp_gcode_path = output_bundle_path + ".gcode.tmp";
     GCodeProcessorResult gcode_result;
     run_cancellable(print, temp_gcode_path, [&] {
-        print.process();
+        process_with_tower_on_bed(print, model, config);
         print.export_gcode(temp_gcode_path, &gcode_result, thumbnail_cb);
     });
 

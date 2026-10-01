@@ -65,6 +65,10 @@ jobs:
         working-directory: engine
         run: tools/nozzle/colourmix_test.sh "$ENGINE_WORK/dist/nozzle-engine" "$ENGINE_WORK/slic3r_cli_test"
 
+      - name: Prime tower on the bed (placed before slicing, moved back when the generated tower overruns)
+        working-directory: engine
+        run: tools/nozzle/prime_tower_test.sh "$ENGINE_WORK/dist/nozzle-engine"
+
       - name: Android engine (arm64-v8a)
         working-directory: engine
         env:

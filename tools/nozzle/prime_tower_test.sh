@@ -6,8 +6,10 @@
 #
 # Each case slices 20 mm cubes, one per filament, and checks every extruding move against the G-code's printable_area
 # (tools/nozzle/within_bed.py):
-#   1. Centauri Carbon, four filaments, 0.1 mm layers: the case above; the default corner alone keeps it on the bed.
-#   2. Snapmaker U1, four filaments, 0.1 mm layers: the generated tower is deeper than the estimate, so it is moved.
+#   1. Centauri Carbon, four filaments, 0.1 mm layers: the case above. The tower starts at upstream OrcaSlicer's corner
+#      (back, right of the middle), as in ElegooSlicer, and is moved in once its real depth is known.
+#   2. Snapmaker U1, four filaments, 0.1 mm layers: Snapmaker Orca's corner (back left) for Snapmaker's printers; the
+#      generated tower is deeper than the estimate, so it is moved.
 #   3. Creality Ender-3 (220 mm bed slinger), two filaments: the tower starts at the bed slinger corner and its skirt,
 #      which goes around the tower, stays on the bed too.
 #   4. A position the caller sets is kept.
@@ -55,6 +57,13 @@ on_bed() {
     fi
 }
 
+# corner <name> <x> <what>: the tower starts at that X (the vendor's default corner)
+corner() {
+    [ -s "$JOB/$1.gcode" ] || return
+    local at; at="$(setting "$1" wipe_tower_x)"
+    if [ "$at" = "$2" ] || [ "$at" = "$2.000" ]; then pass "$3 (wipe_tower_x $at)"; else fail "$3: wipe_tower_x is $at, expected $2"; fi
+}
+
 setting() { grep -m1 -E "^; $2 = " "$JOB/$1.gcode" | sed -E 's/^; [a-z_]+ = //'; }
 
 if [ ! -f "$CUBE" ]; then
@@ -62,9 +71,11 @@ if [ ! -f "$CUBE" ]; then
 else
     slice cc1 elegoo_centauri_carbon_cosmos_afc 4 $'layer_height\t0.1'
     on_bed cc1 "Centauri Carbon, four filaments at 0.1 mm"
+    corner cc1 165 "Centauri Carbon: upstream's corner, back and right of the middle"
 
     slice u1 snapmaker_u1 4 $'layer_height\t0.1'
     on_bed u1 "Snapmaker U1, four filaments at 0.1 mm"
+    corner u1 13 "Snapmaker U1: Snapmaker's corner, back left"
 
     slice ender3 creality_ender_3 2
     on_bed ender3 "Ender-3, two filaments and a skirt"

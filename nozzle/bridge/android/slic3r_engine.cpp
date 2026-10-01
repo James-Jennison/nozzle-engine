@@ -339,14 +339,18 @@ void assign_print_object_ids(Slic3r::Print& print) {
 
 // The prime tower's place on the bed. libslic3r never decides it: its wipe_tower_x / wipe_tower_y default (15, 220) is a
 // stand-in that upstream's GUI and CLI always replace, and a deep tower at that corner overruns a 256 mm bed (four
-// filaments at 0.1 mm layers on a Centauri Carbon: its brim reached Y 258.8). Ported from Snapmaker Orca's GUI:
-//  - the default corner: PartPlate.cpp's WIPE_TOWER_DEFAULT_X_POS / _Y_POS, and the I3_ pair for a bed slinger
-//    (PartPlateList::set_default_wipe_tower_pos_for_plate). A position the caller set, anything but libslic3r's
-//    default, is the starting corner instead, as the GUI starts from the project's.
+// filaments at 0.1 mm layers on a Centauri Carbon: its brim reached Y 258.8). Ported from the GUI:
+//  - the default corner (PartPlate.cpp: WIPE_TOWER_DEFAULT_X_POS / _Y_POS, and the I3_ pair for a bed slinger, in
+//    PartPlateList::set_default_wipe_tower_pos_for_plate). It is the vendor's own: upstream OrcaSlicer, like
+//    ElegooSlicer, starts at the back, right of the middle (165, 250); Snapmaker Orca starts its printers at the back
+//    left (13, 214.5). Snapmaker's corner on a Centauri Carbon stood the tower on the lowest part of a real bed, where
+//    it came loose three layers in (2026-10-01). A position the caller set, anything but libslic3r's default, is the
+//    starting corner instead, as the GUI starts from the project's.
 //  - the size before slicing: PartPlate::estimate_wipe_tower_size over Print::wipe_tower_data's depth.
 //  - the clamp into the plate, a margin and the brim inside its edges: GLCanvas3D::reload_scene.
-const double PRIME_TOWER_DEFAULT_X = 13., PRIME_TOWER_DEFAULT_Y = 214.5;
-const double PRIME_TOWER_I3_DEFAULT_X = 0., PRIME_TOWER_I3_DEFAULT_Y = 250.;
+const double PRIME_TOWER_DEFAULT_X = 165., PRIME_TOWER_DEFAULT_Y = 250.;                    // upstream OrcaSlicer
+const double PRIME_TOWER_SNAPMAKER_DEFAULT_X = 13., PRIME_TOWER_SNAPMAKER_DEFAULT_Y = 214.5; // Snapmaker Orca
+const double PRIME_TOWER_I3_DEFAULT_X = 0., PRIME_TOWER_I3_DEFAULT_Y = 250.;                 // both
 
 // The rectangle the tower may stand in: the printable area's box, or on a bed that is not a rectangle (a delta's round
 // bed is a many-sided polygon, whose box has corners off the bed) the square inside the circle inside that box.
@@ -397,8 +401,10 @@ bool place_prime_tower(const Slic3r::Print& print, const Slic3r::Model& model, S
     if (*tower_x == *print_config_def.get("wipe_tower_x")->default_value && *tower_y == *print_config_def.get("wipe_tower_y")->default_value) {
         const auto* structure = config.option<ConfigOptionEnum<PrinterStructure>>("printer_structure");
         const bool bed_slinger = structure != nullptr && structure->value == PrinterStructure::psI3;
-        x = bed_slinger ? PRIME_TOWER_I3_DEFAULT_X : PRIME_TOWER_DEFAULT_X;
-        y = bed_slinger ? PRIME_TOWER_I3_DEFAULT_Y : PRIME_TOWER_DEFAULT_Y;
+        const auto* printer = config.option<ConfigOptionString>("printer_model");
+        const bool snapmaker = printer != nullptr && printer->value.compare(0, 9, "Snapmaker") == 0;
+        x = bed_slinger ? PRIME_TOWER_I3_DEFAULT_X : snapmaker ? PRIME_TOWER_SNAPMAKER_DEFAULT_X : PRIME_TOWER_DEFAULT_X;
+        y = bed_slinger ? PRIME_TOWER_I3_DEFAULT_Y : snapmaker ? PRIME_TOWER_SNAPMAKER_DEFAULT_Y : PRIME_TOWER_DEFAULT_Y;
     }
 
     const double width = config.opt_float("prime_tower_width");

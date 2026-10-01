@@ -2,7 +2,8 @@
 // generation, which normally comes from rendering the GUI's live OpenGL scene - not available
 // here (SLIC3R_GUI=OFF, no GL context on a headless slice). This renders a plain isometric,
 // flat-shaded view of the model's own meshes instead, each part in the colour of the filament it
-// prints with (colour-painted areas in their painted filament's colour). Simpler than the real
+// prints with (colour-painted areas in their painted filament's colour, a mixed filament in the
+// colour the slicer shows for the mix). Simpler than the real
 // preview OrcaSlicer ships, but real: it's the actual sliced geometry, not a placeholder icon, so
 // the printer's own screen shows something a person picking a job off a list can recognize.
 #pragma once

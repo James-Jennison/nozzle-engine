@@ -1,10 +1,21 @@
 #include "thumbnail_render.hpp"
 
+// Mixed filaments exist only in the desktop engine (Snapmaker Orca's mixed filaments, PrusaSlicer 2.9.6's virtual
+// extruders); the same bridge still builds against upstream OrcaSlicer, where every filament id is a physical one.
+#if __has_include("libslic3r/MixedFilament.hpp")
+#include "libslic3r/MixedFilament.hpp"
+#define NOZZLE_THUMBNAIL_MIXED_FILAMENTS 1
+#endif
+#if __has_include("libslic3r/Feature/FullSpectrum/VirtualExtruder.hpp")
+#include "libslic3r/Feature/FullSpectrum/VirtualExtruder.hpp"
+#endif
+
 #include <algorithm>
 #include <cfloat>
 #include <array>
 #include <cctype>
 #include <cmath>
+#include <map>
 #include <optional>
 #include <string>
 
@@ -54,6 +65,42 @@ Rgb filament_colour(const DynamicPrintConfig& config, int extruder) {
     return parse_colour(colours->values.front()).value_or(kFallbackColour);
 }
 
+// The colour the slicer itself shows for each mixed filament id, from the same state Print::apply() builds
+// (PrintApply.cpp: the physical colours padded to the filament count, then the model's virtual extruders, else the
+// mixed filament manager's auto-generated and custom rows). A part printed with a mix is drawn in that one colour,
+// not in filament 1's: found on a Full Spectrum color reference print, whose six mixes all came out alike.
+std::map<int, Rgb> mixed_filament_colours(const Model& model, const DynamicPrintConfig& config) {
+    std::map<int, Rgb> mixed;
+    const auto* diameters = config.option<ConfigOptionFloats>("filament_diameter");
+    const auto* colours = config.option<ConfigOptionStrings>("filament_colour");
+    const size_t physical = diameters != nullptr ? diameters->values.size() : colours != nullptr ? colours->values.size() : 0;
+    if (physical == 0) return mixed;
+    std::vector<std::string> physical_colours = colours != nullptr ? colours->values : std::vector<std::string>();
+    physical_colours.resize(physical, "#26A69A");
+#ifdef SLIC3R_PRUSA_VIRTUAL_EXTRUDERS
+    // A project uses either virtual extruders or mixed filaments (Print::apply); a virtual extruder's id is its own.
+    const FullSpectrum::VirtualExtruders virtual_extruders =
+        FullSpectrum::filter_virtual_extruders_for_physical_count(static_cast<unsigned int>(physical), model.virtual_extruders);
+    if (!virtual_extruders.empty()) {
+        for (const FullSpectrum::VirtualExtruder& extruder : virtual_extruders)
+            if (auto rgb = parse_colour(extruder.effective_color(physical_colours))) mixed[int(extruder.id)] = *rgb;
+        return mixed;
+    }
+#endif
+#ifdef NOZZLE_THUMBNAIL_MIXED_FILAMENTS
+    MixedFilamentManager manager;
+    manager.auto_generate(physical_colours);
+    if (config.has("mixed_filament_definitions"))
+        manager.load_custom_entries(config.opt_string("mixed_filament_definitions"), physical_colours);
+    for (size_t id = physical + 1; id <= manager.total_filaments(physical); ++id)
+        if (const MixedFilament* row = manager.mixed_filament_from_id(static_cast<unsigned int>(id), physical))
+            if (auto rgb = parse_colour(row->display_color)) mixed[int(id)] = *rgb;
+#else
+    (void)model;
+#endif
+    return mixed;
+}
+
 // Lifts a very dark colour to a dark grey (as OrcaSlicer draws black filament), so a black part doesn't vanish into
 // the dark background most printer screens show thumbnails on.
 Rgb visible(Rgb rgb) {
@@ -70,10 +117,16 @@ struct ColouredPart {
 };
 
 // Every printable part of every instance, split by colour: a part prints with its own filament, else its object's
-// ("extruder" 0 means none set, so filament 1), and colour-painted facets with their painted filament. Modifiers,
+// ("extruder" 0 means none set, so filament 1), and colour-painted facets with their painted filament; a mixed
+// filament shows in its mix's colour. Modifiers,
 // negative volumes and support blockers/enforcers are not printed, so are not drawn.
 std::vector<ColouredPart> coloured_parts(const Model& model, const DynamicPrintConfig& config) {
     std::vector<ColouredPart> parts;
+    const std::map<int, Rgb> mixed = mixed_filament_colours(model, config);
+    auto colour_of = [&](int filament) {
+        const auto it = mixed.find(filament);
+        return visible(it != mixed.end() ? it->second : filament_colour(config, filament));
+    };
     for (const ModelObject* object : model.objects) {
         for (const ModelVolume* volume : object->volumes) {
             if (!volume->is_model_part()) continue;
@@ -86,7 +139,7 @@ std::vector<ColouredPart> coloured_parts(const Model& model, const DynamicPrintC
                 by_state.push_back(volume->mesh().its);
             for (size_t state = 0; state < by_state.size(); ++state) {
                 if (by_state[state].indices.empty()) continue;
-                const Rgb colour = visible(filament_colour(config, state == 0 ? volume_extruder : int(state)));
+                const Rgb colour = colour_of(state == 0 ? volume_extruder : int(state));
                 for (const ModelInstance* instance : object->instances) {
                     const Transform3d matrix = instance->get_matrix() * volume->get_matrix();
                     ColouredPart part{by_state[state], colour};

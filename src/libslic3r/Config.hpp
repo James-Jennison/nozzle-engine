@@ -431,13 +431,36 @@ public:
             throw ConfigurationError("ConfigOptionVector::set_at(): Assigning an incompatible type");
     }
 
+    // Index of the value a per-extruder lookup should use: the i-th value when there is one, otherwise the first
+    // (filament options are not always expanded to the number of virtual tools; the first value is the fallback).
+    //
+    // The index goes through an empty asm statement on purpose. Clang 18 (Android NDK 27.x) auto-vectorizes loops
+    // that reduce over get_at() with unsigned ids (GCode.cpp's bed temperature and vitrification loops over
+    // print.extruders()) and miscompiles the inlined bounds check into a per-lane mask of (size & 1) & ~(i & 1):
+    // even ids read past the end of values (the Snapmaker U1 "heater_bed 32769" incident, 2026-09-30) and in-range
+    // ids land on the first value. Making the index opaque keeps the comparison in every lane. It costs nothing on
+    // correct compilers (GCC, clang 20+, Emscripten); plain C++ rewrites of the check still vectorize wrongly.
+    static size_t checked_index(size_t i, size_t size)
+    {
+#if defined(__GNUC__) || defined(__clang__)
+        __asm__ volatile("" : "+r"(i));
+#endif
+        return (i < size) ? i : 0;
+    }
+
     const T& get_at(size_t i) const
     {
         assert(! this->values.empty());
-        return (i < this->values.size()) ? this->values[i] : this->values.front();
+        return this->values[checked_index(i, this->values.size())];
     }
 
     T& get_at(size_t i) { return const_cast<T&>(std::as_const(*this).get_at(i)); }
+
+    // Bounds-safe index for the nullable is_nil(idx) overloads: an empty vector has no value to test.
+    bool nil_at(size_t idx, bool (*pred)(const T&)) const
+    {
+        return this->values.empty() || pred(this->values[checked_index(idx, this->values.size())]);
+    }
 
     // Resize this vector by duplicating the /*last*/first value.
     // If the current vector is empty, the default value is used instead.
@@ -628,7 +651,7 @@ public:
     static double 			nil_value() { return std::numeric_limits<double>::quiet_NaN(); }
     // A scalar is nil, or all values of a vector are nil.
     bool 					is_nil() const override { for (auto v : this->values) if (! std::isnan(v)) return false; return true; }
-    bool 					is_nil(size_t idx) const override { return std::isnan(this->values[idx]); }
+    bool 					is_nil(size_t idx) const override { return this->nil_at(idx, [](const double& v) { return std::isnan(v); }); }
 
     std::string serialize() const override
     {
@@ -801,7 +824,7 @@ public:
     static int	 			nil_value() { return std::numeric_limits<int>::max(); }
     // A scalar is nil, or all values of a vector are nil.
     bool 					is_nil() const override { for (auto v : this->values) if (v != nil_value()) return false; return true; }
-    bool 					is_nil(size_t idx) const override { return this->values[idx] == nil_value(); }
+    bool 					is_nil(size_t idx) const override { return this->nil_at(idx, [](const int& v) { return v == nil_value(); }); }
 
     std::string serialize() const override
     {
@@ -1125,7 +1148,7 @@ public:
     static FloatOrPercent   nil_value() { return { std::numeric_limits<double>::quiet_NaN(), false }; }
     // A scalar is nil, or all values of a vector are nil.
     bool                    is_nil() const override { for (auto v : this->values) if (! std::isnan(v.value)) return false; return true; }
-    bool                    is_nil(size_t idx) const override { return std::isnan(this->values[idx].value); }
+    bool                    is_nil(size_t idx) const override { return this->nil_at(idx, [](const FloatOrPercent& v) { return std::isnan(v.value); }); }
 
     std::string serialize() const override
     {
@@ -1441,15 +1464,15 @@ public:
     static unsigned char	nil_value() { return std::numeric_limits<unsigned char>::max(); }
     // A scalar is nil, or all values of a vector are nil.
     bool 					is_nil() const override { for (auto v : this->values) if (v != nil_value()) return false; return true; }
-    bool 					is_nil(size_t idx) const override { return this->values[idx] == nil_value(); }
+    bool 					is_nil(size_t idx) const override { return this->nil_at(idx, [](const unsigned char& v) { return v == nil_value(); }); }
 
     bool& get_at(size_t i) {
         assert(! this->values.empty());
-        return *reinterpret_cast<bool*>(&((i < this->values.size()) ? this->values[i] : this->values.front()));
+        return *reinterpret_cast<bool*>(&this->values[this->checked_index(i, this->values.size())]);
     }
 
     //FIXME this smells, the parent class has the method declared returning (unsigned char&).
-    bool get_at(size_t i) const { return ((i < this->values.size()) ? this->values[i] : this->values.front()) != 0; }
+    bool get_at(size_t i) const { return this->values[this->checked_index(i, this->values.size())] != 0; }
 
     std::string serialize() const override
     {

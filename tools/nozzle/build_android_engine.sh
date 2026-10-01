@@ -8,7 +8,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NOZZLE_ROOT="${NOZZLE_ROOT:-/mnt/faststorage/Nozzle It All}"
 WORK="${ENGINE_WORK:-/mnt/faststorage/build-work/test-slicer-engine}"; ER="$WORK/android-root"; B="$WORK/build-android"
 PREPARED_DEPS="${ANDROID_PREPARED_DEPS:-/mnt/faststorage/build-work/nozzle-android-sm/deps}"
-SDK="${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}"; NDK="${ANDROID_NDK_ROOT:-$SDK/ndk/27.1.12297006}"; SDKCM="${ANDROID_CMAKE_BIN:-$SDK/cmake/3.22.1/bin}"
+SDK="${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}"; NDK="${ANDROID_NDK_ROOT:-$SDK/ndk/29.0.14206865}"; SDKCM="${ANDROID_CMAKE_BIN:-$SDK/cmake/3.22.1/bin}"
 "$HERE/export_source.sh" "$ER/orcaslicer"
 [ -e "$ER/deps" ] || ln -s "$PREPARED_DEPS" "$ER/deps"
 "$SDKCM/cmake" -H"$NOZZLE_ROOT/app/src/main/cpp" -B"$B" -GNinja -DCMAKE_MAKE_PROGRAM="$SDKCM/ninja" \

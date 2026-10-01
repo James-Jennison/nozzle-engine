@@ -286,3 +286,45 @@ TEST_CASE("DynamicPrintConfig keeps ordinary filament types unchanged", "[Config
     CHECK(config.get_filament_type(display_type, 0) == "PLA");
     CHECK(display_type == "PLA");
 }
+
+// Mirrors GCode.cpp's reductions over print.extruders() (unsigned int ids) with a filament option that was not
+// expanded to the number of virtual tools. Clang 18 (Android NDK 27.x) vectorized this loop and miscompiled the
+// inlined bounds check, so even ids read past the end of the vector (the Snapmaker U1 "heater_bed 32769" incident,
+// 2026-09-30) and in-range ids landed on the first value. The ids are built at run time so the loop is not folded.
+TEST_CASE("ConfigOptionVector::get_at reductions over out-of-range ids use the first value", "[Config]")
+{
+    ConfigOptionInts bed_temperature;
+    bed_temperature.values = { 60 };
+
+    std::vector<unsigned int> ids;
+    for (unsigned int id = 4; id < 10; ++ id) ids.push_back(id);
+    int max_temp = 0, min_temp = std::numeric_limits<int>::max();
+    for (unsigned int id : ids) {
+        max_temp = std::max(max_temp, bed_temperature.get_at(id));
+        min_temp = std::min(min_temp, bed_temperature.get_at(id));
+    }
+    CHECK(max_temp == 60);
+    CHECK(min_temp == 60);
+
+    // Mixed in-range and out-of-range ids over an even-sized vector (the miscompile mapped odd in-range ids to the first value).
+    ConfigOptionInts temps;
+    for (int t = 0; t < 10; ++ t) temps.values.push_back(100 + t);
+    std::vector<unsigned int> mixed = { 3, 2, 9, 8, 12, 15 };
+    std::vector<int> seen;
+    for (unsigned int id : mixed) seen.push_back(temps.get_at(id));
+    CHECK(seen == std::vector<int>{ 103, 102, 109, 108, 100, 100 });
+
+    // The nullable overloads must not index past the end either: a missing per-extruder value is the first one's.
+    ConfigOptionFloatsNullable retract;
+    retract.values = { 0.8 };
+    CHECK(! retract.is_nil(0));
+    CHECK(! retract.is_nil(7));
+    retract.values = { ConfigOptionFloatsNullable::nil_value() };
+    CHECK(retract.is_nil(7));
+    retract.values.clear();
+    CHECK(retract.is_nil(0));
+    ConfigOptionBoolsNullable cooling;
+    cooling.values = { 1 };
+    CHECK(! cooling.is_nil(5));
+    CHECK(cooling.get_at(5) == true);
+}

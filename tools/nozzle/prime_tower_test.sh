@@ -6,8 +6,10 @@
 #
 # Each case slices 20 mm cubes, one per filament, and checks every extruding move against the G-code's printable_area
 # (tools/nozzle/within_bed.py):
-#   1. Centauri Carbon, four filaments, 0.1 mm layers: the case above. The tower starts at upstream OrcaSlicer's corner
-#      (back, right of the middle), as in ElegooSlicer, and is moved in once its real depth is known.
+#   1. Centauri Carbon, four filaments, 0.1 mm layers: the case above, on both of its CANVAS packs. The Elegoo firmware
+#      pack sets no position, so its tower starts at upstream OrcaSlicer's corner (back, right of the middle), as in
+#      ElegooSlicer, and is moved in once its real depth is known. The COSMOS pack may set its own position (Nozzle
+#      It All moved it away from COSMOS's purge tray), so only the bed check applies to it.
 #   2. Snapmaker U1, four filaments, 0.1 mm layers: Snapmaker Orca's corner (back left) for Snapmaker's printers; the
 #      generated tower is deeper than the estimate, so it is moved.
 #   3. Creality Ender-3 (220 mm bed slinger), two filaments: the tower starts at the bed slinger corner and its skirt,
@@ -70,8 +72,11 @@ if [ ! -f "$CUBE" ]; then
     fail "cannot find the test cube under NOZZLE_ROOT=$NOZZLE_ROOT"
 else
     slice cc1 elegoo_centauri_carbon_cosmos_afc 4 $'layer_height\t0.1'
-    on_bed cc1 "Centauri Carbon, four filaments at 0.1 mm"
-    corner cc1 165 "Centauri Carbon: upstream's corner, back and right of the middle"
+    on_bed cc1 "Centauri Carbon (COSMOS pack), four filaments at 0.1 mm"
+
+    slice stock elegoo_centauri_carbon_canvas 4 $'layer_height\t0.1'
+    on_bed stock "Centauri Carbon (Elegoo firmware pack), four filaments at 0.1 mm"
+    corner stock 165 "Centauri Carbon (Elegoo firmware pack): upstream's corner, back and right of the middle"
 
     slice u1 snapmaker_u1 4 $'layer_height\t0.1'
     on_bed u1 "Snapmaker U1, four filaments at 0.1 mm"

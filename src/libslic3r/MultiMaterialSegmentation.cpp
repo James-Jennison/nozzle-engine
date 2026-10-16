@@ -62,6 +62,17 @@ namespace Slic3r { enum class EnforcerBlockerType : int8_t; }
 //#define MM_SEGMENTATION_DEBUG_TOP_BOTTOM
 
 namespace Slic3r {
+
+// Paint penetration depth in layers. 0 follows the shell layer count (the OrcaSlicer behaviour); an explicit
+// value (Snapmaker / BambuStudio semantics) decouples it from the shell layers.
+static inline int painted_top_layers(const PrintRegionConfig &config)
+{
+    return config.top_color_penetration_layers.value > 0 ? config.top_color_penetration_layers.value : config.top_shell_layers.value;
+}
+static inline int painted_bottom_layers(const PrintRegionConfig &config)
+{
+    return config.bottom_color_penetration_layers.value > 0 ? config.bottom_color_penetration_layers.value : config.bottom_shell_layers.value;
+}
 using boost::polygon::voronoi_diagram;
 using VD = Geometry::VoronoiDiagram;
 
@@ -1251,8 +1262,8 @@ static inline std::vector<std::vector<ExPolygons>> segmentation_top_and_bottom_l
     int max_bottom_layers = 0;
     for (size_t i = 0; i < print_object.num_printing_regions(); ++ i) {
         const PrintRegionConfig &config = print_object.printing_region(i).config();
-        max_top_layers    = std::max(max_top_layers, config.top_shell_layers.value);
-        max_bottom_layers = std::max(max_bottom_layers, config.bottom_shell_layers.value);
+        max_top_layers    = std::max(max_top_layers, painted_top_layers(config));
+        max_bottom_layers = std::max(max_bottom_layers, painted_bottom_layers(config));
     }
 
     // Project upwards pointing painted triangles over top surfaces,
@@ -1413,8 +1424,8 @@ static inline std::vector<std::vector<ExPolygons>> segmentation_top_and_bottom_l
                 //BBS: the extrusion line width is outer wall rather than inner wall
                 double outer_wall_line_width = resolve_outer_wall_line_width(config, print_object.config(), print_object.print()->config());
                 out.extrusion_width     = std::max<float>(out.extrusion_width, outer_wall_line_width);
-                out.top_shell_layers    = std::max<int>(out.top_shell_layers, config.top_shell_layers);
-                out.bottom_shell_layers = std::max<int>(out.bottom_shell_layers, config.bottom_shell_layers);
+                out.top_shell_layers    = std::max<int>(out.top_shell_layers, painted_top_layers(config));
+                out.bottom_shell_layers = std::max<int>(out.bottom_shell_layers, painted_bottom_layers(config));
                 out.small_region_threshold = config.gap_infill_speed.get_at(print_object.print()->get_extruder_id(config.outer_wall_filament_id - 1)) > 0 ?
                                              // Gap fill enabled. Enable a single line of 1/2 extrusion width.
                                              0.5f * outer_wall_line_width :

@@ -8059,6 +8059,24 @@ void PrintConfigDef::init_fff_params()
     def->min = 0;
     def->set_default_value(new ConfigOptionInt(4));
 
+    // Ported from Snapmaker Orca (from BambuStudio c782fbb8). 0 = follow the shell layer count, so
+    // existing profiles keep the OrcaSlicer behaviour.
+    def = this->add("top_color_penetration_layers", coInt);
+    def->label = L("Top paint penetration layers");
+    def->category = L("Strength");
+    def->sidetext = L("layers");
+    def->tooltip = L("Number of layers below the top surface that painted colors reach. 0 uses the top shell layers.");
+    def->min = 0;
+    def->set_default_value(new ConfigOptionInt(0));
+
+    def = this->add("bottom_color_penetration_layers", coInt);
+    def->label = L("Bottom paint penetration layers");
+    def->category = L("Strength");
+    def->sidetext = L("layers");
+    def->tooltip = L("Number of layers above the bottom surface that painted colors reach. 0 uses the bottom shell layers.");
+    def->min = 0;
+    def->set_default_value(new ConfigOptionInt(0));
+
     def = this->add("top_shell_thickness", coFloat);
     def->label = L("Top shell thickness");
     def->category = L("Strength");

@@ -94,6 +94,12 @@ std::string build_prompt(const Segmentation &seg, const std::vector<FilamentInfo
 std::string claude_request_json(const std::string &model, const std::string &prompt, const std::vector<std::string> &png_b64);
 std::string ollama_request_json(const std::string &model, const std::string &prompt, const std::vector<std::string> &png_b64);
 
+// Claude Code CLI provider (`claude -p`), which runs on the user's Claude subscription instead of an API key.
+// The CLI cannot take inline images, so the views are written to files and the prompt tells it to open them.
+std::string claude_cli_prompt(const std::string &prompt, const std::vector<std::string> &image_paths);
+// Text inside `claude -p --output-format json` output (empty when it reports an error or carries no result).
+std::string claude_cli_reply_text(const std::string &body);
+
 // The assistant text inside a provider reply (empty when the reply carries none).
 std::string claude_reply_text(const std::string &body);
 std::string ollama_reply_text(const std::string &body);

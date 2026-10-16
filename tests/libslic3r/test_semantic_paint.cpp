@@ -107,3 +107,14 @@ TEST_CASE("SemanticPaint: assignment parsing", "[SemanticPaint]")
     REQUIRE(faces.size() == cube.its.indices.size());
     for (int f : faces) CHECK(f == 2);
 }
+
+TEST_CASE("SemanticPaint: Claude Code CLI helpers", "[SemanticPaint]")
+{
+    const std::string p = SP::claude_cli_prompt("question", {"/tmp/a.png", "/tmp/b.png"});
+    CHECK(p.find("/tmp/a.png") != std::string::npos);
+    CHECK(p.find("/tmp/b.png") != std::string::npos);
+    CHECK(p.find("question") != std::string::npos);
+    CHECK(SP::claude_cli_reply_text(R"({"type":"result","is_error":false,"result":"answer"})") == "answer");
+    CHECK(SP::claude_cli_reply_text(R"({"is_error":true,"result":"boom"})").empty());
+    CHECK(SP::claude_cli_reply_text("garbage").empty());
+}

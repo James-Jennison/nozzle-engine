@@ -517,6 +517,24 @@ std::string ollama_request_json(const std::string &model, const std::string &pro
     return body.dump();
 }
 
+std::string claude_cli_prompt(const std::string &prompt, const std::vector<std::string> &image_paths)
+{
+    std::ostringstream o;
+    o << "Use the Read tool to open each of these image files (rendered views of the model, in order) before answering:\n";
+    for (const std::string &p : image_paths)
+        o << "  " << p << "\n";
+    o << "\n" << prompt;
+    return o.str();
+}
+
+std::string claude_cli_reply_text(const std::string &body)
+{
+    const nlohmann::json j = nlohmann::json::parse(body, nullptr, false);
+    if (j.is_discarded() || !j.is_object() || j.value("is_error", false) || !j.contains("result") || !j["result"].is_string())
+        return {};
+    return j["result"].get<std::string>();
+}
+
 std::string claude_reply_text(const std::string &body)
 {
     const nlohmann::json j = nlohmann::json::parse(body, nullptr, false);

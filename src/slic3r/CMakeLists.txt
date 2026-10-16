@@ -476,6 +476,8 @@ set(SLIC3R_GUI_SOURCES
     GUI/NativeDevicePage.cpp
     GUI/NativeDevicePage.hpp
     GUI/DirectLanPage.hpp
+    GUI/U1FilamentSync.cpp
+    GUI/U1FilamentSync.hpp
     GUI/U1SendDialog.cpp
     GUI/U1SendDialog.hpp
     GUI/PrinterWebViewHandler.cpp

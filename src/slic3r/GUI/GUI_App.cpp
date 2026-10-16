@@ -3271,7 +3271,6 @@ bool GUI_App::on_init_inner()
         if (!m_tls_init_warning.empty())
             BOOST_LOG_TRIVIAL(error) << "TLS init: " << m_tls_init_warning;
     }
-    }
 
     // !!! Initialization of UI settings as a language, application color mode, fonts... have to be done before first UI action.
     // Like here, before the show InfoDialog in check_older_app_config()

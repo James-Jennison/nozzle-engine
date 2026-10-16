@@ -200,6 +200,7 @@
 #include "wxExtensions.hpp"
 #include "../Utils/PrintHost.hpp"
 #include "../Utils/U1LanPrintHost.hpp"
+#include "U1FilamentSync.hpp"
 #include "U1SendDialog.hpp"
 #include "libslic3r/U1PrintTask.hpp"
 #include "MainFrame.hpp"
@@ -3355,6 +3356,10 @@ Sidebar::Sidebar(Plater *parent)
                                                  wxBU_EXACTFIT | wxNO_BORDER, false, 16); // ORCA match icon size with other icons as 16x16
     ams_btn->SetToolTip(_L("Synchronize filament list from AMS"));
     ams_btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent &e) {
+        if (u1_filament_sync_available()) {
+            sync_filaments_from_u1(this);
+            return;
+        }
         sync_ams_list();
     });
 
@@ -3811,7 +3816,7 @@ void Sidebar::update_all_preset_comboboxes()
 
         // ORCA: show/hide sync-ams button based on filament sync mode
         auto agent = wxGetApp().getAgent();
-        if (agent && agent->get_filament_sync_mode() != FilamentSyncMode::none)
+        if (u1_filament_sync_available() || (agent && agent->get_filament_sync_mode() != FilamentSyncMode::none))
             p->m_bpButton_ams_filament->Show();
         else
             p->m_bpButton_ams_filament->Hide();

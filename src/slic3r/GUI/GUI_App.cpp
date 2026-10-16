@@ -934,6 +934,13 @@ void GUI_App::post_init()
     if (! this->initialized())
         throw Slic3r::RuntimeError("Calling post_init() while not yet initialized");
 
+    if (!m_tls_init_warning.empty() && plater()) {
+        plater()->get_notification_manager()->push_notification(NotificationType::CustomNotification,
+                                                                NotificationManager::NotificationLevel::WarningNotificationLevel,
+                                                                m_tls_init_warning);
+        m_tls_init_warning.clear();
+    }
+
 #if wxUSE_WEBVIEW_EDGE
     // Ensure the Microsoft WebView2 runtime is installed before any WebView is
     // created. The setup wizard and several dialogs render entirely through
@@ -3258,23 +3265,12 @@ bool GUI_App::on_init_inner()
 
 //     Slic3r::debugf "wxWidgets version %s, Wx version %s\n", wxVERSION_STRING, wxVERSION;
     if (is_editor()) {
-        std::string msg = Slic3r::Http::tls_global_init();
-        std::string ssl_cert_store = app_config->get("tls_accepted_cert_store_location");
-        bool ssl_accept = app_config->get("tls_cert_store_accepted") == "yes" && ssl_cert_store == Slic3r::Http::tls_system_cert_store();
-
-        if (!msg.empty() && !ssl_accept) {
-            RichMessageDialog
-                dlg(nullptr,
-                    wxString::Format(_L("%s\nDo you want to continue?"), msg),
-                    "OrcaSlicer", wxICON_QUESTION | wxYES_NO);
-            dlg.ShowCheckBox(_L("Remember my choice"));
-            if (dlg.ShowModal() != wxID_YES) return false;
-
-            app_config->set("tls_cert_store_accepted",
-                dlg.IsCheckBoxChecked() ? "yes" : "no");
-            app_config->set("tls_accepted_cert_store_location",
-                dlg.IsCheckBoxChecked() ? Slic3r::Http::tls_system_cert_store() : "");
-        }
+        // The CA bundle is located quietly and logged by Http; a missing bundle is reported as a
+        // non-blocking notification once the main window exists, never a modal prompt.
+        m_tls_init_warning = Slic3r::Http::tls_global_init();
+        if (!m_tls_init_warning.empty())
+            BOOST_LOG_TRIVIAL(error) << "TLS init: " << m_tls_init_warning;
+    }
     }
 
     // !!! Initialization of UI settings as a language, application color mode, fonts... have to be done before first UI action.

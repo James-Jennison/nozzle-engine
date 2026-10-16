@@ -903,6 +903,8 @@ private:
     bool                    m_datadir_redefined { false };
     std::string             m_older_data_dir_path;
     bool                    m_unsigned_plugin_warning_shown { false };
+    // Non-empty when no system CA bundle was found at startup.
+    std::string             m_tls_init_warning;
     boost::optional<Semver> m_last_config_version;
     bool                    m_config_corrupted { false };
     std::string             m_open_method;

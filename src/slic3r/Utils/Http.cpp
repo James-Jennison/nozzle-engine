@@ -82,13 +82,17 @@ struct CurlGlobalInit
                 }
             }
 
-            if (!bundle)
-                message = "Unable to get system certificate.";
-            else
-                message = (boost::format("use system SSL certificate: %1%") % bundle).str();
-
-             message += "\n" + (boost::format("To manually specify the system certificate store, "
-                                                   "set the %1% environment variable to the correct CA and restart the application") % SSL_CA_FILE).str();
+            // A distro bundle is found quietly; only a missing bundle is reported (non-blocking).
+            if (!bundle) {
+                message = "Unable to find a system CA certificate bundle. HTTPS connections will fail certificate checks.";
+                message += "\n" + (boost::format("To specify the certificate store, "
+                                                 "set the %1% environment variable to the correct CA bundle and restart the application") % SSL_CA_FILE).str();
+                BOOST_LOG_TRIVIAL(error) << "TLS: no system CA bundle found";
+            } else {
+                BOOST_LOG_TRIVIAL(info) << "TLS: using system CA bundle " << bundle;
+            }
+        } else {
+            BOOST_LOG_TRIVIAL(info) << "TLS: using CA bundle " << ssl_cafile;
         }
 #endif // OPENSSL_CERT_OVERRIDE
 
@@ -214,8 +218,10 @@ Http::priv::priv(const std::string &url)
 #ifdef __WINDOWS__
 	::curl_easy_setopt(curl, CURLOPT_SSLVERSION, CURL_SSLVERSION_MAX_TLSv1_2);
 #endif
-	::curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
-	::curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+	// Verify the server certificate and host name. A LAN printer with a self-signed certificate
+	// is trusted through its "HTTPS CA file" (printhost_cafile), passed via Http::ca_file().
+	::curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+	::curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
 
 	// https://everything.curl.dev/http/post/expect100.html
 	// remove the Expect: header, it will add a second delay to each request,
@@ -646,6 +652,10 @@ Http& Http::ca_file(const std::string &name)
 {
 	if (p && priv::ca_file_supported(p->curl)) {
 		::curl_easy_setopt(p->curl, CURLOPT_CAINFO, name.c_str());
+		// The user explicitly trusts this CA. The chain is still verified against it, but
+		// self-signed LAN printer certificates rarely name the address the user typed.
+		if (!name.empty())
+			::curl_easy_setopt(p->curl, CURLOPT_SSL_VERIFYHOST, 0L);
 	}
 
 	return *this;

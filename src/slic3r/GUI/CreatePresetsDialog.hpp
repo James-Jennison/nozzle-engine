@@ -29,6 +29,9 @@
 
 namespace Slic3r {
 namespace GUI {
+// Filament id for a user filament preset of this name (reuses an existing one, else a free "P" id).
+std::string new_user_filament_id(const std::string &filament_name);
+
 
 class CreateFilamentPresetDialog : public DPIDialog
 {

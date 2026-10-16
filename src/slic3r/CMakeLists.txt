@@ -471,6 +471,13 @@ set(SLIC3R_GUI_SOURCES
     GUI/Printer/PrinterFileSystem.cpp
     GUI/Printer/PrinterFileSystem.h
     GUI/PrinterWebView.cpp
+    GUI/NativePrinterPanel.cpp
+    GUI/NativePrinterPanel.hpp
+    GUI/NativeDevicePage.cpp
+    GUI/NativeDevicePage.hpp
+    GUI/DirectLanPage.hpp
+    GUI/U1SendDialog.cpp
+    GUI/U1SendDialog.hpp
     GUI/PrinterWebViewHandler.cpp
     GUI/PrinterWebViewHandler.hpp
     GUI/PrinterWebView.hpp
@@ -795,6 +802,10 @@ set(SLIC3R_GUI_SOURCES
     Utils/MoonrakerPrinterAgent.cpp
     Utils/MoonrakerPrinterAgent.hpp
     Utils/Moonraker.cpp
+    Utils/MoonrakerLive.cpp
+    Utils/MoonrakerLive.hpp
+    Utils/U1LanPrintHost.cpp
+    Utils/U1LanPrintHost.hpp
     Utils/Moonraker.hpp
     Utils/BBLCloudServiceAgent.cpp
     Utils/BBLCloudServiceAgent.hpp

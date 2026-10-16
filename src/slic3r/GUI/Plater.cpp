@@ -199,6 +199,9 @@
 #include "GUI_Factories.hpp"
 #include "wxExtensions.hpp"
 #include "../Utils/PrintHost.hpp"
+#include "../Utils/U1LanPrintHost.hpp"
+#include "U1SendDialog.hpp"
+#include "libslic3r/U1PrintTask.hpp"
 #include "MainFrame.hpp"
 #ifdef SLIC3R_CAD
 #include "slic3r/GUI/CAD/DesignPanel.hpp"
@@ -20888,6 +20891,73 @@ void Plater::reslice_SLA_until_step(SLAPrintObjectStep step, const ModelObject &
     // and let the background processing start.
     this->p->restart_background_process(state | priv::UPDATE_BACKGROUND_PROCESS_FORCE_RESTART);
 }
+void Plater::send_gcode_u1_lan(const fs::path &default_output_file)
+{
+    // Where to reach the printer: the address typed into the printer settings.
+    std::string host = wxGetApp().preset_bundle->printers.get_edited_preset().config.opt_string("print_host");
+    if (host.empty()) {
+        show_error(this, _L("No Snapmaker U1 address is known yet. Enter its IP address in the printer settings "
+                            "(Connection > Hostname, IP or URL)."), false);
+        return;
+    }
+
+    std::string                              base_url;
+    wxString                                 error;
+    std::optional<U1PrintTask::PrinterState> printer;
+    {
+        wxBusyCursor wait;
+        printer = U1LanPrintHost::query_printer(host, base_url, error);
+    }
+    if (!printer) {
+        show_error(this, GUI::format_wxstr(_L("Could not reach the Snapmaker U1 at %s on the local network.\n\n%s"),
+                                           from_u8(host), error), false);
+        return;
+    }
+
+    // Filaments this plate actually extrudes. The slice result counts real
+    // extruders, so Full Spectrum mixed filaments are already resolved.
+    PartPlate               *plate = get_partplate_list().get_curr_plate();
+    const Print             *print = plate != nullptr ? plate->fff_print() : nullptr;
+    std::vector<U1PrintTask::Filament> filaments;
+    if (print != nullptr) {
+        const DynamicPrintConfig full_config = print->full_print_config();
+        const auto *colors = full_config.option<ConfigOptionStrings>("filament_colour");
+        const auto *types  = full_config.option<ConfigOptionStrings>("filament_type");
+        const size_t count = std::max(colors ? colors->values.size() : 0, types ? types->values.size() : 0);
+        filaments.resize(count);
+        for (size_t i = 0; i < count; ++i) {
+            filaments[i].type  = types && i < types->values.size() ? boost::trim_copy(types->values[i]) : std::string();
+            filaments[i].color = colors && i < colors->values.size() ? colors->values[i] : std::string();
+        }
+        bool marked = false;
+        if (plate->is_slice_result_valid() && plate->get_slice_result() != nullptr) {
+            for (const auto &used : plate->get_slice_result()->print_statistics.total_volumes_per_extruder)
+                if (used.first < filaments.size() && used.second > 0.) {
+                    filaments[used.first].present = true;
+                    marked                         = true;
+                }
+        }
+        if (!marked)
+            for (int extruder : plate->get_extruders(true))
+                if (extruder >= 1 && size_t(extruder) <= filaments.size())
+                    filaments[extruder - 1].present = true;
+    }
+
+    U1SendDialog dlg(this, default_output_file, filaments, *printer);
+    if (dlg.ShowModal() != wxID_OK)
+        return;
+
+    PrintHostJob upload_job;
+    upload_job.printhost               = std::make_unique<U1LanPrintHost>(base_url, dlg.options());
+    upload_job.upload_data.use_3mf     = false;
+    upload_job.upload_data.upload_path = dlg.filename();
+    upload_job.upload_data.post_action = dlg.start_print() ? PrintHostPostUploadAction::StartPrint : PrintHostPostUploadAction::None;
+    upload_job.switch_to_device_tab    = false;
+    // Exports the G-code, then hands the job to the upload queue, which shows
+    // progress and lets the user cancel.
+    p->export_gcode(fs::path(), false, std::move(upload_job));
+}
+
 void Plater::send_gcode_legacy(int plate_idx, Export3mfProgressFn proFn)
 {
     // if physical_printer is selected, send gcode for this printer
@@ -20895,6 +20965,28 @@ void Plater::send_gcode_legacy(int plate_idx, Export3mfProgressFn proFn)
     DynamicPrintConfig* physical_printer_config = &Slic3r::GUI::wxGetApp().preset_bundle->printers.get_edited_preset().config;
     if (! physical_printer_config || p->model.objects.empty())
         return;
+
+    {
+        const std::string printer_model = physical_printer_config->opt_string("printer_model");
+        if (boost::icontains(printer_model, "Snapmaker") && boost::icontains(printer_model, "U1")) {
+            fs::path u1_output_file;
+            try {
+                unsigned int state = this->p->update_restart_background_process(false, false);
+                if (state & priv::UPDATE_BACKGROUND_PROCESS_INVALID)
+                    return;
+                u1_output_file = this->p->background_process.output_filepath_for_project(into_path(this->p->get_project_filename(".3mf")));
+            } catch (const Slic3r::PlaceholderParserError& ex) {
+                show_error(this, ex.what(), true);
+                return;
+            } catch (const std::exception& ex) {
+                show_error(this, ex.what(), false);
+                return;
+            }
+            u1_output_file = fs::path(Slic3r::fold_utf8_to_ascii(u1_output_file.string())).replace_extension("gcode");
+            send_gcode_u1_lan(u1_output_file);
+            return;
+        }
+    }
 
     PrintHostJob upload_job(physical_printer_config);
     if (upload_job.empty())

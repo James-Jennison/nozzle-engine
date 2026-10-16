@@ -65,6 +65,7 @@
 // comes first, which silently defeats PluginPages' selection round-trip across a tab relayout.
 #define TAB_ID_MONITOR_WEB   "monitor_web"
 #define TAB_ID_MULTI_DEVICE  "multi_device"
+#define TAB_ID_NATIVE_DEVICE "native_device"
 #define TAB_ID_PROJECT       "project"
 #define TAB_ID_CALIBRATION   "calibration"
 
@@ -85,6 +86,7 @@ class Plater;
 #ifdef SLIC3R_CAD
 class DesignPanel;
 #endif
+class NativeDevicePage;
 class MainFrame;
 class WebViewPanel;
 class ParamsDialog;
@@ -523,6 +525,8 @@ public:
     LazyPage<CalibrationPanel>* m_calibration_page{ nullptr };
     LazyPage<WebViewPanel>* m_home_page { nullptr };
     LazyPage<PrinterWebView>* m_printer_view_page{nullptr};
+    LazyPage<NativeDevicePage>* m_native_device_page{nullptr};
+    void update_native_device_tab();
     PluginPages           m_plugin_pages;
     wxLogWindow*          m_log_window { nullptr };
     // BBS

@@ -5197,6 +5197,13 @@ void PresetTree::edit_preset(std::string printer_name, int need_edit_preset_inde
     m_parent_dialog->edit_preset();
 }
 
+std::string new_user_filament_id(const std::string &filament_name)
+{
+    PresetBundle filament_id_sources;
+    load_filament_id_sources(filament_id_sources);
+    return get_filament_id(filament_name, filament_id_sources);
+}
+
 } // namespace GUI
 
 } // namespace Slic3r

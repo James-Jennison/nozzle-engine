@@ -21,6 +21,7 @@
 #include "slic3r/GUI/LazyPage.hpp"
 #include "slic3r/GUI/Monitor.hpp"
 #include "slic3r/GUI/PrinterWebView.hpp"
+#include "slic3r/GUI/NativeDevicePage.hpp"
 #include "slic3r/GUI/MultiMachinePage.hpp"
 #include "slic3r/GUI/CalibrationPanel.hpp"
 #include "slic3r/GUI/ReleaseNote.hpp"
@@ -1543,6 +1544,10 @@ void MainFrame::init_tabpanel() {
         return view;
     });
     m_lazy_pages.push_back(m_printer_view_page);
+
+    // Native LAN monitor for Moonraker/Snapmaker printers; only listed while such a printer is selected.
+    m_native_device_page = new LazyPage<NativeDevicePage>(m_tabpanel, TAB_ID_NATIVE_DEVICE, 55);
+    m_lazy_pages.push_back(m_native_device_page);
     Bind(EVT_LOAD_PRINTER_URL, [this](LoadPrinterViewEvent &evt) {
         //select_tab(MainFrame::tpMonitor);
         m_printer_url     = evt.GetString();
@@ -1587,7 +1592,41 @@ void MainFrame::init_tabpanel() {
 }
 
 // SoftFever
+void MainFrame::update_native_device_tab()
+{
+    if (m_native_device_page == nullptr || m_tabpanel == nullptr)
+        return;
+    PresetBundle* bundle = wxGetApp().preset_bundle;
+    bool want = false;
+    if (bundle != nullptr && !bundle->use_bbl_device_tab()) {
+        const auto& cfg = bundle->printers.get_edited_preset().config;
+        const auto* host_type = cfg.option<ConfigOptionEnum<PrintHostType>>("host_type");
+        const std::string model = cfg.opt_string("printer_model");
+        const bool is_u1 = boost::icontains(model, "Snapmaker") && boost::icontains(model, "U1");
+        want = is_u1 || (host_type != nullptr && host_type->value == htMoonraker && !cfg.opt_string("print_host").empty());
+    }
+    int idx = m_tabpanel->FindPage(m_native_device_page);
+    if (!want) {
+        if (idx != wxNOT_FOUND) {
+            m_native_device_page->Show(false);
+            m_tabpanel->RemovePage(idx);
+        }
+        return;
+    }
+    if (idx == wxNOT_FOUND) {
+        m_native_device_page->Show(false);
+        m_tabpanel->InsertPage(m_tabpanel->PositionAfter({TAB_ID_MONITOR_WEB, TAB_ID_MONITOR}), TAB_ID_NATIVE_DEVICE,
+                               m_native_device_page, _L("Printer"), "tab_monitor_active");
+    }
+    if (NativeDevicePage* page = m_native_device_page->get())
+        page->reload();
+}
+
 void MainFrame::show_device(bool should_use_native) {
+    struct NativeTabUpdate {
+        MainFrame* self;
+        ~NativeTabUpdate() { self->update_native_device_tab(); }
+    } native_tab_update{this};
     auto idx = -1;
 
     const bool use_printer_agents = wxGetApp().app_config->get_bool("use_printer_agents");

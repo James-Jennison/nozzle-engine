@@ -24,6 +24,7 @@
 #include <wx/stattext.h>
 #include <wx/textctrl.h>
 
+#include <algorithm>
 #include <atomic>
 #include <memory>
 #include <thread>
@@ -296,17 +297,11 @@ void run_semantic_paint()
         return;
     }
     ModelObject *object = model.objects[obj_idx];
-    ModelVolume *volume = nullptr;
+    std::vector<ModelVolume *> parts;
     for (ModelVolume *v : object->volumes)
-        if (v->is_model_part()) {
-            if (volume) {
-                show_info(plater, _L("AI auto-paint currently works on objects with a single part. Split or merge the parts first."),
-                          _L("AI auto-paint"));
-                return;
-            }
-            volume = v;
-        }
-    if (!volume)
+        if (v->is_model_part())
+            parts.push_back(v);
+    if (parts.empty())
         return;
 
     const std::vector<SP::FilamentInfo> filaments = current_filaments();
@@ -314,19 +309,32 @@ void run_semantic_paint()
         show_info(plater, _L("Add at least two filaments first; there is nothing to choose between with one."), _L("AI auto-paint"));
         return;
     }
-    if (!volume->mmu_segmentation_facets.empty() &&
+    const bool has_paint = std::any_of(parts.begin(), parts.end(), [](const ModelVolume *v) { return !v->mmu_segmentation_facets.empty(); });
+    if (has_paint &&
         MessageDialog(plater, _L("This object already has colour painting. AI auto-paint will replace it. Continue?"), _L("AI auto-paint"),
                       wxYES_NO | wxICON_QUESTION).ShowModal() != wxID_YES)
         return;
 
-    // Segment and render in the object's own orientation (volume transform applied, instance ignored).
-    TriangleMesh mesh = volume->mesh();
-    mesh.transform(volume->get_matrix());
-    const SP::Segmentation seg = SP::segment_mesh(mesh.its);
+    // All parts go into one mesh (volume transforms applied, instance ignored). Parts share no vertices, so a segment never
+    // spans two parts, and each part owns a contiguous range of faces that is used to split the answer back up.
+    indexed_triangle_set       combined;
+    std::vector<size_t>        first_face;
+    for (ModelVolume *v : parts) {
+        TriangleMesh mesh = v->mesh();
+        mesh.transform(v->get_matrix());
+        const int offset = int(combined.vertices.size());
+        first_face.push_back(combined.indices.size());
+        combined.vertices.insert(combined.vertices.end(), mesh.its.vertices.begin(), mesh.its.vertices.end());
+        for (const stl_triangle_vertex_indices &t : mesh.its.indices)
+            combined.indices.emplace_back(t(0) + offset, t(1) + offset, t(2) + offset);
+    }
+    first_face.push_back(combined.indices.size());
+
+    const SP::Segmentation seg = SP::segment_mesh(combined);
     std::vector<SP::Image>   images;
     std::vector<std::string> names;
     for (const SP::View &v : SP::default_views()) {
-        images.push_back(SP::render_view(mesh.its, seg, v));
+        images.push_back(SP::render_view(combined, seg, v));
         names.push_back(v.name);
     }
 
@@ -337,11 +345,13 @@ void run_semantic_paint()
     const std::vector<int> faces = SP::face_filaments(seg, dlg.assignments());
     {
         Plater::TakeSnapshot snapshot(plater, _u8L("AI auto-paint"));
-        TriangleSelector selector(volume->mesh());
-        for (size_t f = 0; f < faces.size(); ++f)
-            if (faces[f] > 0 && faces[f] <= int(EnforcerBlockerType::ExtruderMax))
-                selector.set_facet(int(f), EnforcerBlockerType(faces[f]));
-        volume->mmu_segmentation_facets.set(selector);
+        for (size_t p = 0; p < parts.size(); ++p) {
+            TriangleSelector selector(parts[p]->mesh());
+            for (size_t f = first_face[p]; f < first_face[p + 1]; ++f)
+                if (faces[f] > 0 && faces[f] <= int(EnforcerBlockerType::ExtruderMax))
+                    selector.set_facet(int(f - first_face[p]), EnforcerBlockerType(faces[f]));
+            parts[p]->mmu_segmentation_facets.set(selector);
+        }
     }
     wxGetApp().obj_list()->update_info_items(size_t(obj_idx));
     plater->changed_object(obj_idx);

@@ -900,11 +900,13 @@ void ObjectList::update_filament_values_for_items_when_delete_filament(const siz
                         int new_extruder = replace_id == -1 ? 0 : (replace_id + 1);
                         extruder         = wxString::Format("%d", new_extruder);
                         layer_range_item.second.set("extruder", new_extruder);
-                    } else {
+                    } else if (layer_range_item.second.has("extruder")) {
                         int layer_filament_id = layer_range_item.second.option("extruder")->getInt();
                         int new_extruder      = layer_filament_id > filament_id ? layer_filament_id - 1 : layer_filament_id;
                         extruder              = wxString::Format("%d", new_extruder);
                         layer_range_item.second.set("extruder", new_extruder);
+                    } else {
+                        continue; // this range does not override the filament
                     }
                     m_objects_model->SetExtruder(extruder, layer_item);
                 }

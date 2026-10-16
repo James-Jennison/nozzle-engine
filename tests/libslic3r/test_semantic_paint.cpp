@@ -4,7 +4,6 @@
 #include "libslic3r/SemanticPaint.hpp"
 #include "libslic3r/TriangleMesh.hpp"
 
-#include <nlohmann/json.hpp>
 
 using namespace Slic3r;
 namespace SP = Slic3r::SemanticPaint;
@@ -67,7 +66,7 @@ TEST_CASE("SemanticPaint: colour names", "[SemanticPaint]")
     CHECK(SP::color_name("#00C800") == "green");
 }
 
-TEST_CASE("SemanticPaint: prompt and provider round trips", "[SemanticPaint]")
+TEST_CASE("SemanticPaint: prompt", "[SemanticPaint]")
 {
     const TriangleMesh cube = make_cube(10., 10., 10.);
     const auto seg = SP::segment_mesh(cube.its);
@@ -76,19 +75,6 @@ TEST_CASE("SemanticPaint: prompt and provider round trips", "[SemanticPaint]")
     CHECK(prompt.find("box") != std::string::npos);
     CHECK(prompt.find("festive") != std::string::npos);
     CHECK(prompt.find("#FF0000") != std::string::npos);
-
-    const auto claude = nlohmann::json::parse(SP::claude_request_json("m", prompt, {"AAAA", "BBBB"}));
-    CHECK(claude["model"] == "m");
-    CHECK(claude["messages"][0]["content"].size() == 3);
-    CHECK(claude["messages"][0]["content"][0]["source"]["data"] == "AAAA");
-
-    const auto ollama = nlohmann::json::parse(SP::ollama_request_json("m", prompt, {"AAAA"}));
-    CHECK(ollama["stream"] == false);
-    CHECK(ollama["messages"][0]["images"][0] == "AAAA");
-
-    CHECK(SP::claude_reply_text(R"({"content":[{"type":"text","text":"hi "},{"type":"text","text":"there"}]})") == "hi there");
-    CHECK(SP::ollama_reply_text(R"({"message":{"role":"assistant","content":"yo"}})") == "yo");
-    CHECK(SP::claude_reply_text("not json").empty());
 }
 
 TEST_CASE("SemanticPaint: assignment parsing", "[SemanticPaint]")

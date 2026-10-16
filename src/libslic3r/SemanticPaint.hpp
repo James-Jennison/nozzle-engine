@@ -90,19 +90,11 @@ std::string color_name(const std::string &hex);
 std::string build_prompt(const Segmentation &seg, const std::vector<FilamentInfo> &filaments, const std::string &object_name,
                          const std::vector<std::string> &view_names, const std::string &user_hint = {});
 
-// Request bodies for the supported providers. `png_b64` holds the base64 PNGs in view order.
-std::string claude_request_json(const std::string &model, const std::string &prompt, const std::vector<std::string> &png_b64);
-std::string ollama_request_json(const std::string &model, const std::string &prompt, const std::vector<std::string> &png_b64);
-
-// Claude Code CLI provider (`claude -p`), which runs on the user's Claude subscription instead of an API key.
+// Claude Code CLI provider (`claude -p`), which runs on the user's Claude subscription.
 // The CLI cannot take inline images, so the views are written to files and the prompt tells it to open them.
 std::string claude_cli_prompt(const std::string &prompt, const std::vector<std::string> &image_paths);
 // Text inside `claude -p --output-format json` output (empty when it reports an error or carries no result).
 std::string claude_cli_reply_text(const std::string &body);
-
-// The assistant text inside a provider reply (empty when the reply carries none).
-std::string claude_reply_text(const std::string &body);
-std::string ollama_reply_text(const std::string &body);
 
 // seg_to_filament[i] is the 1-based filament slot for segment i, or 0 for "leave unpainted". Segments the reply
 // does not mention, or maps outside 1..filament_count, stay 0. std::nullopt when no assignment could be read.

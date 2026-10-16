@@ -484,6 +484,8 @@ set(SLIC3R_GUI_SOURCES
     GUI/PlaterFilamentComboBox.hpp
     GUI/U1FilamentSync.cpp
     GUI/U1FilamentSync.hpp
+    GUI/SemanticPaintDialog.cpp
+    GUI/SemanticPaintDialog.hpp
     GUI/U1SendDialog.cpp
     GUI/U1SendDialog.hpp
     GUI/PrinterWebViewHandler.cpp
@@ -814,6 +816,8 @@ set(SLIC3R_GUI_SOURCES
     Utils/NozzleSession.hpp
     Utils/MoonrakerLive.cpp
     Utils/MoonrakerLive.hpp
+    Utils/SemanticPaintClient.cpp
+    Utils/SemanticPaintClient.hpp
     Utils/U1LanPrintHost.cpp
     Utils/U1LanPrintHost.hpp
     Utils/Moonraker.hpp

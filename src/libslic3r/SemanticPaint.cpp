@@ -365,7 +365,7 @@ Image render_view(const indexed_triangle_set &its, const Segmentation &seg, cons
                 anchor[s] = {x, y};
             }
         }
-    const int label_scale = std::max(2, size / 128);
+    const int label_scale = std::max(3, size / 64);
     for (size_t s = 0; s < nseg; ++s)
         if (anchor[s].first >= 0)
             draw_number(img, int(s), anchor[s].first, anchor[s].second, label_scale);
@@ -495,28 +495,6 @@ std::string build_prompt(const Segmentation &seg, const std::vector<FilamentInfo
     return o.str();
 }
 
-std::string claude_request_json(const std::string &model, const std::string &prompt, const std::vector<std::string> &png_b64)
-{
-    nlohmann::json content = nlohmann::json::array();
-    for (const std::string &b : png_b64)
-        content.push_back({{"type", "image"}, {"source", {{"type", "base64"}, {"media_type", "image/png"}, {"data", b}}}});
-    content.push_back({{"type", "text"}, {"text", prompt}});
-    nlohmann::json body = {{"model", model}, {"max_tokens", 1500}, {"messages", nlohmann::json::array({{{"role", "user"}, {"content", content}}})}};
-    return body.dump();
-}
-
-std::string ollama_request_json(const std::string &model, const std::string &prompt, const std::vector<std::string> &png_b64)
-{
-    nlohmann::json images = nlohmann::json::array();
-    for (const std::string &b : png_b64)
-        images.push_back(b);
-    nlohmann::json body = {{"model", model},
-                           {"stream", false},
-                           {"format", "json"},
-                           {"messages", nlohmann::json::array({{{"role", "user"}, {"content", prompt}, {"images", images}}})}};
-    return body.dump();
-}
-
 std::string claude_cli_prompt(const std::string &prompt, const std::vector<std::string> &image_paths)
 {
     std::ostringstream o;
@@ -533,27 +511,6 @@ std::string claude_cli_reply_text(const std::string &body)
     if (j.is_discarded() || !j.is_object() || j.value("is_error", false) || !j.contains("result") || !j["result"].is_string())
         return {};
     return j["result"].get<std::string>();
-}
-
-std::string claude_reply_text(const std::string &body)
-{
-    const nlohmann::json j = nlohmann::json::parse(body, nullptr, false);
-    if (j.is_discarded() || !j.is_object() || !j.contains("content") || !j["content"].is_array())
-        return {};
-    std::string out;
-    for (const auto &c : j["content"])
-        if (c.is_object() && c.value("type", "") == "text" && c.contains("text") && c["text"].is_string())
-            out += c["text"].get<std::string>();
-    return out;
-}
-
-std::string ollama_reply_text(const std::string &body)
-{
-    const nlohmann::json j = nlohmann::json::parse(body, nullptr, false);
-    if (j.is_discarded() || !j.is_object() || !j.contains("message") || !j["message"].is_object())
-        return {};
-    const auto &m = j["message"];
-    return m.contains("content") && m["content"].is_string() ? m["content"].get<std::string>() : std::string();
 }
 
 namespace {

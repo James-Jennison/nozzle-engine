@@ -4,6 +4,7 @@
 #include "libslic3r/Model.hpp"
 
 #include "GUI_Factories.hpp"
+#include "SemanticPaintDialog.hpp"
 #include "GUI_ObjectList.hpp"
 #include "GUI_App.hpp"
 #include "Shortcuts.hpp"
@@ -1040,6 +1041,10 @@ wxMenuItem* MenuFactory::append_menu_item_fix_through_cgal(wxMenu* menu)
     wxMenuItem* menu_item = append_menu_item(menu, wxID_ANY, _L("Fix Model"), "",
         [](wxCommandEvent&) { obj_list()->fix_through_cgal(); }, "", menu,
         []() {return plater()->can_fix_through_cgal(); }, plater());
+
+    append_menu_item(menu, wxID_ANY, _L("AI auto-paint") + dots, _L("Let Claude suggest a filament for each part of the surface"),
+        [](wxCommandEvent&) { run_semantic_paint(); }, "", menu,
+        []() { return can_run_semantic_paint(); }, plater());
 
     return menu_item;
 }

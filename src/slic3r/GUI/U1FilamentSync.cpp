@@ -84,7 +84,7 @@ const Preset *pick_preset(PresetBundle &bundle, const Slot &slot)
     const Preset     *best   = nullptr;
     int               best_score = -1;
     for (const Preset &p : bundle.filaments.get_presets()) {
-        if (!p.is_visible || !p.is_compatible || p.is_default)
+        if (!p.is_compatible || p.is_default)
             continue;
         if (p.config.opt_string("filament_type", 0u) != slot.type)
             continue;
@@ -98,6 +98,8 @@ const Preset *pick_preset(PresetBundle &bundle, const Slot &slot)
             score += 4;
         if (p.is_system)
             score += 1;
+        if (p.is_visible)
+            score += 20; // selected in the setup wizard / filament list
         // Shorter names are plainer variants of the same filament.
         score = score * 100 - int(std::min<size_t>(name.size(), 99));
         if (score > best_score) {

@@ -3817,7 +3817,10 @@ void Sidebar::update_all_preset_comboboxes()
 
         // ORCA: show/hide sync-ams button based on filament sync mode
         auto agent = wxGetApp().getAgent();
-        if (u1_filament_sync_available() || (agent && agent->get_filament_sync_mode() != FilamentSyncMode::none))
+        if (u1_filament_sync_available()) {
+            p->m_bpButton_ams_filament->SetToolTip(_L("Synchronize filament list from the printer"));
+            p->m_bpButton_ams_filament->Show();
+        } else if (agent && agent->get_filament_sync_mode() != FilamentSyncMode::none)
             p->m_bpButton_ams_filament->Show();
         else
             p->m_bpButton_ams_filament->Hide();
@@ -14382,7 +14385,7 @@ void Plater::priv::set_project_name(const wxString& project_name)
     if (!m_project_name.IsEmpty())
         wxGetApp().mainframe->update_title_colour_after_set_title();
 #else
-    wxGetApp().mainframe->SetTitle(m_project_name + " - OrcaSlicer");
+    wxGetApp().mainframe->SetTitle(m_project_name + " - " SLIC3R_APP_NAME);
     wxGetApp().mainframe->topbar()->SetTitle(m_project_name);
 #endif
 }
@@ -14402,7 +14405,7 @@ void Plater::priv::update_title_dirty_status()
     wxGetApp().mainframe->SetTitle(title);
     wxGetApp().mainframe->update_title_colour_after_set_title();
 #else
-    wxGetApp().mainframe->SetTitle(title + " - OrcaSlicer");
+    wxGetApp().mainframe->SetTitle(title + " - " SLIC3R_APP_NAME);
     wxGetApp().mainframe->topbar()->SetTitle(title);
 #endif    
 }

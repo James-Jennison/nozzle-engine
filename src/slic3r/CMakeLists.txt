@@ -804,6 +804,8 @@ set(SLIC3R_GUI_SOURCES
     Utils/MoonrakerPrinterAgent.cpp
     Utils/MoonrakerPrinterAgent.hpp
     Utils/Moonraker.cpp
+    Utils/NozzleSession.cpp
+    Utils/NozzleSession.hpp
     Utils/MoonrakerLive.cpp
     Utils/MoonrakerLive.hpp
     Utils/U1LanPrintHost.cpp

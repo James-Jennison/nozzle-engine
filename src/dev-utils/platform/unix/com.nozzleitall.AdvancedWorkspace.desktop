@@ -1,0 +1,13 @@
+[Desktop Entry]
+Name=Nozzle It All Advanced Workspace
+GenericName=3D Printing Software
+Comment=Advanced slicing workspace for Nozzle It All
+Icon=com.nozzleitall.AdvancedWorkspace
+Exec=nozzle-advanced-workspace %U
+Terminal=false
+Type=Application
+MimeType=model/stl;model/3mf;application/vnd.ms-3mfdocument;application/prs.wavefront-obj;application/x-amf;
+Categories=Graphics;3DGraphics;Engineering;
+Keywords=3D;Printing;Slicer;slice;3D;printer;convert;gcode;stl;obj;amf;
+StartupNotify=false
+StartupWMClass=nozzle-advanced-workspace

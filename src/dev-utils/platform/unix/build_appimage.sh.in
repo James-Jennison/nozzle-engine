@@ -16,9 +16,9 @@ fi
 mv @SLIC3R_APP_CMD@ AppRun
 chmod +x AppRun
 
-cp resources/images/@SLIC3R_APP_KEY@_192px.png @SLIC3R_APP_KEY@.png
-mkdir -p usr/share/icons/hicolor/192x192/apps
-cp resources/images/@SLIC3R_APP_KEY@_192px.png usr/share/icons/hicolor/192x192/apps/@SLIC3R_APP_KEY@.png
+cp resources/images/@SLIC3R_APP_ICON_BASE@_@SLIC3R_APPIMAGE_ICON_PX@px.png @SLIC3R_APP_KEY@.png
+mkdir -p usr/share/icons/hicolor/@SLIC3R_APPIMAGE_ICON_PX@x@SLIC3R_APPIMAGE_ICON_PX@/apps
+cp resources/images/@SLIC3R_APP_ICON_BASE@_@SLIC3R_APPIMAGE_ICON_PX@px.png usr/share/icons/hicolor/@SLIC3R_APPIMAGE_ICON_PX@x@SLIC3R_APPIMAGE_ICON_PX@/apps/@SLIC3R_APP_KEY@.png
 cat <<EOF > com.orcaslicer.@SLIC3R_APP_KEY@.desktop
 [Desktop Entry]
 Name=@SLIC3R_APP_KEY@
@@ -35,10 +35,12 @@ mkdir -p usr/share/applications
 cp com.orcaslicer.@SLIC3R_APP_KEY@.desktop usr/share/applications/
 
 mkdir -p usr/share/metainfo
+if [ -f "${REPO_ROOT}/scripts/flatpak/com.orcaslicer.@SLIC3R_APP_KEY@.metainfo.xml" ]; then
 cp "${REPO_ROOT}/scripts/flatpak/com.orcaslicer.@SLIC3R_APP_KEY@.metainfo.xml" \
   "usr/share/metainfo/com.orcaslicer.@SLIC3R_APP_KEY@.metainfo.xml"
 cp "${REPO_ROOT}/scripts/flatpak/com.orcaslicer.@SLIC3R_APP_KEY@.metainfo.xml" \
   "usr/share/metainfo/com.orcaslicer.@SLIC3R_APP_KEY@.appdata.xml"
+fi
 
 
 export ARCH=$(uname -m)

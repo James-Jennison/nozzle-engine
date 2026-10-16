@@ -200,6 +200,7 @@
 #include "wxExtensions.hpp"
 #include "../Utils/PrintHost.hpp"
 #include "../Utils/U1LanPrintHost.hpp"
+#include "../Utils/NozzleSession.hpp"
 #include "U1FilamentSync.hpp"
 #include "U1SendDialog.hpp"
 #include "libslic3r/U1PrintTask.hpp"
@@ -16268,6 +16269,12 @@ int Plater::save_project(bool saveAs)
         ctx.code = Slic3r::LifecycleEvtCode::Ok;
         Slic3r::fire_lifecycle_event(Slic3r::LifecycleEvent::ProjectAfterSave, ctx);
     }
+
+#if NOZZLE_BRANDING
+    // Nozzle It All bridge: report the save to the launching app (no-op unless
+    // NOZZLE_WORKSPACE_SESSION is set).
+    NozzleSession::on_project_saved(into_path(filename).string());
+#endif
 
     Slic3r::remove_backup(model(), false);
 

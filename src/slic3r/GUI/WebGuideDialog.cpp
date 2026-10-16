@@ -507,6 +507,38 @@ void GuideFrame::OnDocumentLoaded(wxWebViewEvent &evt)
     if (evt.GetURL() == m_browser->GetCurrentURL()) {
         // wxLogMessage("%s", "Document loaded; url='" + evt.GetURL() + "'");
     }
+#if NOZZLE_BRANDING
+    // Nozzle It All: rebrand the shared wizard pages at load time, so the upstream HTML stays
+    // unchanged for the unbranded build. The product name is swapped in every text node (and in
+    // text a page writes later, via a MutationObserver) and the Nozzle mark replaces the logo.
+    {
+        const std::string mark = "file://" + (boost::filesystem::path(resources_dir()) / "images" / SLIC3R_APP_ICON_BASE "_256px.png").generic_string();
+        const std::string js = std::string(R"JS((function(){
+  var NAME = 'Nozzle It All Advanced Workspace';
+  function fix(root){
+    var w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null), n;
+    while ((n = w.nextNode())) {
+      var v = n.nodeValue;
+      if (v && (v.indexOf('OrcaSlicer') >= 0 || v.indexOf('Orca Slicer') >= 0))
+        n.nodeValue = v.split('OrcaSlicer').join(NAME).split('Orca Slicer').join(NAME);
+    }
+    var imgs = root.querySelectorAll ? root.querySelectorAll("img[src$='image/logo.png']") : [];
+    for (var i = 0; i < imgs.length; i++) {
+      var w2 = imgs[i].width || 154;
+      imgs[i].src = ')JS") + mark + R"JS(';
+      imgs[i].style.width = w2 + 'px'; imgs[i].style.height = w2 + 'px';
+    }
+  }
+  fix(document.body);
+  if (!window.__nozzleBrandObs) {
+    window.__nozzleBrandObs = new MutationObserver(function(){ window.__nozzleBrandObs.disconnect(); fix(document.body);
+      window.__nozzleBrandObs.observe(document.body, {childList:true, subtree:true, characterData:true}); });
+    window.__nozzleBrandObs.observe(document.body, {childList:true, subtree:true, characterData:true});
+  }
+})();)JS";
+        RunScript(wxString::FromUTF8(js));
+    }
+#endif
     UpdateState();
 
     // wxCommandEvent *event = new

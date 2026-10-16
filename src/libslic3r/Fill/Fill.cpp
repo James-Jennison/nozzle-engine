@@ -1486,6 +1486,8 @@ void Layer::make_fills(const FillAdaptive::RegionOctrees* fill_octrees, FillLigh
 			if(surface_fill.params.bridge && surface_fill.surface.is_external() && surface_fill.params.density > 99.0){
 				params.density = layerm->region().config().bridge_density.get_abs_value(1.0);
 				params.dont_adjust = true;
+				// >= 100% bridges switch to per-surface edge anchoring (only set site).
+				params.bridge_edge_anchor = params.density >= 0.999f;
 			}
             if(surface_fill.surface.is_internal_bridge()){
                 params.density = f->print_object_config->internal_bridge_density.get_abs_value(1.0);

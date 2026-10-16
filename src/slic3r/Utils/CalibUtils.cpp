@@ -1257,7 +1257,7 @@ void CalibUtils::calib_max_vol_speed(const CalibInfo &calib_info, wxString &erro
     if (max_lh->values[0] < layer_height) max_lh->values[0] = {layer_height};
 
     filament_config.set_key_value("filament_max_volumetric_speed", new ConfigOptionFloats{50});
-    filament_config.set_key_value("slow_down_layer_time", new ConfigOptionInts{0});
+    filament_config.set_key_value("slow_down_layer_time", new ConfigOptionFloats{0.0});
     filament_config.set_key_value("curr_bed_type", new ConfigOptionEnum<BedType>(calib_info.bed_type));
 
     print_config.set_key_value("enable_overhang_speed", new ConfigOptionBoolsNullable({false}));
@@ -1269,7 +1269,7 @@ void CalibUtils::calib_max_vol_speed(const CalibInfo &calib_info, wxString &erro
     print_config.set_key_value("sparse_infill_density", new ConfigOptionPercent(0));
     print_config.set_key_value("overhang_reverse", new ConfigOptionBool(false));
     print_config.set_key_value("spiral_mode", new ConfigOptionBool(true));
-    print_config.set_key_value("outer_wall_line_width", new ConfigOptionFloat(line_width));
+    print_config.set_key_value("outer_wall_line_width", new ConfigOptionFloatOrPercent(line_width, false));
     print_config.set_key_value("initial_layer_print_height", new ConfigOptionFloat(layer_height));
     print_config.set_key_value("layer_height", new ConfigOptionFloat(layer_height));
     obj->config.set_key_value("brim_type", new ConfigOptionEnum<BrimType>(btOuterAndInner));
@@ -1331,7 +1331,7 @@ void CalibUtils::calib_VFA(const CalibInfo &calib_info, wxString &error_message)
     // Resolved layer height: use the (possibly auto-adjusted) value if provided, else default to nozzle/2.
     double layer_height = params.vfa_layer_height > 0.0 ? params.vfa_layer_height : nozzle_diameter / 2.0;
 
-    filament_config.set_key_value("slow_down_layer_time", new ConfigOptionInts{0});
+    filament_config.set_key_value("slow_down_layer_time", new ConfigOptionFloats{0.0});
     filament_config.set_key_value("filament_max_volumetric_speed", new ConfigOptionFloats{200});
     filament_config.set_key_value("curr_bed_type", new ConfigOptionEnum<BedType>(calib_info.bed_type));
 

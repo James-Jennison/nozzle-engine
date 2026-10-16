@@ -18,6 +18,7 @@
 
 class wxDC;
 class wxWindow;
+namespace Slic3r { namespace GUI { class PlaterFilamentComboBox; } }
 
 #define DD_NO_CHECK_ICON    0x0001
 #define DD_NO_TEXT          0x0002
@@ -142,6 +143,7 @@ private:
     std::pair<int, int> actionColumn() const;
 
     friend class ComboBox;
+    friend class Slic3r::GUI::PlaterFilamentComboBox;
     void messureSize();
     void autoPosition();
 

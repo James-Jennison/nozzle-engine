@@ -476,6 +476,12 @@ set(SLIC3R_GUI_SOURCES
     GUI/NativeDevicePage.cpp
     GUI/NativeDevicePage.hpp
     GUI/DirectLanPage.hpp
+    GUI/FilamentDropDown.cpp
+    GUI/FilamentDropDown.hpp
+    GUI/FilamentSort.cpp
+    GUI/FilamentSort.hpp
+    GUI/PlaterFilamentComboBox.cpp
+    GUI/PlaterFilamentComboBox.hpp
     GUI/U1FilamentSync.cpp
     GUI/U1FilamentSync.hpp
     GUI/U1SendDialog.cpp

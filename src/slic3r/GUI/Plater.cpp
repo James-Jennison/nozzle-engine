@@ -246,6 +246,7 @@
 #include "InstanceCheck.hpp"
 #include "NotificationManager.hpp"
 #include "PresetComboBoxes.hpp"
+#include "PlaterFilamentComboBox.hpp"
 #include "MsgDialog.hpp"
 #include "Widgets/MultiNozzleSync.hpp"           // NozzleOption, tryPopUpMultiNozzleDialog, setExtruderNozzleCount
 #include "DeviceCore/DevNozzleSystem.h"          // DevNozzle, GetExtNozzles / GetRackNozzles
@@ -3696,7 +3697,7 @@ void Sidebar::create_printer_preset()
 
 void Sidebar::init_filament_combo(PlaterPresetComboBox **combo, const int filament_idx)
 {
-    *combo = new PlaterPresetComboBox(p->m_panel_filament_content, Slic3r::Preset::TYPE_FILAMENT);
+    *combo = new PlaterFilamentComboBox(p->m_panel_filament_content, Slic3r::Preset::TYPE_FILAMENT);
     (*combo)->set_filament_idx(filament_idx);
 
     auto combo_and_btn_sizer = new wxBoxSizer(wxHORIZONTAL);

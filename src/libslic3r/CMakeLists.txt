@@ -395,6 +395,8 @@ set(lisbslic3r_sources
     ParameterUtils.hpp
     pchheader.cpp
     pchheader.hpp
+    SemanticPaint.cpp
+    SemanticPaint.hpp
     PerimeterGenerator.cpp
     PerimeterGenerator.hpp
     PlaceholderParser.cpp

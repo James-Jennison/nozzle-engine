@@ -2,6 +2,7 @@ get_filename_component(_TEST_NAME ${CMAKE_CURRENT_LIST_DIR} NAME)
 
 add_executable(${_TEST_NAME}_tests
     ${_TEST_NAME}_tests.cpp
+    test_semantic_paint.cpp
     test_u1_print_task.cpp
     test_printer_snapshot.cpp
     test_device_workspace_state.cpp

@@ -1,0 +1,29 @@
+{
+	"type": "filament",
+	"from": "system",
+	"instantiation": "false",
+	"name": "Snapmaker Support For PLA @U1 base",
+	"inherits": "fdm_filament_support_pla_category",
+	"bed_type": [
+		"Hot Plate"
+	],
+	"cool_plate_temp": [
+		"0"
+	],
+	"cool_plate_temp_initial_layer": [
+		"0"
+	],
+	"filament_end_gcode": [
+		""
+	],
+	"filament_multitool_ramming_volume": [
+		"5"
+	],
+	"filament_settings_id": [
+		"Snapmaker Breakaway Support @base"
+	],
+	"filament_vendor": [
+		"Snapmaker"
+	],
+	"filament_id": "P34beb81"
+}

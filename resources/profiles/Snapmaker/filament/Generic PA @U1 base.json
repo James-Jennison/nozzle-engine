@@ -1,0 +1,8 @@
+{
+	"type": "filament",
+	"from": "system",
+	"instantiation": "false",
+	"name": "Generic PA @U1 base",
+	"inherits": "fdm_filament_pa_category",
+	"filament_id": "P3fbac9a"
+}

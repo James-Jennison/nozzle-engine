@@ -282,7 +282,8 @@ set(OPENVDB_FIND_MODULE_PATH "" CACHE PATH "Path to OpenVDB installation's find 
 
 set(SLIC3R_GTK "3" CACHE STRING "GTK version to use with wxWidgets on Linux")
 
-set(IS_CROSS_COMPILE FALSE)
+# Nozzle headless engine: seeded from CMake's own cross-compiling flag (true for Android/NDK and Emscripten builds).
+set(IS_CROSS_COMPILE ${CMAKE_CROSSCOMPILING})
 
 option (COLORED_OUTPUT "Always produce ANSI-colored output (GNU/Clang only)." OFF)
 if (${COLORED_OUTPUT})
@@ -812,6 +813,11 @@ if ("${CMAKE_BUILD_TYPE}" STREQUAL "RelWithDebInfo" OR MSVC)
     set(CMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO RelWithDebInfo Release "")
 endif()
 find_package(TBB REQUIRED)
+# Nozzle browser engine: oneTBB's scalable allocator has no WebAssembly port; Emscripten's allocator is used instead.
+# The link lines get an empty target; the scalable_* entry points come from nozzle/bridge/wasm/wasm_standins.cpp.
+if (EMSCRIPTEN AND NOT TARGET TBB::tbbmalloc)
+    add_library(TBB::tbbmalloc INTERFACE IMPORTED)
+endif ()
 # include_directories(SYSTEM ${TBB_INCLUDE_DIRS})
 # add_definitions(${TBB_DEFINITIONS})
 # if(MSVC)
@@ -822,7 +828,11 @@ find_package(TBB REQUIRED)
 # add_definitions(-DTBB_USE_CAPTURED_EXCEPTION=0)
 
 find_package(OpenSSL REQUIRED)
-find_package(CURL REQUIRED)
+# Nozzle headless engine: CURL is used only by the GUI and ORCA_TOOLS, never by libslic3r. Headless builds (Android,
+# browser, desktop CLI) get an empty libcurl target so nothing else changes.
+if (SLIC3R_GUI OR ORCA_TOOLS)
+    find_package(CURL REQUIRED)
+endif ()
 find_package(Freetype REQUIRED)
 
 if (SLIC3R_GUI)
@@ -858,7 +868,9 @@ endif()
 
 
 add_library(libcurl INTERFACE)
-target_link_libraries(libcurl INTERFACE CURL::libcurl)
+if (TARGET CURL::libcurl)
+    target_link_libraries(libcurl INTERFACE CURL::libcurl)
+endif ()
 
 find_package(ZLIB REQUIRED)
 target_link_libraries(libcurl INTERFACE ZLIB::ZLIB)
@@ -911,6 +923,8 @@ endif ()
 
 find_package(PNG REQUIRED)
 
+# Nozzle headless engine: OpenGL and glfw are GUI-only (libslic3r never uses them).
+if (SLIC3R_GUI)
 set(OpenGL_GL_PREFERENCE "LEGACY")
 find_package(OpenGL REQUIRED)
 
@@ -919,6 +933,7 @@ if(APPLE AND CMAKE_VERSION VERSION_GREATER_EQUAL "4.0")
 endif()
 
 find_package(glfw3 REQUIRED)
+endif () # SLIC3R_GUI (OpenGL, glfw)
 
 # Find the Cereal serialization library
 find_package(cereal REQUIRED)
@@ -1054,7 +1069,10 @@ add_library(pybind11::embed ALIAS pybind11_embed)
 
 if(SLIC3R_STATIC)
     set(OPENVDB_USE_STATIC_LIBS ON)
-    set(USE_BLOSC TRUE)
+    # Nozzle headless engine: the Android and browser OpenVDB builds skip Blosc.
+    if (NOT ANDROID AND NOT EMSCRIPTEN)
+        set(USE_BLOSC TRUE)
+    endif ()
 endif ()
 
 find_package(OpenVDB 5.0 COMPONENTS openvdb)
@@ -1264,6 +1282,10 @@ elseif (MSVC AND NOT IS_CLANG_CL)
 endif ()
 
 add_subdirectory(src)
+# Nozzle headless engine: the shared bridge (Android JNI, desktop CLI, browser) builds against the libslic3r target here.
+if (DEFINED ANDROID_JNI_BRIDGE_DIR)
+    add_subdirectory("${ANDROID_JNI_BRIDGE_DIR}" "${CMAKE_BINARY_DIR}/android_jni")
+endif ()
 set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT OrcaSlicer_app_gui)
 
 add_dependencies(gettext_make_pot hintsToPot)

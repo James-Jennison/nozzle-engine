@@ -337,7 +337,7 @@ OptionStates print_option_states(const DynamicPrintConfig& input, const OptionCo
 
     bool has_detect_overhang_wall = config->opt_bool("detect_overhang_wall");
     bool has_overhang_reverse     = config->opt_bool("overhang_reverse");
-    bool force_wall_direction     = config->opt_enum<WallDirection>("wall_direction") != WallDirection::Auto;
+    bool force_wall_direction     = false /* Orca 2.5.0 has no automatic wall direction */;
     bool allow_overhang_reverse   = !has_spiral_vase && !force_wall_direction;
     toggle_line("overhang_reverse", allow_overhang_reverse);
     toggle_line("overhang_reverse_internal_only", allow_overhang_reverse && has_overhang_reverse);
@@ -593,8 +593,6 @@ OptionStates filament_option_states(const DynamicPrintConfig& input, const Optio
         toggle_line("hot_plate_temp", curr_bed_type == btPEI);
         toggle_line("textured_plate_temp_initial_layer", curr_bed_type == btPTE);
         toggle_line("textured_plate_temp", curr_bed_type == btPTE);
-        toggle_line("graphic_effect_plate_temp_initial_layer", curr_bed_type == btGESP);
-        toggle_line("graphic_effect_plate_temp", curr_bed_type == btGESP);
     }
     bool is_pellet_printer = get_bool(cfg, "pellet_modded_printer");
     toggle_line("pellet_flow_coefficient", is_pellet_printer);
@@ -678,7 +676,6 @@ OptionStates print_config_checks(const DynamicPrintConfig& input, const OptionCo
            config->opt_int("enforce_support_layers") == 0 &&
            ! config->opt_bool("detect_thin_wall") &&
            ! config->opt_bool("overhang_reverse") &&
-            config->opt_enum<WallDirection>("wall_direction") == WallDirection::Auto &&
             config->opt_enum<TimelapseType>("timelapse_type") == TimelapseType::tlTraditional))
         conflict("spiral_mode_settings",
                  "Spiral mode only works when wall loops is 1, support is disabled, top shell layers is 0, sparse infill density is 0 "

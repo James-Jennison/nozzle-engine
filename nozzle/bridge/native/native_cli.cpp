@@ -30,8 +30,10 @@
 // Exit codes: 0 success, 1 slice failed (message on stderr), 2 bad usage/request, 3 cancelled (SIGINT/SIGTERM).
 // Everything is local; nothing here performs network I/O.
 #include "slic3r_engine.hpp"
+#ifdef NOZZLE_BRIDGE_MIXING
 #include "full_spectrum.hpp"
 #include "color_mix.hpp"
+#endif
 #include "plate_ops.hpp"
 #include "contract_cli.hpp"
 
@@ -254,7 +256,11 @@ int main(int argc, char** argv) {
             code = mode == "--option-states" ? nozzle_contract::run_option_states(request, response)
                  : mode == "--config-checks" ? nozzle_contract::run_config_checks(request, response)
                  : mode == "--plate" ? nozzle_plate::run_plate(request, response)
+#ifdef NOZZLE_BRIDGE_MIXING
                  : color_mix ? nozzle_cm::run_color_mix(request, response) : nozzle_fs::run_full_spectrum(request, response);
+#else
+                 : (response = "{\"error\":\"Colour mixing is not available in this engine build yet.\"}", 2);
+#endif
         } else {
             response = "{\"error\":" + json_string(std::string("Cannot read request file ") + argv[2]) + "}";
         }
@@ -277,9 +283,13 @@ int main(int argc, char** argv) {
             std::ifstream vf(req.virtual_extruders_path, std::ios::binary);
             std::stringstream vs; vs << vf.rdbuf();
             virtual_extruders_json = vs.str();
+#ifdef NOZZLE_BRIDGE_MIXING
             std::string why;
             if (!nozzle_cm::check_virtual_extruders_file(virtual_extruders_json, why))
                 throw BadRequest("Bad virtual extruders file " + req.virtual_extruders_path + ": " + why);
+#else
+            throw BadRequest("Virtual extruders are not supported by this engine build.");
+#endif
         }
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;

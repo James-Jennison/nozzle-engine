@@ -90,7 +90,7 @@ public:
         auto *images_sizer = new wxGridSizer(3, 4, 4);
         for (size_t i = 0; i < images.size(); ++i) {
             auto *box = new wxBoxSizer(wxVERTICAL);
-            box->Add(new wxStaticBitmap(this, wxID_ANY, wxBitmap(to_wx(images[i], 8 * em * 2 / 2 + 8 * em))), 0, wxALIGN_CENTER);
+            box->Add(new wxStaticBitmap(this, wxID_ANY, wxBitmap(to_wx(images[i], 11 * em))), 0, wxALIGN_CENTER);
             box->Add(new wxStaticText(this, wxID_ANY, wxString::FromUTF8(m_view_names[i].c_str())), 0, wxALIGN_CENTER);
             images_sizer->Add(box, 0, wxALIGN_CENTER);
         }
@@ -130,7 +130,7 @@ public:
         root->Add(m_send, 0, wxALL, em);
 
         // Result: per-segment filament choice.
-        m_result_win = new wxScrolledWindow(this, wxID_ANY, wxDefaultPosition, wxSize(-1, 14 * em));
+        m_result_win = new wxScrolledWindow(this, wxID_ANY, wxDefaultPosition, wxSize(-1, 9 * em));
         m_result_win->SetScrollRate(0, em);
         m_result_sizer = new wxFlexGridSizer(3, 6, 12);
         m_result_win->SetSizer(m_result_sizer);

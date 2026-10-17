@@ -495,22 +495,47 @@ std::string build_prompt(const Segmentation &seg, const std::vector<FilamentInfo
     return o.str();
 }
 
-std::string claude_cli_prompt(const std::string &prompt, const std::vector<std::string> &image_paths)
+std::string command_prompt(const std::string &prompt, const std::vector<std::string> &image_paths)
 {
     std::ostringstream o;
-    o << "Use the Read tool to open each of these image files (rendered views of the model, in order) before answering:\n";
+    o << "Open each of these image files (rendered views of the model, in order) and look at them before answering:\n";
     for (const std::string &p : image_paths)
         o << "  " << p << "\n";
     o << "\n" << prompt;
     return o.str();
 }
 
-std::string claude_cli_reply_text(const std::string &body)
+std::string command_reply_text(const std::string &stdout_text)
+{
+    const nlohmann::json j = nlohmann::json::parse(stdout_text, nullptr, false);
+    if (!j.is_discarded() && j.is_object() && j.contains("result")) {
+        if (j.value("is_error", false) || !j["result"].is_string())
+            return {};
+        return j["result"].get<std::string>();
+    }
+    return stdout_text;
+}
+
+std::string openai_request_json(const std::string &model, const std::string &prompt, const std::vector<std::string> &png_b64)
+{
+    nlohmann::json content = nlohmann::json::array();
+    content.push_back({{"type", "text"}, {"text", prompt}});
+    for (const std::string &b : png_b64)
+        content.push_back({{"type", "image_url"}, {"image_url", {{"url", "data:image/png;base64," + b}}}});
+    nlohmann::json body = {{"model", model}, {"messages", nlohmann::json::array({{{"role", "user"}, {"content", content}}})}};
+    return body.dump();
+}
+
+std::string openai_reply_text(const std::string &body)
 {
     const nlohmann::json j = nlohmann::json::parse(body, nullptr, false);
-    if (j.is_discarded() || !j.is_object() || j.value("is_error", false) || !j.contains("result") || !j["result"].is_string())
+    if (j.is_discarded() || !j.is_object() || !j.contains("choices") || !j["choices"].is_array() || j["choices"].empty())
         return {};
-    return j["result"].get<std::string>();
+    const auto &c = j["choices"][0];
+    if (!c.is_object() || !c.contains("message") || !c["message"].is_object() || !c["message"].contains("content") ||
+        !c["message"]["content"].is_string())
+        return {};
+    return c["message"]["content"].get<std::string>();
 }
 
 namespace {

@@ -90,11 +90,18 @@ std::string color_name(const std::string &hex);
 std::string build_prompt(const Segmentation &seg, const std::vector<FilamentInfo> &filaments, const std::string &object_name,
                          const std::vector<std::string> &view_names, const std::string &user_hint = {});
 
-// Claude Code CLI provider (`claude -p`), which runs on the user's Claude subscription.
-// The CLI cannot take inline images, so the views are written to files and the prompt tells it to open them.
-std::string claude_cli_prompt(const std::string &prompt, const std::vector<std::string> &image_paths);
-// Text inside `claude -p --output-format json` output (empty when it reports an error or carries no result).
-std::string claude_cli_reply_text(const std::string &body);
+// Command provider: any program that reads the prompt on stdin and prints the answer on stdout (Claude Code's
+// `claude -p`, `ollama run`, `llm`, a script...). Command-line tools cannot take inline images, so the views are
+// written to files and the prompt lists their paths.
+std::string command_prompt(const std::string &prompt, const std::vector<std::string> &image_paths);
+// Answer text from a command's stdout: unwraps `{"result": "..."}` (Claude Code's --output-format json) and
+// otherwise returns the output unchanged. Empty when the command reported an error.
+std::string command_reply_text(const std::string &stdout_text);
+
+// OpenAI-compatible chat completions (OpenAI, Ollama /v1, LM Studio, vLLM, OpenRouter...). `png_b64` holds the
+// base64 PNGs in view order and is sent as data-URL images.
+std::string openai_request_json(const std::string &model, const std::string &prompt, const std::vector<std::string> &png_b64);
+std::string openai_reply_text(const std::string &body);
 
 // seg_to_filament[i] is the 1-based filament slot for segment i, or 0 for "leave unpainted". Segments the reply
 // does not mention, or maps outside 1..filament_count, stay 0. std::nullopt when no assignment could be read.

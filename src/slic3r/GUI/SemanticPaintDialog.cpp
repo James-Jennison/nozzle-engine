@@ -103,12 +103,23 @@ public:
             form->Add(new wxStaticText(this, wxID_ANY, label), 0, wxALIGN_CENTER_VERTICAL);
             form->Add(w, 1, wxEXPAND);
         };
-        m_model = new wxTextCtrl(this, wxID_ANY);
-        m_cli   = new wxTextCtrl(this, wxID_ANY);
+        m_provider = new wxChoice(this, wxID_ANY);
+        m_provider->Append(_L("Command (default: Claude Code, uses your Claude subscription)"));
+        m_provider->Append(_L("OpenAI-compatible API (OpenAI, Ollama, LM Studio...)"));
+        m_command  = new wxTextCtrl(this, wxID_ANY);
+        m_endpoint = new wxTextCtrl(this, wxID_ANY);
+        m_key      = new wxTextCtrl(this, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, wxTE_PASSWORD);
+        m_remember = new wxCheckBox(this, wxID_ANY, _L("Remember the API key in the system keychain"));
+        m_model    = new wxTextCtrl(this, wxID_ANY);
         m_hint     = new wxTextCtrl(this, wxID_ANY);
         m_hint->SetHint(_L("Optional, e.g. \"make it a festive Christmas tree\""));
+        row(_L("Provider"), m_provider);
+        row(_L("Command"), m_command);
+        row(_L("Server address"), m_endpoint);
+        row(_L("API key"), m_key);
+        form->Add(new wxStaticText(this, wxID_ANY, ""));
+        form->Add(m_remember);
         row(_L("Model (blank = default)"), m_model);
-        row(_L("Claude CLI path (blank = auto)"), m_cli);
         row(_L("Hint"), m_hint);
         root->Add(form, 0, wxALL | wxEXPAND, em);
 
@@ -139,7 +150,8 @@ public:
 
         SetSizerAndFit(root);
         load_settings();
-        m_send->SetLabel(wxString::Format(_L("Send these %d images to Claude Code"), int(m_png.size())));
+        update_provider_fields();
+        m_provider->Bind(wxEVT_CHOICE, [this](wxCommandEvent &) { update_provider_fields(); });
 
         m_send->Bind(wxEVT_BUTTON, [this](wxCommandEvent &) { on_send(); });
         Bind(wxEVT_CLOSE_WINDOW, [this](wxCloseEvent &e) {
@@ -174,25 +186,53 @@ protected:
     void on_dpi_changed(const wxRect &) override { Fit(); }
 
 private:
+    bool is_openai() const { return m_provider->GetSelection() == 1; }
+
     void load_settings()
     {
         AppConfig *cfg = wxGetApp().app_config;
+        m_provider->SetSelection(cfg->get("semantic_paint", "provider") == "openai" ? 1 : 0);
+        const std::string command = cfg->get("semantic_paint", "command");
+        m_command->SetValue(wxString::FromUTF8((command.empty() ? std::string(k_semantic_paint_default_command) : command).c_str()));
+        const std::string endpoint = cfg->get("semantic_paint", "endpoint");
+        m_endpoint->SetValue(wxString::FromUTF8((endpoint.empty() ? SemanticPaintSettings().endpoint : endpoint).c_str()));
         m_model->SetValue(wxString::FromUTF8(cfg->get("semantic_paint", "model").c_str()));
-        m_cli->SetValue(wxString::FromUTF8(cfg->get("semantic_paint", "cli_path").c_str()));
+        const std::string key = semantic_paint_load_api_key();
+        m_key->SetValue(wxString::FromUTF8(key.c_str()));
+        m_remember->SetValue(!key.empty());
     }
 
     void save_settings(const SemanticPaintSettings &s)
     {
         AppConfig *cfg = wxGetApp().app_config;
+        cfg->set("semantic_paint", "provider", s.provider);
+        cfg->set("semantic_paint", "command", s.command);
+        cfg->set("semantic_paint", "endpoint", s.endpoint);
         cfg->set("semantic_paint", "model", s.model);
-        cfg->set("semantic_paint", "cli_path", s.cli_path);
+        if (s.provider == "openai")
+            semantic_paint_save_api_key(m_remember->GetValue() ? s.api_key : std::string());
+    }
+
+    void update_provider_fields()
+    {
+        const bool openai = is_openai();
+        m_command->Enable(!openai);
+        m_endpoint->Enable(openai);
+        m_key->Enable(openai);
+        m_remember->Enable(openai);
+        const wxString dest = openai ? _L("the server") : _L("the command");
+        m_send->SetLabel(wxString::Format(_L("Send these %d images to %s"), int(m_png.size()), dest));
+        Layout();
     }
 
     SemanticPaintSettings gather() const
     {
         SemanticPaintSettings s;
+        s.provider = is_openai() ? "openai" : "command";
+        s.command  = std::string(m_command->GetValue().utf8_str());
+        s.endpoint = std::string(m_endpoint->GetValue().utf8_str());
+        s.api_key  = std::string(m_key->GetValue().utf8_str());
         s.model    = std::string(m_model->GetValue().utf8_str());
-        s.cli_path = std::string(m_cli->GetValue().utf8_str());
         return s;
     }
 
@@ -274,7 +314,9 @@ private:
     bool                              m_busy{false};
     std::thread                       m_worker;
 
-    wxTextCtrl   *m_model{nullptr}, *m_cli{nullptr}, *m_hint{nullptr};
+    wxChoice     *m_provider{nullptr};
+    wxTextCtrl   *m_model{nullptr}, *m_command{nullptr}, *m_endpoint{nullptr}, *m_key{nullptr}, *m_hint{nullptr};
+    wxCheckBox   *m_remember{nullptr};
     wxStaticText *m_status{nullptr}, *m_notes{nullptr};
     wxButton     *m_send{nullptr}, *m_apply{nullptr};
     wxScrolledWindow *m_result_win{nullptr};

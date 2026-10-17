@@ -4,6 +4,8 @@
 #include "libslic3r/SemanticPaint.hpp"
 #include "libslic3r/TriangleMesh.hpp"
 
+#include <nlohmann/json.hpp>
+
 
 using namespace Slic3r;
 namespace SP = Slic3r::SemanticPaint;
@@ -94,13 +96,27 @@ TEST_CASE("SemanticPaint: assignment parsing", "[SemanticPaint]")
     for (int f : faces) CHECK(f == 2);
 }
 
-TEST_CASE("SemanticPaint: Claude Code CLI helpers", "[SemanticPaint]")
+TEST_CASE("SemanticPaint: command provider helpers", "[SemanticPaint]")
 {
-    const std::string p = SP::claude_cli_prompt("question", {"/tmp/a.png", "/tmp/b.png"});
+    const std::string p = SP::command_prompt("question", {"/tmp/a.png", "/tmp/b.png"});
     CHECK(p.find("/tmp/a.png") != std::string::npos);
     CHECK(p.find("/tmp/b.png") != std::string::npos);
     CHECK(p.find("question") != std::string::npos);
-    CHECK(SP::claude_cli_reply_text(R"({"type":"result","is_error":false,"result":"answer"})") == "answer");
-    CHECK(SP::claude_cli_reply_text(R"({"is_error":true,"result":"boom"})").empty());
-    CHECK(SP::claude_cli_reply_text("garbage").empty());
+    CHECK(SP::command_reply_text(R"({"type":"result","is_error":false,"result":"answer"})") == "answer");
+    CHECK(SP::command_reply_text(R"({"is_error":true,"result":"boom"})").empty());
+    CHECK(SP::command_reply_text("plain text answer") == "plain text answer");
+    CHECK(SP::command_reply_text(R"({"assignments":[]})") == R"({"assignments":[]})");
+}
+
+TEST_CASE("SemanticPaint: OpenAI-compatible provider helpers", "[SemanticPaint]")
+{
+    const auto req = nlohmann::json::parse(SP::openai_request_json("m", "q", {"AAAA", "BBBB"}));
+    CHECK(req["model"] == "m");
+    const auto &content = req["messages"][0]["content"];
+    REQUIRE(content.size() == 3);
+    CHECK(content[0]["text"] == "q");
+    CHECK(content[1]["image_url"]["url"] == "data:image/png;base64,AAAA");
+    CHECK(SP::openai_reply_text(R"({"choices":[{"message":{"role":"assistant","content":"hi"}}]})") == "hi");
+    CHECK(SP::openai_reply_text(R"({"choices":[]})").empty());
+    CHECK(SP::openai_reply_text("nope").empty());
 }

@@ -51,6 +51,7 @@ struct OptionContext {
     std::string printer_model_id;  // the vendor model id (for example "SM_U1", "C11"), for the default bed type
     bool is_plate_config = false;  // settings of one plate (Orca skips the spiral vase check there)
     int filament_count = 1;        // filaments in the project (support filament indices above it are reset)
+    bool expert_mode = true;       // Orca's expert mode (a few rules show settings only to experts)
 };
 
 // `config` is a full print configuration (printer + filament + process), as the slicer resolves it.

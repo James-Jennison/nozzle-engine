@@ -90,6 +90,12 @@ req "$JOB/badkey.gcode" "$(printf "$OBJ")" "$(printf 'object_range\t1\t5\t10\tno
 # Variable layer height: a profile of z / height pairs.
 req "$JOB/var.gcode" "$(printf "$OBJ")" "$(printf 'object_layers\t1\t0,0.2,10,0.2,10,0.1,20,0.1')" && \
   [ "$(layers "$JOB/var.gcode")" -gt "$base_layers" ] && pass "a variable layer height profile changes the layers ($base_layers -> $(layers "$JOB/var.gcode"))" || fail "layer profile ($(tail -2 "$JOB/err"))"
+# A profile whose first height isn't the process's first layer height (the Snapmaker U1 prints a 0.25 mm first layer) still applies.
+SAVED_PACK="$PACK"; PACK="$NOZZLE_ROOT/app/src/main/assets/slicer_profiles/snapmaker_u1"
+req "$JOB/u1base.gcode" "$(printf "$OBJ")"; u1_layers="$(layers "$JOB/u1base.gcode")"
+req "$JOB/u1var.gcode" "$(printf "$OBJ")" "$(printf 'object_layers\t1\t0,0.2,10,0.2,10,0.1,20,0.1')" && \
+  [ "$(layers "$JOB/u1var.gcode")" -gt "$u1_layers" ] && pass "a layer profile that doesn't start at the first layer height is brought to it ($u1_layers -> $(layers "$JOB/u1var.gcode"))" || fail "u1 profile ($(tail -2 "$JOB/err"))"
+PACK="$SAVED_PACK"
 req "$JOB/oddprofile.gcode" "$(printf "$OBJ")" "$(printf 'object_layers\t1\t0,0.2,10')"; [ $? = 1 ] && pass "a profile that isn't pairs is refused" || fail "odd profile"
 
 # Adaptive layers: finer where the cone's wall is shallow than where it is steep.

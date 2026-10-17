@@ -307,6 +307,10 @@ void apply_paint_strokes(Slic3r::ModelObject* object, const std::vector<PaintStr
     TriangleSelector seam_selector(volume->mesh());
     TriangleSelector material_selector(volume->mesh());
     Transform3d inv = volume->get_matrix().inverse(); // object frame -> the volume's own mesh frame
+    // Paint the model came with (a 3MF with per-face paint, such as AI auto-paint's) stays; the strokes add to it.
+    if (!volume->supported_facets.get_data().triangles_to_split.empty()) support_selector.deserialize(volume->supported_facets.get_data());
+    if (!volume->seam_facets.get_data().triangles_to_split.empty()) seam_selector.deserialize(volume->seam_facets.get_data());
+    if (!volume->mmu_segmentation_facets.get_data().triangles_to_split.empty()) material_selector.deserialize(volume->mmu_segmentation_facets.get_data());
     bool support_painted = false, seam_painted = false, material_painted = false;
     for (const PaintStrokeRec& s : strokes) {
         Vec3d local_origin = inv * s.origin;
@@ -367,7 +371,7 @@ void apply_volume_specs(Slic3r::ModelObject* object, const std::string& text) {
 // Applies one object's extras. Strokes and volumes arrive in the object's own frame - MeshGeometry coordinates
 // minus MeshGeometry.origin - which does not depend on the bed the model is later centred on (the preview loads
 // with a default bed, the real slice with the printer's own).
-void apply_object_extras(Slic3r::ModelObject* object, const ObjectExtras& extras) {
+void apply_object_extras(Slic3r::ModelObject* object, const ObjectExtras& extras, double first_layer_height = 0.0) {
     if (object == nullptr) return;
     apply_paint_strokes(object, parse_strokes(extras.paint_strokes));
     apply_volume_specs(object, extras.volume_specs);
@@ -386,7 +390,16 @@ void apply_object_extras(Slic3r::ModelObject* object, const ObjectExtras& extras
     }
     if (!extras.layer_profile.empty()) {
         if (extras.layer_profile.size() % 2 != 0) throw std::runtime_error("A layer height profile is z / height pairs.");
-        object->layer_height_profile.set(extras.layer_profile);
+        // A profile is used only when it starts with the first layer's height (PrintObject::update_layer_height_profile drops it
+        // otherwise), as the ones Orca makes do: [0, first, first, first, ...]. A caller's profile is brought to that form.
+        std::vector<double> profile = extras.layer_profile;
+        if (first_layer_height > 0.0 && std::abs(profile[1] - first_layer_height) > 1e-6) {
+            std::vector<double> fixed = { 0.0, first_layer_height, first_layer_height, first_layer_height };
+            for (size_t i = 0; i + 1 < profile.size(); i += 2)
+                if (profile[i] > first_layer_height + 1e-6) { fixed.push_back(profile[i]); fixed.push_back(profile[i + 1]); }
+            profile = fixed;
+        }
+        object->layer_height_profile.set(profile);
     }
     // Per-object settings: the options Orca's object list offers for an object (region and object options).
     static const Slic3r::PrintObjectConfig object_options;
@@ -1044,7 +1057,7 @@ void slice_multi_object_bambu_bundle(const std::vector<std::tuple<std::string, M
             combined.add_object(*object);
         }
         if (object_index < extras.size() && combined.objects.size() > first_object_of_file)
-            apply_object_extras(combined.objects[first_object_of_file], extras[object_index]);
+            apply_object_extras(combined.objects[first_object_of_file], extras[object_index], config.opt_float("initial_layer_print_height"));
         ++object_index;
     }
 
@@ -1104,7 +1117,7 @@ void slice_multi_object(const std::vector<std::tuple<std::string, ModelTransform
         }
         // Applied to the copy inside `combined` (Model::add_object clones the object), which is what gets sliced.
         if (object_index < extras.size() && combined.objects.size() > first_object_of_file)
-            apply_object_extras(combined.objects[first_object_of_file], extras[object_index]);
+            apply_object_extras(combined.objects[first_object_of_file], extras[object_index], config.opt_float("initial_layer_print_height"));
         ++object_index;
     }
 

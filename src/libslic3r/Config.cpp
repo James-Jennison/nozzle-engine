@@ -659,6 +659,12 @@ bool ConfigBase::set_deserialize_raw(const t_config_option_key &opt_key_src, con
 
     ConfigOption *opt = this->option(opt_key, true);
     assert(opt != nullptr);
+    // An enum vector created from its default value has no name table (the initializer-list constructor leaves it null), so setting it
+    // by name (an override, a profile value that was never loaded) dereferenced a null map. Give it the definition's table first.
+    if (optdef->type == coEnums && optdef->enum_keys_map) {
+        if (auto *generic = dynamic_cast<ConfigOptionEnumsGeneric*>(opt)) { if (generic->keys_map == nullptr) generic->keys_map = optdef->enum_keys_map; }
+        else if (auto *nullable = dynamic_cast<ConfigOptionEnumsGenericNullable*>(opt)) { if (nullable->keys_map == nullptr) nullable->keys_map = optdef->enum_keys_map; }
+    }
     bool success     = false;
     bool substituted = false;
     if (optdef->type == coBools && substitutions_ctxt.rule != ForwardCompatibilitySubstitutionRule::Disable) {

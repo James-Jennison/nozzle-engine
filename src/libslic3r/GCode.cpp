@@ -11171,17 +11171,27 @@ std::string GCode::set_object_info(Print *print) {
             const Vec2f  offset = Vec2f(float(config.wipe_tower_x.get_at(plate)), float(config.wipe_tower_y.get_at(plate))) +
                                   print->get_plate_origin().head<2>().cast<float>();
             Points footprint;
-            for (const std::vector<WipeTower::ToolChangeResult>& layer : print->wipe_tower_data().tool_changes)
-                for (const WipeTower::ToolChangeResult& tcr : layer) {
-                    if (tcr.priming)
-                        continue;
-                    for (const WipeTower::Extrusion& extrusion : tcr.extrusions) {
-                        const Vec2f  pt   = Eigen::Rotation2Df(alpha) * extrusion.pos + offset;
-                        const double half = std::max(0.5 * extrusion.width, 0.25);
-                        for (const Vec2d& d : {Vec2d(-half, -half), Vec2d(half, -half), Vec2d(half, half), Vec2d(-half, half)})
-                            footprint.emplace_back(Point(scale_(pt.x() + d.x()), scale_(pt.y() + d.y())));
-                    }
+            // A rib wall's offset enters where the emitter puts it: the type 1 tower (append_tcr) rotates the point and then
+            // adds the offset, the type 2 tower (append_tcr2) adds it before rotating.
+            const Vec2f rib_offset = print->wipe_tower_data().rib_offset;
+            const bool  rib_rotates = print->wipe_tower_type() == WipeTowerType::Type2;
+            const auto add_tcr = [&](const WipeTower::ToolChangeResult& tcr) {
+                if (tcr.priming)
+                    return;
+                for (const WipeTower::Extrusion& extrusion : tcr.extrusions) {
+                    const Vec2f  pt   = rib_rotates ? Vec2f(Eigen::Rotation2Df(alpha) * (extrusion.pos + rib_offset) + offset)
+                                                    : Vec2f(Eigen::Rotation2Df(alpha) * extrusion.pos + offset + rib_offset);
+                    const double half = std::max(0.5 * extrusion.width, 0.25);
+                    for (const Vec2d& d : {Vec2d(-half, -half), Vec2d(half, -half), Vec2d(half, half), Vec2d(-half, half)})
+                        footprint.emplace_back(Point(scale_(pt.x() + d.x()), scale_(pt.y() + d.y())));
                 }
+            };
+            // Orca 2.5.0 also prints a final purge inside the tower; it is part of its footprint.
+            for (const std::vector<WipeTower::ToolChangeResult>& layer : print->wipe_tower_data().tool_changes)
+                for (const WipeTower::ToolChangeResult& tcr : layer)
+                    add_tcr(tcr);
+            if (print->wipe_tower_data().final_purge)
+                add_tcr(*print->wipe_tower_data().final_purge);
             if (footprint.size() >= 3) {
                 const Polygon tower  = Geometry::convex_hull(std::move(footprint));
                 const Vec2d   center = print->translate_to_print_space(tower.bounding_box().center());

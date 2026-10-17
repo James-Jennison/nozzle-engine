@@ -156,8 +156,11 @@ bool Moonraker::get_storage(wxArrayString &storage_path, wxArrayString &storage_
                 const std::string &perms = child.second.get<std::string>("permissions", "");
                 if (root.empty() || perms.find('w') == std::string::npos)
                     continue;
-                storage_path.Add(wxString::FromUTF8(root));
-                storage_name.Add(wxString::FromUTF8(root));
+                //ORCA: the dialog preselects the first entry, and a printer may report "config" or "logs" first.
+                //      "gcodes" is the only root a print can start from, so always offer it first.
+                const size_t at = root == "gcodes" ? 0 : storage_path.GetCount();
+                storage_path.Insert(wxString::FromUTF8(root), at);
+                storage_name.Insert(wxString::FromUTF8(root), at);
                 got_any = true;
             }
         } catch (const std::exception &ex) {
@@ -238,6 +241,15 @@ bool Moonraker::upload(PrintHostUpload upload_data, ProgressFn progress_fn, Erro
     const std::string root = upload_data.storage.empty() ? std::string("gcodes") : upload_data.storage;
 
     const bool want_start = upload_data.post_action == PrintHostPostUploadAction::StartPrint;
+
+    //ORCA: /printer/print/start (and print=true on upload) only find files in the "gcodes" root. Uploading to
+    //      "config", "logs"... and then asking to print from there fails with "Unable to open file" after the
+    //      file has already been transferred, leaving a stray copy behind. Refuse up front instead.
+    if (want_start && root != "gcodes") {
+        error_fn(GUI::format_wxstr(_L("Printing can only be started from the \"gcodes\" storage, but \"%1%\" is selected. "
+                                      "Choose \"gcodes\" under \"Upload to storage\", or use Upload only."), wxString::FromUTF8(root)));
+        return false;
+    }
 
     std::string url = make_url("server/files/upload");
     bool result = true;

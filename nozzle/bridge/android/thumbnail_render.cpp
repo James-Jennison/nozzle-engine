@@ -1,14 +1,6 @@
 #include "thumbnail_render.hpp"
 
-// Mixed filaments exist only in the desktop engine (Snapmaker Orca's mixed filaments, PrusaSlicer 2.9.6's virtual
-// extruders); the same bridge still builds against upstream OrcaSlicer, where every filament id is a physical one.
-#if __has_include("libslic3r/MixedFilament.hpp")
-#include "libslic3r/MixedFilament.hpp"
-#define NOZZLE_THUMBNAIL_MIXED_FILAMENTS 1
-#endif
-#if __has_include("libslic3r/Feature/FullSpectrum/VirtualExtruder.hpp")
-#include "libslic3r/Feature/FullSpectrum/VirtualExtruder.hpp"
-#endif
+#include "libslic3r/FilamentMixer.hpp"
 
 #include <algorithm>
 #include <cfloat>
@@ -65,39 +57,30 @@ Rgb filament_colour(const DynamicPrintConfig& config, int extruder) {
     return parse_colour(colours->values.front()).value_or(kFallbackColour);
 }
 
-// The colour the slicer itself shows for each mixed filament id, from the same state Print::apply() builds
-// (PrintApply.cpp: the physical colours padded to the filament count, then the model's virtual extruders, else the
-// mixed filament manager's auto-generated and custom rows). A part printed with a mix is drawn in that one colour,
-// not in filament 1's: found on a Full Spectrum color reference print, whose six mixes all came out alike.
-std::map<int, Rgb> mixed_filament_colours(const Model& model, const DynamicPrintConfig& config) {
+// The colour of each mixed filament slot (filament_is_mixed): its components blended by their weights, the way Orca's
+// own plater shows it. A part printed with a mix is drawn in that one colour, not in filament 1's. A gradient slot
+// shows its starting mix.
+std::map<int, Rgb> mixed_filament_colours(const Model&, const DynamicPrintConfig& config) {
     std::map<int, Rgb> mixed;
-    const auto* diameters = config.option<ConfigOptionFloats>("filament_diameter");
     const auto* colours = config.option<ConfigOptionStrings>("filament_colour");
-    const size_t physical = diameters != nullptr ? diameters->values.size() : colours != nullptr ? colours->values.size() : 0;
-    if (physical == 0) return mixed;
-    std::vector<std::string> physical_colours = colours != nullptr ? colours->values : std::vector<std::string>();
-    physical_colours.resize(physical, "#26A69A");
-#ifdef SLIC3R_PRUSA_VIRTUAL_EXTRUDERS
-    // A project uses either virtual extruders or mixed filaments (Print::apply); a virtual extruder's id is its own.
-    const FullSpectrum::VirtualExtruders virtual_extruders =
-        FullSpectrum::filter_virtual_extruders_for_physical_count(static_cast<unsigned int>(physical), model.virtual_extruders);
-    if (!virtual_extruders.empty()) {
-        for (const FullSpectrum::VirtualExtruder& extruder : virtual_extruders)
-            if (auto rgb = parse_colour(extruder.effective_color(physical_colours))) mixed[int(extruder.id)] = *rgb;
-        return mixed;
+    const auto* is_mixed = config.option<ConfigOptionBools>("filament_is_mixed");
+    const auto* components = config.option<ConfigOptionStrings>("filament_mixed_components");
+    const auto* ratios = config.option<ConfigOptionStrings>("filament_mixed_sublayer_ratios");
+    if (colours == nullptr || is_mixed == nullptr || components == nullptr || ratios == nullptr) return mixed;
+    for (size_t slot = 0; slot < is_mixed->values.size() && slot < components->values.size(); ++slot) {
+        if (!is_mixed->values[slot]) continue;
+        const std::vector<unsigned int> parts = parse_mixed_components(components->values[slot]);
+        const std::vector<double> shares = parse_mixed_ratios(slot < ratios->values.size() ? ratios->values[slot] : std::string(), parts.size());
+        std::vector<std::string> hexes;
+        std::vector<int> weights;
+        for (size_t i = 0; i < parts.size(); ++i) {
+            if (parts[i] < 1 || parts[i] > colours->values.size()) continue;
+            hexes.push_back(colours->values[parts[i] - 1]);
+            weights.push_back(std::max(1, int(std::lround(shares[i] * 1000.))));
+        }
+        if (hexes.size() < 2) continue;
+        if (auto rgb = parse_colour(blend_color_multi(hexes, weights))) mixed[int(slot) + 1] = *rgb;
     }
-#endif
-#ifdef NOZZLE_THUMBNAIL_MIXED_FILAMENTS
-    MixedFilamentManager manager;
-    manager.auto_generate(physical_colours);
-    if (config.has("mixed_filament_definitions"))
-        manager.load_custom_entries(config.opt_string("mixed_filament_definitions"), physical_colours);
-    for (size_t id = physical + 1; id <= manager.total_filaments(physical); ++id)
-        if (const MixedFilament* row = manager.mixed_filament_from_id(static_cast<unsigned int>(id), physical))
-            if (auto rgb = parse_colour(row->display_color)) mixed[int(id)] = *rgb;
-#else
-    (void)model;
-#endif
     return mixed;
 }
 

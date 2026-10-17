@@ -32,3 +32,16 @@ G. AI auto-paint in Prepare (SemanticPaint via bridge + provider call from Kotli
 - Variant handling now uses 2.5.0's native `normalize_filament_values_to_variants`; the engine's own `ExtruderVariants.cpp` backport was dropped. Not yet checked against a Bambu H2D profile.
 - E (Android) built: `libslic3rengine.so` (arm64-v8a, NDK 29, 65 MB stripped) cross-compiles from the 2.5.0 base on gthost (`~/nia-android`, using NIA's `app/src/main/cpp` CMake project, read only). Headless CMake changes needed: no embedded Python, no shared-library copy step, no fontconfig on Android, OCCT 7.6 library names. The prepared Android prefix had CGAL 5.6.3; 2.5.0 needs 6.2, so CGAL 6.2's headers and CMake config (header-only) were copied from the native deps prefix into a COPY of the prefix under `~/nia-android/root/deps` (the original on MORG is untouched). Colour-mixing JNI calls are stubbed to report "not available" until step C. Not run on a device or emulator; the native build of the same pipeline passes the golden and contract checks. NIA's `engine/fork/ENGINE_PIN.json` and `prepare_engine_root.sh` still point at the old engine; re-pinning is not done.
 - Not started: C (mixing), wasm build, F (UI parity), G (AI auto-paint).
+
+## Status: step C (colour mixing on 2.5.0's mixed filaments) - done in the bridge
+
+- `nozzle/bridge/native/mixed_filament.{hpp,cpp}`: stateless ops `display, add, update, remove, delete_physical, match, presets, slice_overrides`
+  on `Slic3r::blend_color_multi`, `format_mixed_*` and `recommend_from_physical_filaments` / `lookup_standard_recipe`.
+  CLI `nozzle-engine --mixed-filament <request.json>`; JNI `NativeEngine.nativeMixedFilament(String): String`.
+- `slice_overrides` returns the per-filament config values (`filament_colour`, `filament_is_mixed`, `filament_mixed_*`,
+  `enable_mixed_color_sublayer`) a caller passes as `set` lines; `grow_mixed_slots()` in `slic3r_engine.cpp` grows the profile's
+  per-filament options to the slot count before slicing. Gradient rows force the sub-layer path.
+- Thumbnails draw a mixed slot's blended colour (`thumbnail_render.cpp`).
+- `tools/nozzle/mixed_filament_test.sh <nozzle-engine>` covers the ops, the 3:1 extrusion share and the thumbnail colour.
+- `nativeFullSpectrum` / `nativeColorMix` and the Snapmaker/Prusa sources (`full_spectrum.cpp`, `color_mix.cpp`,
+  `colourmix_test.sh`) are retired but left in the tree until the NIA side stops calling them.

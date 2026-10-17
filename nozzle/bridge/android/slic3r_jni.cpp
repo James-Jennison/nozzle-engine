@@ -32,6 +32,7 @@
 // process or temp-file involved even on desktop, so exposing them to Android is a direct call, not a re-implementation
 // - see CMakeLists.txt for how their two .cpp files (shared with the desktop build, not duplicated) get built into
 // this bridge's slic3r_engine static library.
+#include "mixed_filament.hpp"
 #ifdef NOZZLE_BRIDGE_MIXING
 #include "full_spectrum.hpp"
 #include "color_mix.hpp"
@@ -155,6 +156,23 @@ Java_org_orcaslicer_engine_NativeEngine_nativeDiagnoseConfigDef(JNIEnv* env, jcl
     result += "; has(\"machine_end_gcode\")=";
     result += (placeholders.find("machine_end_gcode") != placeholders.end()) ? "true" : "false";
     return env->NewStringUTF(result.c_str());
+}
+
+// Orca 2.5.0 mixed filaments: same request/response JSON as `nozzle-engine --mixed-filament <request.json>`
+// (mixed_filament.hpp). Like the functions below it never throws for an ordinary failure; the response carries {"error": "..."}.
+extern "C" JNIEXPORT jstring JNICALL
+Java_org_orcaslicer_engine_NativeEngine_nativeMixedFilament(JNIEnv* env, jclass, jstring jRequestJson) {
+    std::string response;
+    try {
+        (void) nozzle_mf::run_mixed_filament(jstring_to_string(env, jRequestJson), response);
+    } catch (const std::exception& ex) {
+        response = json_error(ex.what());
+    } catch (...) {
+        response = json_error("Unknown native error during mixed filament operation");
+    }
+    jstring result = env->NewStringUTF(response.c_str());
+    if (result == nullptr) throw_java_exception(env, "Could not allocate the mixed filament response string.");
+    return result;
 }
 
 // Snapmaker Orca's Full Spectrum colour mixing (Color Mixing list / Color Mixing Match): the same request/response

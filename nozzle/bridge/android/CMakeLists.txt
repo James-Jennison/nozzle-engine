@@ -31,6 +31,7 @@ add_library(slic3r_engine STATIC
     thumbnail_render.cpp
     nanosvg_impl.cpp
     option_states.cpp
+    ${NOZZLE_NATIVE_BRIDGE}/mixed_filament.cpp
     ${NOZZLE_MIXING_SOURCES}
 )
 if (NOZZLE_BRIDGE_MIXING)

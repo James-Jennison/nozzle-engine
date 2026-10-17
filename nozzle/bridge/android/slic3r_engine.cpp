@@ -24,6 +24,7 @@
 #include "libslic3r/Model.hpp"
 #include "libslic3r/Print.hpp"
 #include "libslic3r/PrintConfig.hpp"
+#include "libslic3r/Preset.hpp"
 #include "libslic3r/Config.hpp"
 #include "libslic3r/TriangleSelector.hpp"
 #include "libslic3r/Format/bbs_3mf.hpp"
@@ -113,11 +114,28 @@ void mark_bambu_printer(Slic3r::Print& print, const Slic3r::DynamicPrintConfig& 
 #endif
 }
 
+// A mixed filament is a slot after the physical ones (filament_colour has an entry for it) that is not loaded into any
+// extruder. The profile's per-filament options only cover the physical filaments, so they are grown to the slot count
+// first (a new slot repeats the first filament's value, as Orca's GUI does when it appends a mixed filament).
+void grow_mixed_slots(Slic3r::DynamicPrintConfig& config) {
+    using namespace Slic3r;
+    const auto* colours = config.option<ConfigOptionStrings>("filament_colour");
+    const auto* diameters = config.option<ConfigOptionFloats>("filament_diameter");
+    if (colours == nullptr || diameters == nullptr) return;
+    const size_t slots = colours->values.size(), physical = diameters->values.size();
+    if (slots <= physical) return;
+    for (const std::string& key : Preset::filament_options()) {
+        auto* opt = dynamic_cast<ConfigOptionVectorBase*>(config.option(key));
+        if (opt != nullptr && opt->size() == physical) opt->resize(slots);
+    }
+}
+
 // Gives every filament of a multi-filament print its own copy of a Bambu filament profile's extruder-variant columns,
 // then lays the per-filament overrides out one value per variant. Orca 2.5.0 does this natively
 // (normalize_filament_values_to_variants), keyed by filament_self_index; the profile's own column count is no longer needed.
 void expand_filament_variants(Slic3r::DynamicPrintConfig& config, size_t /*profile_columns*/,
                               const std::vector<std::pair<std::string, std::string>>& /*config_overrides*/) {
+    grow_mixed_slots(config);
     Slic3r::normalize_filament_values_to_variants(config);
 }
 

@@ -1103,7 +1103,13 @@ std::string Model::get_backup_path()
     if (backup_path.empty())
     {
         auto pid = get_current_pid();
+        // Without a configured temporary dir the backup folder used to land at the filesystem root ("/orcaslicer_model/...",
+        // read-only on Android and in packaged installs), so fall back to the system temp dir.
         boost::filesystem::path parent_path(temporary_dir());
+        if (parent_path.empty()) {
+            boost::system::error_code ec;
+            parent_path = boost::filesystem::temp_directory_path(ec);
+        }
         std::time_t t = std::time(0);
         std::tm* now_time = std::localtime(&t);
         std::stringstream buf;

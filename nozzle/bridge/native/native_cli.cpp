@@ -5,6 +5,7 @@
 //   nozzle-engine <request.txt>      slice; prints "progress <0-100>" lines on stdout, exits 0 on success
 //   nozzle-engine --version
 //   nozzle-engine --schema           every print/filament/printer setting libslic3r defines, as JSON on stdout
+//   nozzle-engine --semantic-paint <request.json>   AI auto-paint ops (semantic_paint_op.cpp; the engine makes no provider calls)
 //   nozzle-engine --mixed-filament <request.json>
 //                                    Orca 2.5.0 mixed filaments (display/add/update/remove/match/presets/slice_overrides; see
 //                                    mixed_filament.cpp): one JSON response on stdout; exit 0 success, 1 failed, 2 bad request.
@@ -24,6 +25,7 @@
 // Everything is local; nothing here performs network I/O.
 #include "slic3r_engine.hpp"
 #include "mixed_filament.hpp"
+#include "semantic_paint_op.hpp"
 #include "plate_ops.hpp"
 #include "contract_cli.hpp"
 
@@ -228,7 +230,7 @@ int main(int argc, char** argv) {
         std::cout << "nozzle-engine 1 (libslic3r, shared Android pipeline, native)" << std::endl;
         return 0;
     }
-    if (argc == 3 && (std::string(argv[1]) == "--mixed-filament" || std::string(argv[1]) == "--plate" || std::string(argv[1]) == "--option-states" || std::string(argv[1]) == "--config-checks")) {
+    if (argc == 3 && (std::string(argv[1]) == "--mixed-filament" || std::string(argv[1]) == "--semantic-paint" || std::string(argv[1]) == "--plate" || std::string(argv[1]) == "--option-states" || std::string(argv[1]) == "--config-checks")) {
         const std::string mode = argv[1];
         std::string request, response;
         int code = 2;
@@ -239,6 +241,7 @@ int main(int argc, char** argv) {
             code = mode == "--option-states" ? nozzle_contract::run_option_states(request, response)
                  : mode == "--config-checks" ? nozzle_contract::run_config_checks(request, response)
                  : mode == "--mixed-filament" ? nozzle_mf::run_mixed_filament(request, response)
+                 : mode == "--semantic-paint" ? nozzle_sp::run_semantic_paint(request, response)
                  : nozzle_plate::run_plate(request, response);
         } else {
             response = "{\"error\":" + json_string(std::string("Cannot read request file ") + argv[2]) + "}";
@@ -248,7 +251,7 @@ int main(int argc, char** argv) {
         return code;
     }
     if (argc != 2) {
-        std::cerr << "usage: nozzle-engine <request.txt> | --version | --schema | --mixed-filament <request.json> | --plate <request.json> | --option-states <request.json> | --config-checks <request.json>" << std::endl;
+        std::cerr << "usage: nozzle-engine <request.txt> | --version | --schema | --mixed-filament <request.json> | --semantic-paint <request.json> | --plate <request.json> | --option-states <request.json> | --config-checks <request.json>" << std::endl;
         return 2;
     }
     Request req;

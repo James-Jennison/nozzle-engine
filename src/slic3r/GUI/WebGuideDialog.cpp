@@ -514,7 +514,7 @@ void GuideFrame::OnDocumentLoaded(wxWebViewEvent &evt)
     {
         const std::string mark = "file://" + (boost::filesystem::path(resources_dir()) / "images" / SLIC3R_APP_ICON_BASE "_256px.png").generic_string();
         const std::string js = std::string(R"JS((function(){
-  var NAME = 'Nozzle It All Advanced Workspace';
+  var NAME = 'Nozzle It All Desktop';
   function fix(root){
     var w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null), n;
     while ((n = w.nextNode())) {

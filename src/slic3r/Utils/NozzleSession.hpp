@@ -1,4 +1,4 @@
-// Nozzle It All Advanced Workspace: session bridge.
+// Nozzle It All Desktop: session bridge.
 //
 // When the Nozzle It All app launches the workspace it may set the environment
 // variable NOZZLE_WORKSPACE_SESSION to the path of a session.json file:

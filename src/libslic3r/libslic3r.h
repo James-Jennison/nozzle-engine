@@ -14,17 +14,17 @@
 #define NOZZLE_BRANDING 0
 #endif
 #if NOZZLE_BRANDING
-#define SLIC3R_APP_FULL_NAME "Nozzle It All Advanced Workspace"
-#define GCODEVIEWER_APP_NAME "Nozzle It All Advanced Workspace G-code Viewer"
-#define GCODEVIEWER_APP_KEY  "nozzle-it-all-advanced-workspace-gcodeviewer"
-#define GCODEVIEWER_BUILD_ID std::string("Nozzle It All Advanced Workspace G-code Viewer-") + std::string(SLIC3R_VERSION) + std::string("-RC")
+#define SLIC3R_APP_FULL_NAME "Nozzle It All Desktop"
+#define GCODEVIEWER_APP_NAME "Nozzle It All Desktop G-code Viewer"
+#define GCODEVIEWER_APP_KEY  "nozzle-it-all-desktop-gcodeviewer"
+#define GCODEVIEWER_BUILD_ID std::string("Nozzle It All Desktop G-code Viewer-") + std::string(SLIC3R_VERSION) + std::string("-RC")
 // Base name of the application icons in resources/images, and the desktop file/icon id.
-#define SLIC3R_APP_ICON_BASE "nozzle-advanced-workspace"
-#define SLIC3R_APP_DESKTOP_ID "com.nozzleitall.AdvancedWorkspace"
-#define SLIC3R_APP_CMD_NAME "nozzle-advanced-workspace"
+#define SLIC3R_APP_ICON_BASE "nozzle-it-all-desktop"
+#define SLIC3R_APP_DESKTOP_ID "com.nozzleitall.Desktop"
+#define SLIC3R_APP_CMD_NAME "nozzle-it-all-desktop"
 // DBus single-instance namespace.
-#define SLIC3R_DBUS_INTERFACE_PREFIX "com.nozzleitall.AdvancedWorkspace"
-#define SLIC3R_DBUS_OBJECT_PREFIX "/com/nozzleitall/AdvancedWorkspace"
+#define SLIC3R_DBUS_INTERFACE_PREFIX "com.nozzleitall.Desktop"
+#define SLIC3R_DBUS_OBJECT_PREFIX "/com/nozzleitall/Desktop"
 #else
 #define SLIC3R_APP_FULL_NAME "Orca Slicer"
 #define GCODEVIEWER_APP_NAME "OrcaSlicer G-code Viewer"

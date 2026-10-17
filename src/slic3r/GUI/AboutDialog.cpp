@@ -37,7 +37,7 @@ AboutDialogLogo::AboutDialogLogo(wxWindow* parent)
     : wxPanel(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize)
 {
     this->SetBackgroundColour(*wxWHITE);
-    this->logo = ScalableBitmap(this, Slic3r::var(NOZZLE_BRANDING ? "nozzle-advanced-workspace_256px.png" : "OrcaSlicer_192px.png"), wxBITMAP_TYPE_PNG);
+    this->logo = ScalableBitmap(this, Slic3r::var(NOZZLE_BRANDING ? "nozzle-it-all-desktop_256px.png" : "OrcaSlicer_192px.png"), wxBITMAP_TYPE_PNG);
     this->SetMinSize(this->logo.GetBmpSize());
 
     this->Bind(wxEVT_PAINT, &AboutDialogLogo::onRepaint, this);
@@ -288,7 +288,7 @@ AboutDialog::AboutDialog()
     std::vector<wxString> text_list;
     text_list.push_back(_L("Open-source slicing stands on a tradition of collaboration and attribution. Slic3r, created by Alessandro Ranellucci and the RepRap community, laid the foundation. PrusaSlicer by Prusa Research built on that work, Bambu Studio forked from PrusaSlicer, and SuperSlicer extended it with community-driven enhancements. Each project carried the work of its predecessors forward, crediting those who came before."));
 #if NOZZLE_BRANDING
-    text_list.push_back(_L("Nozzle It All Advanced Workspace is a fork of OrcaSlicer that adds native Snapmaker U1 and Moonraker printer tools. All upstream credits below remain."));
+    text_list.push_back(_L("Nozzle It All Desktop is a fork of OrcaSlicer that adds native Snapmaker U1 and Moonraker printer tools. All upstream credits below remain."));
 #endif
     text_list.push_back(_L("OrcaSlicer began in that same spirit, drawing from PrusaSlicer, BambuStudio, SuperSlicer, and CuraSlicer. But it has since grown far beyond its origins — introducing advanced calibration tools, precise wall and seam control and hundreds of other features."));
     text_list.push_back(_L("Today, OrcaSlicer is the most widely used and actively developed open-source slicer in the 3D printing community. Many of its innovations have been adopted by other slicers, making it a driving force for the entire industry."));

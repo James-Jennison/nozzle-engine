@@ -1,4 +1,4 @@
-// Nozzle It All Advanced Workspace: session bridge. See NozzleSession.hpp.
+// Nozzle It All Desktop: session bridge. See NozzleSession.hpp.
 #include "NozzleSession.hpp"
 
 #include <chrono>

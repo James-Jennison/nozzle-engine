@@ -408,3 +408,77 @@ TEST_CASE("Filament shrinkage compensation counts the wipe tower filament next t
         return w.string.find("Filament shrinkage will not be used") != std::string::npos;
     }));
 }
+
+namespace {
+
+// Extruded length per 0-based tool, split into the lower and upper half of the object by Z.
+struct ToolShare
+{
+    double low[2]  = {0., 0.};
+    double high[2] = {0., 0.};
+    double total(int tool) const { return low[tool] + high[tool]; }
+};
+
+ToolShare tool_share(const std::string &gcode, double split_z)
+{
+    ToolShare share;
+    int       tool = 0;
+    double    z    = 0.;
+    GCodeReader reader;
+    reader.parse_buffer(gcode, [&](GCodeReader &self, const GCodeReader::GCodeLine &line) {
+        const std::string cmd(line.cmd());
+        if (cmd.size() >= 2 && cmd[0] == 'T' && std::isdigit((unsigned char) cmd[1]))
+            tool = std::stoi(cmd.substr(1));
+        z = self.z();
+        if (line.extruding(self) && tool >= 0 && tool < 2 && line.dist_E(self) > 0.) {
+            // Only the object, not the prime tower: skip extrusions tagged as wipe tower.
+            if (std::string(line.comment()).find("Wipe tower") != std::string::npos)
+                return;
+            (z < split_z ? share.low : share.high)[tool] += line.dist_E(self);
+        }
+    });
+    return share;
+}
+
+} // namespace
+
+TEST_CASE("A 60/40 mixed slot splits the extruded filament between its components", "[MixedFilament]")
+{
+    DynamicPrintConfig config = mixed_config(true);
+    config.set_deserialize_strict({{"layer_height", "0.2"}, {"initial_layer_print_height", "0.2"}, {"gcode_comments", "1"}});
+
+    Print print;
+    Model model;
+    init_print({cube(20)}, print, model, config);
+    print.process();
+    const ToolShare s = tool_share(Slic3r::Test::gcode(print), 10.);
+
+    const double a = s.total(0), b = s.total(1);
+    INFO("component 1 = " << a << " mm, component 2 = " << b << " mm");
+    REQUIRE(a > 0.);
+    REQUIRE(b > 0.);
+    CHECK_THAT(a / (a + b), Catch::Matchers::WithinAbs(0.6, 0.08));
+}
+
+TEST_CASE("A gradient mixed slot shifts from the first component to the second up the object", "[MixedFilament]")
+{
+    DynamicPrintConfig config = mixed_config(true);
+    config.set_deserialize_strict({{"layer_height", "0.2"}, {"initial_layer_print_height", "0.2"}, {"gcode_comments", "1"},
+                                   {"filament_mixed_gradient", "0,0,1"}, {"filament_mixed_gradient_range", ";;0.9,0.1"}});
+
+    Print print;
+    Model model;
+    init_print({cube(20)}, print, model, config);
+    print.process();
+    const ToolShare s = tool_share(Slic3r::Test::gcode(print), 10.);
+
+    const double low_first  = s.low[0] / std::max(1e-9, s.low[0] + s.low[1]);
+    const double high_first = s.high[0] / std::max(1e-9, s.high[0] + s.high[1]);
+    INFO("first-component share: low half " << low_first << ", high half " << high_first);
+    // The 0.9 -> 0.1 range would average 0.7 / 0.3 over the two halves, but walls and solid
+    // layers are not split evenly between sub-layers, so the measured shift is smaller. What
+    // must hold is the direction and a clear gap.
+    CHECK(low_first > 0.5);
+    CHECK(high_first < 0.5);
+    CHECK(low_first - high_first > 0.1);
+}

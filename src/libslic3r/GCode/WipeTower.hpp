@@ -236,6 +236,9 @@ public:
 	// Set the extruder properties.
     void set_extruder(size_t idx, const PrintConfig& config);
 
+    // Nozzle: G-code comment-tag dialect for the tower block (BBL tags for Bambu, compatible tags otherwise).
+    void set_is_bbl_printer(bool is_bbl_printer) { m_is_bbl_printer = is_bbl_printer; }
+
     void set_shared_print_bed(const Polygons &bed) { m_shared_print_bed = bed; }
     // Orca: has_filament_switcher is not a static PrintConfig member here, so it is pushed in from
     // Print via a setter rather than read in the ctor. Device-set only.
@@ -540,6 +543,7 @@ private:
     //bool            m_set_extruder_trimpot      = false;
     bool            m_adhesion                  = true;
     GCodeFlavor     m_gcode_flavor;
+    bool            m_is_bbl_printer            = true; // Nozzle: see set_is_bbl_printer()
     bool                      m_is_multiple_nozzle = false;
     std::vector<unsigned int> m_normal_accels;
     std::vector<unsigned int> m_first_layer_normal_accels;

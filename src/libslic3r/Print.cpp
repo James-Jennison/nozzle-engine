@@ -5105,6 +5105,8 @@ void Print::_make_wipe_tower()
                                                   ? float(m_default_region_config.first_layer_flow_ratio)
                                                   : 1.f);
         wipe_tower.set_has_tpu_filament(this->has_tpu_filament());
+        // Nozzle: a non-Bambu Type1 printer's G-code processor reads the compatible comment tags.
+        wipe_tower.set_is_bbl_printer(is_BBL_printer());
         // Per-layer filament->nozzle grouping. sort_and_build_data() above publishes it on the Print
         // for by-layer prints; by-object prints publish only later (psSkirtBrim), so fall back to the
         // ToolOrdering's own copy there. set_extruder() below dereferences it, so it must be set first.

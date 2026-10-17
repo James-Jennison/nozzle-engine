@@ -130,12 +130,40 @@ void grow_mixed_slots(Slic3r::DynamicPrintConfig& config) {
     }
 }
 
+// A multi-filament config carries its filaments' identity the way Orca's full_config() writes it: filament_self_index 1..n and
+// one filament_extruder_variant per filament. Without them every filament resolves to the first one's values (the engine's
+// per-extruder lookup falls back to column 0), so the second filament of a profile pack that only lists the first one's
+// settings would print at the first one's temperature. Configs that already lay out their own variant columns (Bambu
+// profiles) are left as they are.
+void ensure_filament_identity(Slic3r::DynamicPrintConfig& config) {
+    using namespace Slic3r;
+    const auto* colours = config.option<ConfigOptionStrings>("filament_colour");
+    const size_t n = colours != nullptr ? colours->values.size() : 0;
+    if (n < 2) return;
+    auto* self_index = config.option<ConfigOptionInts>("filament_self_index", true);
+    if (self_index->values.size() < n) {
+        self_index->values.resize(n);
+        for (size_t i = 0; i < n; ++i) self_index->values[i] = int(i) + 1;
+    }
+    auto* variants = config.option<ConfigOptionStrings>("filament_extruder_variant", true);
+    if (variants->values.size() != self_index->values.size()) variants->values.assign(self_index->values.size(), "Direct Drive Standard");
+    // The lookup also reads the printer's extruder type and nozzle flow per extruder; a profile pack that lists neither has
+    // empty vectors there, so give every nozzle the plain direct-drive standard-flow default.
+    const auto* nozzles = config.option<ConfigOptionFloats>("nozzle_diameter");
+    const size_t extruders = nozzles != nullptr && !nozzles->values.empty() ? nozzles->values.size() : 1;
+    for (const char* key : {"extruder_type", "nozzle_volume_type"}) {
+        auto* opt = config.option<ConfigOptionEnumsGeneric>(key, true);
+        if (opt->values.empty()) opt->values.assign(extruders, 0);
+    }
+}
+
 // Gives every filament of a multi-filament print its own copy of a Bambu filament profile's extruder-variant columns,
 // then lays the per-filament overrides out one value per variant. Orca 2.5.0 does this natively
 // (normalize_filament_values_to_variants), keyed by filament_self_index; the profile's own column count is no longer needed.
 void expand_filament_variants(Slic3r::DynamicPrintConfig& config, size_t /*profile_columns*/,
                               const std::vector<std::pair<std::string, std::string>>& /*config_overrides*/) {
     grow_mixed_slots(config);
+    ensure_filament_identity(config);
     Slic3r::normalize_filament_values_to_variants(config);
 }
 
@@ -537,8 +565,18 @@ void apply_and_validate(Slic3r::Print& print, Slic3r::Model& model, Slic3r::Dyna
 // depend on its position run twice). The moved tower is validated, as its real footprint may now meet an exclusion area.
 void process_with_tower_on_bed(Slic3r::Print& print, Slic3r::Model& model, Slic3r::DynamicPrintConfig& config) {
     using namespace Slic3r;
-    print.process();
-    const Vec2d move = prime_tower_overrun(print, model, config, true);
+    // Orca 2.5.0's process() re-tests the exact generated footprint and refuses a tower that reaches past the bed, which the
+    // estimate in place_prime_tower() can miss (a rib wall, a large flush volume). The tower data it built is still there,
+    // so the overrun is worked out from it and the tower moved back, as the GUI's drag would.
+    bool refused = false;
+    try {
+        print.process();
+    } catch (const SlicingError& error) {
+        if (std::string(error.what()).find("Prime tower is partially outside") == std::string::npos) throw;
+        refused = true;
+    }
+    Vec2d move = prime_tower_overrun(print, model, config, !refused);
+    if (refused && move == Vec2d::Zero()) throw SlicingError("Prime tower is partially outside the printable area, and it cannot be printed.");
     if (move == Vec2d::Zero()) return;
     move_prime_tower(config, config.option<ConfigOptionFloats>("wipe_tower_x")->get_at(0) + move.x(),
                      config.option<ConfigOptionFloats>("wipe_tower_y")->get_at(0) + move.y());

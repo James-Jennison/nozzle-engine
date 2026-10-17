@@ -3870,6 +3870,20 @@ void GCode::_do_export(Print& print, GCodeOutputStream &file, ThumbnailsGenerato
         auto center = bbox_wo_wt.center();
         this->placeholder_parser().set("first_layer_center_no_wipe_tower", new ConfigOptionFloats{ {center.x(),center.y()}});
     }
+    // Chamber cooling mode from the filaments used on this plate (Snapmaker U1 start G-code reads it): a filament that is
+    // not high temperature and softens at <= 50 C needs strong cooling, <= 70 C weak, otherwise the chamber stays warm.
+    {
+        int chamber_cooling_mode = 0; // keep warm
+        for (const auto &extruder : m_writer.extruders()) {
+            const unsigned int filament = extruder.id();
+            if (filament < m_config.filament_is_high_temperature.values.size() && m_config.filament_is_high_temperature.get_at(filament))
+                continue;
+            const int vitrification = m_config.temperature_vitrification.get_at(filament);
+            if (vitrification <= 50) { chamber_cooling_mode = 2; break; }
+            if (vitrification <= 70) chamber_cooling_mode = 1;
+        }
+        this->placeholder_parser().set("chamber_cooling_mode", new ConfigOptionInt(chamber_cooling_mode));
+    }
     bool activate_chamber_temp_control = false;
     auto max_chamber_temp              = 0;
     for (const auto &extruder : m_writer.extruders()) {

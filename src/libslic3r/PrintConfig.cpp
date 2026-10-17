@@ -3560,6 +3560,14 @@ void PrintConfigDef::init_fff_params()
     def->mode = comSimple;
     def->set_default_value(new ConfigOptionInts{ 100 });
 
+    // Snapmaker: a filament that prints hot enough that its chamber needs no cooling; read with temperature_vitrification
+    // to choose the chamber_cooling_mode placeholder that Snapmaker U1 start G-code uses.
+    def = this->add("filament_is_high_temperature", coBools);
+    def->label = L("High temperature filament");
+    def->tooltip = L("The filament prints at a temperature where the chamber is kept warm rather than cooled.");
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionBools{ false });
+
     def = this->add("filament_cost", coFloats);
     def->label = L("Price");
     def->tooltip = L("Filament price, for statistical purposes only.");

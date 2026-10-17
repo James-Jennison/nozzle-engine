@@ -27,6 +27,7 @@
 
 #include "mixed_filament.hpp"
 #include "semantic_paint_op.hpp"
+#include "paint_ops.hpp"
 
 namespace {
 
@@ -162,6 +163,22 @@ Java_org_orcaslicer_engine_NativeEngine_nativeMixedFilament(JNIEnv* env, jclass,
     }
     jstring result = env->NewStringUTF(response.c_str());
     if (result == nullptr) throw_java_exception(env, "Could not allocate the mixed filament response string.");
+    return result;
+}
+
+// Paint tools: same request/response JSON as `nozzle-engine --paint <request.json>` (paint_ops.hpp).
+extern "C" JNIEXPORT jstring JNICALL
+Java_org_orcaslicer_engine_NativeEngine_nativePaintOps(JNIEnv* env, jclass, jstring jRequestJson) {
+    std::string response;
+    try {
+        (void) nozzle_paint::run_paint(jstring_to_string(env, jRequestJson), response);
+    } catch (const std::exception& ex) {
+        response = json_error(ex.what());
+    } catch (...) {
+        response = json_error("Unknown native error during paint operation");
+    }
+    jstring result = env->NewStringUTF(response.c_str());
+    if (result == nullptr) throw_java_exception(env, "Could not allocate the paint response string.");
     return result;
 }
 

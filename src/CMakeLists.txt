@@ -310,7 +310,9 @@ if (WIN32)
     endif()
 
 else ()
-    if (NOT APPLE)
+    # Nozzle headless engine: the shared-library copy (ffmpeg and friends, for running the desktop app from the build
+    # tree) only matters to the GUI; a headless/cross-compiled prefix has none of those libraries.
+    if (NOT APPLE AND SLIC3R_GUI)
         set(output_sos_Release "")
         set(output_sos_Debug "")
         add_custom_target(OrcaSlicerSosCopy ALL DEPENDS OrcaSlicer)

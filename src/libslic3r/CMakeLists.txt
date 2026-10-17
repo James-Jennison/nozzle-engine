@@ -713,6 +713,12 @@ set(OCCT_LIBS
     TKMath
     TKernel
 )
+# Nozzle headless engine: the Android dependency prefix carries OCCT 7.6, which has no TKDE/TKDESTEP (7.8 split the data
+# exchange framework); its STEP reader is the TKSTEP* / TKXDESTEP family.
+if (OpenCASCADE_MAJOR_VERSION EQUAL 7 AND OpenCASCADE_MINOR_VERSION LESS 8)
+    list(REMOVE_ITEM OCCT_LIBS TKDESTEP TKDE)
+    list(INSERT OCCT_LIBS 0 TKXDESTEP TKSTEP TKSTEP209 TKSTEPAttr TKSTEPBase)
+endif ()
 # The CAD kernel is the only consumer of OCCT's ModelingAlgorithms module: TKFillet
 # (BRepFilletAPI), TKOffset (BRepOffsetAPI) and TKBool, which the other two need.
 #
@@ -795,7 +801,7 @@ if(NOT WIN32)
     endif ()
     # Link freetype for OCCT dependency (CAD operations need font rendering)
     target_link_libraries(libslic3r PRIVATE ${FREETYPE_LIBRARIES})
-    if (NOT APPLE)
+    if (NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN)
         target_link_libraries(libslic3r PRIVATE fontconfig)
     endif()
 endif()

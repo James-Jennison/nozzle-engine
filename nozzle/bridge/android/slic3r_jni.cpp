@@ -32,8 +32,10 @@
 // process or temp-file involved even on desktop, so exposing them to Android is a direct call, not a re-implementation
 // - see CMakeLists.txt for how their two .cpp files (shared with the desktop build, not duplicated) get built into
 // this bridge's slic3r_engine static library.
+#ifdef NOZZLE_BRIDGE_MIXING
 #include "full_spectrum.hpp"
 #include "color_mix.hpp"
+#endif
 
 namespace {
 
@@ -170,7 +172,11 @@ Java_org_orcaslicer_engine_NativeEngine_nativeFullSpectrum(JNIEnv* env, jclass, 
     std::string response;
     try {
         std::string ignored_code_carrier; // run_full_spectrum's int return is the CLI's process exit code (0/1/2);
+#ifdef NOZZLE_BRIDGE_MIXING
         (void) nozzle_fs::run_full_spectrum(jstring_to_string(env, jRequestJson), response); // the response JSON already says which.
+#else
+        response = json_error("Colour mixing is not available in this engine build yet.");
+#endif
     } catch (const std::exception& ex) {
         response = json_error(ex.what());
     } catch (...) {
@@ -188,7 +194,11 @@ extern "C" JNIEXPORT jstring JNICALL
 Java_org_orcaslicer_engine_NativeEngine_nativeColorMix(JNIEnv* env, jclass, jstring jRequestJson) {
     std::string response;
     try {
+#ifdef NOZZLE_BRIDGE_MIXING
         (void) nozzle_cm::run_color_mix(jstring_to_string(env, jRequestJson), response);
+#else
+        response = json_error("Colour mixing is not available in this engine build yet.");
+#endif
     } catch (const std::exception& ex) {
         response = json_error(ex.what());
     } catch (...) {
@@ -382,11 +392,16 @@ static void nativeSliceMultiObject_impl(
 
         std::string virtual_extruders_json = jVirtualExtruders != nullptr ? jstring_to_string(env, jVirtualExtruders) : std::string{};
         if (!virtual_extruders_json.empty()) {
+#ifdef NOZZLE_BRIDGE_MIXING
             std::string why;
             if (!nozzle_cm::check_virtual_extruders_file(virtual_extruders_json, why)) {
                 throw_java_exception(env, "Bad virtual extruders JSON: " + why);
                 return;
             }
+#else
+            throw_java_exception(env, "Virtual extruders are not supported by this engine build.");
+            return;
+#endif
         }
 
         engine::slice_multi_object(objects, output_path, profile_paths, config_overrides, extras_from(env, jPaint, jVolumes, objects.size()), virtual_extruders_json);
@@ -585,11 +600,16 @@ Java_org_orcaslicer_engine_NativeEngine_nativeSlicePaintSessionMix(
 
         std::string virtual_extruders_json = jVirtualExtruders != nullptr ? jstring_to_string(env, jVirtualExtruders) : std::string{};
         if (!virtual_extruders_json.empty()) {
+#ifdef NOZZLE_BRIDGE_MIXING
             std::string why;
             if (!nozzle_cm::check_virtual_extruders_file(virtual_extruders_json, why)) {
                 throw_java_exception(env, "Bad virtual extruders JSON: " + why);
                 return;
             }
+#else
+            throw_java_exception(env, "Virtual extruders are not supported by this engine build.");
+            return;
+#endif
         }
 
         engine::slice_paint_session(static_cast<engine::PaintSessionHandle>(handle), jstring_to_string(env, jOutputGcodePath),

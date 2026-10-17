@@ -591,7 +591,8 @@ if ((NOT MSVC OR IS_CLANG_CL) AND ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU" OR 
     endforeach ()
 
     # GCC is not built in CI, so don't throw errors CI won't catch.
-    if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    # wasm32 (Nozzle browser engine): size_t is 32 bits, so upstream's 64-bit range checks trip -Wtautological-*.
+    if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR EMSCRIPTEN)
         add_compile_options(-Werror=return-type)
     else ()
         # Turn everything else into an error. Dependency headers are exempt because the

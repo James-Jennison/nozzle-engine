@@ -1,3 +1,4 @@
+#include <boost/version.hpp>
 #include "Utils.hpp"
 #include "Exception.hpp"
 #include "I18N.hpp"
@@ -1052,7 +1053,11 @@ CopyFileResult copy_file_inner(const std::string& from, const std::string& to, s
 	// That may happen when copying on some exotic file system, for example Linux on Chrome.
 	copy_file_linux(source, target, ec);
 #else // __linux__
+#if BOOST_VERSION >= 107400
+	boost::filesystem::copy_file(source, target, boost::filesystem::copy_options::overwrite_existing, ec);
+#else
 	boost::filesystem::copy_file(source, target, boost::filesystem::copy_option::overwrite_if_exists, ec);
+#endif
 #endif // __linux__
 	if (ec) {
 		error_message = ec.message();

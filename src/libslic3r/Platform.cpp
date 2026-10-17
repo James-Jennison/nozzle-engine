@@ -60,7 +60,7 @@ void detect_platform()
             }
         }
     }
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(__EMSCRIPTEN__)
     BOOST_LOG_TRIVIAL(info) << "Platform: Linux";
 	s_platform 		  = Platform::Linux;
 	s_platform_flavor = PlatformFlavor::GenericLinux;

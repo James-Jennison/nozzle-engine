@@ -45,3 +45,11 @@ G. AI auto-paint in Prepare (SemanticPaint via bridge + provider call from Kotli
 - `tools/nozzle/mixed_filament_test.sh <nozzle-engine>` covers the ops, the 3:1 extrusion share and the thumbnail colour.
 - `nativeFullSpectrum` / `nativeColorMix` and the Snapmaker/Prusa sources (`full_spectrum.cpp`, `color_mix.cpp`,
   `colourmix_test.sh`) are retired but left in the tree until the NIA side stops calling them.
+
+## Status: wasm, deltas, paint and AI auto-paint (2026-10-17)
+
+- wasm: `nozzle-engine.{js,wasm}` builds from this base with Emscripten 6.0.10 (the dependency prefix's toolchain; gthost's 3.1.74 cannot link it) and slices the 20 mm cube in node. Engine changes: `__EMSCRIPTEN__` as a Linux-like platform, Boost.Filesystem `copy_options`, no `-Werror` for wasm32's size_t range checks. Prefix fixes (not in the repo): CGAL 6.2.1, Boost.Interval hw_rounding and `boost/detail/fenv.hpp` accept Emscripten.
+- Delta ported from the old nozzle-engine (items 5-6): Klipper `wipe_tower` object (placed with the rib offset, includes the final purge), uninitialised-member fixes, seedable `random()`, arm64 `get_at` hardening, wipe tower comment-tag dialect. Already native in 2.5.0: wipe_tower_type, tower outline / rib offset, ceil()/floor(), plate origin, Arachne parameter defaults. Not ported: `append_tcr` empty-template branch (2.5.0 always retracts), the old ExtruderVariants backport (replaced by `normalize_filament_values_to_variants`).
+- Device (arm64, NDK 29): the slicing, multi-object, paint-session, Bambu bundle, profile-pack and colour-mixing instrumented classes pass. Four Compose UI tests fail for reasons outside the engine: two (`MultiMaterialDeviceTest`) assert wording the app changed in ab8b5a23, two (`TestModeDeviceTest`) look for test-grid text.
+- `--paint` (paint_ops.cpp): brush, bucket fill, smart fill, erase and painted pieces on TriangleSelector; JNI `nativePaintOps`. `tools/nozzle/paint_ops_test.sh`.
+- `--semantic-paint` (semantic_paint_op.cpp): segment, openai_request, reply_text, assign over SemanticPaint; JNI `nativeSemanticPaint`. `tools/nozzle/semantic_paint_test.sh`. The provider call is made by the app.

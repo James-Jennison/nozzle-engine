@@ -1013,8 +1013,7 @@ void slice_multi_object(const std::vector<std::tuple<std::string, ModelTransform
                          const std::string& output_gcode_path,
                          const std::vector<std::string>& profile_paths,
                          const std::vector<std::pair<std::string, std::string>>& config_overrides,
-                         const std::vector<ObjectExtras>& extras,
-                         const std::string& virtual_extruders_json) {
+                         const std::vector<ObjectExtras>& extras) {
     using namespace Slic3r;
 
     if (objects.empty()) {
@@ -1049,18 +1048,6 @@ void slice_multi_object(const std::vector<std::tuple<std::string, ModelTransform
         if (object_index < extras.size() && combined.objects.size() > first_object_of_file)
             apply_object_extras(combined.objects[first_object_of_file], extras[object_index]);
         ++object_index;
-    }
-
-    // PrusaSlicer 2.9.6 virtual extruders go on the combined Model, as its 3MF reader puts them there
-    // (Format/3mf.cpp _extract_full_spectrum_from_archive: deserialize, then normalize). Print::apply() keeps the ones
-    // this printer's physical count can print (filter_virtual_extruders_for_physical_count).
-    if (!virtual_extruders_json.empty()) {
-#ifdef SLIC3R_PRUSA_VIRTUAL_EXTRUDERS
-        const FullSpectrum::FullSpectrumConfig fs_config = FullSpectrum::deserialize_virtual_extruders_from_json(virtual_extruders_json);
-        combined.virtual_extruders = FullSpectrum::normalize_virtual_extruders(fs_config.virtual_extruders);
-#else
-        throw std::runtime_error("This slicing engine does not support virtual extruders.");
-#endif
     }
 
     slice_model(combined, config, output_gcode_path);
@@ -1295,8 +1282,7 @@ std::vector<float> get_painted_facets(PaintSessionHandle handle) {
 
 void slice_paint_session(PaintSessionHandle handle, const std::string& output_gcode_path,
                           const std::vector<std::string>& profile_paths,
-                          const std::vector<std::pair<std::string, std::string>>& config_overrides,
-                          const std::string& virtual_extruders_json) {
+                          const std::vector<std::pair<std::string, std::string>>& config_overrides) {
     PaintSession& s = find_paint_session(handle);
     std::lock_guard<std::mutex> lock(s.mutex);
     for (const std::string& profile_path : profile_paths) {
@@ -1310,17 +1296,6 @@ void slice_paint_session(PaintSessionHandle handle, const std::string& output_gc
         s.config.set_deserialize_strict(key, value);
     }
     expand_filament_variants(s.config, filament_columns, config_overrides);
-
-    // Same mechanism slice_multi_object() uses (see its own comment): virtual extruders live on the Model, not the
-    // config, because the 3MF reader puts them there too (Format/3mf.cpp _extract_full_spectrum_from_archive).
-    if (!virtual_extruders_json.empty()) {
-#ifdef SLIC3R_PRUSA_VIRTUAL_EXTRUDERS
-        const FullSpectrum::FullSpectrumConfig fs_config = FullSpectrum::deserialize_virtual_extruders_from_json(virtual_extruders_json);
-        s.model.virtual_extruders = FullSpectrum::normalize_virtual_extruders(fs_config.virtual_extruders);
-#else
-        throw std::runtime_error("This slicing engine does not support virtual extruders.");
-#endif
-    }
 
     slice_model(s.model, s.config, output_gcode_path);
 }

@@ -8,14 +8,7 @@
 //   nozzle-engine --mixed-filament <request.json>
 //                                    Orca 2.5.0 mixed filaments (display/add/update/remove/match/presets/slice_overrides; see
 //                                    mixed_filament.cpp): one JSON response on stdout; exit 0 success, 1 failed, 2 bad request.
-//   nozzle-engine --full-spectrum <request.json>
-//                                    Full Spectrum colour mixing (Snapmaker Orca's Color Mixing list and Color Mixing
-//                                    Match, see full_spectrum.cpp): one JSON response on stdout; exit 0 success,
-//                                    1 the operation failed, 2 bad request (response {"error": "..."})
 //   nozzle-engine --plate <request.json>           plate tools (arrange, auto-orient, cut): see plate_ops.cpp
-//   nozzle-engine --color-mix <request.json>
-//                                    PrusaSlicer 2.9.6 colour mixing (virtual extruders; see color_mix.cpp): one JSON
-//                                    response on stdout, exit codes as --full-spectrum
 //
 // The request file uses the Web App's line format (one field per line, tab-separated):
 //   out\t<gcode path>
@@ -24,9 +17,6 @@
 //   object\t<model path>\t<x mm>\t<y mm>\t<rotation z deg>\t<scale>\t<tool index, 1-based, 0 = default>
 //   object_set\t<object number, 1-based, in object line order>\t<key>\t<value>
 //                                (repeatable) a per-object print setting, as Orca's object list sets them
-//   virtual_extruders\t<path>    (optional, at most once) PrusaSlicer 2.9.6 virtual extruders, a JSON file in the
-//                                Metadata/Prusa_Slicer_full_spectrum.json format; a tool index or painted state equal
-//                                to a virtual id then prints by PrusaSlicer's layer cycle
 // x/y are relative to the bed centre, as in the Web App.
 //
 // stdout carries only the progress lines: libslic3r's own log output (Boost.Log) is sent to stderr with everything else.
@@ -34,10 +24,6 @@
 // Everything is local; nothing here performs network I/O.
 #include "slic3r_engine.hpp"
 #include "mixed_filament.hpp"
-#ifdef NOZZLE_BRIDGE_MIXING
-#include "full_spectrum.hpp"
-#include "color_mix.hpp"
-#endif
 #include "plate_ops.hpp"
 #include "contract_cli.hpp"
 
@@ -70,7 +56,6 @@ struct Request {
     std::vector<std::pair<std::string, std::string>> overrides;
     std::vector<std::tuple<std::string, engine::ModelTransform, int>> objects;
     std::vector<std::tuple<size_t, std::string, std::string>> object_settings;
-    std::string virtual_extruders_path;
 };
 
 // Same parser as nozzle/bridge/wasm/wasm_engine.cpp, so a request written for one engine works for the other.
@@ -99,9 +84,6 @@ Request parse(const std::string& text) {
             size_t n = 0;
             try { n = std::stoul(f[1]); } catch (const std::logic_error&) { throw BadRequest("Bad object number in object_set line: " + line); }
             r.object_settings.emplace_back(n, f[2], f.size() == 4 ? f[3] : "");
-        } else if (f[0] == "virtual_extruders" && f.size() == 2) {
-            if (!r.virtual_extruders_path.empty()) throw BadRequest("Only one virtual_extruders line is allowed.");
-            r.virtual_extruders_path = f[1];
         } else throw BadRequest("Unrecognised request line: " + f[0]);
     }
     if (r.out.empty() || r.objects.empty() || r.profiles.empty()) throw BadRequest("The slice request is incomplete.");
@@ -111,8 +93,6 @@ Request parse(const std::string& text) {
     auto readable = [](const std::string& p) { std::ifstream f(p, std::ios::binary); return f.good(); };
     for (const auto& p : r.profiles) if (!readable(p)) throw BadRequest("Cannot read profile " + p);
     for (const auto& o : r.objects) if (!readable(std::get<0>(o))) throw BadRequest("Cannot read model " + std::get<0>(o));
-    if (!r.virtual_extruders_path.empty() && !readable(r.virtual_extruders_path))
-        throw BadRequest("Cannot read virtual extruders " + r.virtual_extruders_path);
     return r;
 }
 
@@ -248,9 +228,8 @@ int main(int argc, char** argv) {
         std::cout << "nozzle-engine 1 (libslic3r, shared Android pipeline, native)" << std::endl;
         return 0;
     }
-    if (argc == 3 && (std::string(argv[1]) == "--full-spectrum" || std::string(argv[1]) == "--color-mix" || std::string(argv[1]) == "--mixed-filament" || std::string(argv[1]) == "--plate" || std::string(argv[1]) == "--option-states" || std::string(argv[1]) == "--config-checks")) {
+    if (argc == 3 && (std::string(argv[1]) == "--mixed-filament" || std::string(argv[1]) == "--plate" || std::string(argv[1]) == "--option-states" || std::string(argv[1]) == "--config-checks")) {
         const std::string mode = argv[1];
-        const bool color_mix = mode == "--color-mix";
         std::string request, response;
         int code = 2;
         std::ifstream f(argv[2], std::ios::binary);
@@ -260,12 +239,7 @@ int main(int argc, char** argv) {
             code = mode == "--option-states" ? nozzle_contract::run_option_states(request, response)
                  : mode == "--config-checks" ? nozzle_contract::run_config_checks(request, response)
                  : mode == "--mixed-filament" ? nozzle_mf::run_mixed_filament(request, response)
-                 : mode == "--plate" ? nozzle_plate::run_plate(request, response)
-#ifdef NOZZLE_BRIDGE_MIXING
-                 : color_mix ? nozzle_cm::run_color_mix(request, response) : nozzle_fs::run_full_spectrum(request, response);
-#else
-                 : (response = "{\"error\":\"Colour mixing is not available in this engine build yet.\"}", 2);
-#endif
+                 : nozzle_plate::run_plate(request, response);
         } else {
             response = "{\"error\":" + json_string(std::string("Cannot read request file ") + argv[2]) + "}";
         }
@@ -274,28 +248,15 @@ int main(int argc, char** argv) {
         return code;
     }
     if (argc != 2) {
-        std::cerr << "usage: nozzle-engine <request.txt> | --version | --schema | --full-spectrum <request.json> | --color-mix <request.json> | --mixed-filament <request.json> | --plate <request.json> | --option-states <request.json> | --config-checks <request.json>" << std::endl;
+        std::cerr << "usage: nozzle-engine <request.txt> | --version | --schema | --mixed-filament <request.json> | --plate <request.json> | --option-states <request.json> | --config-checks <request.json>" << std::endl;
         return 2;
     }
     Request req;
-    std::string virtual_extruders_json;
     try {
         std::ifstream f(argv[1], std::ios::binary);
         if (!f) throw BadRequest(std::string("Cannot read request file ") + argv[1]);
         std::stringstream ss; ss << f.rdbuf();
         req = parse(ss.str());
-        if (!req.virtual_extruders_path.empty()) {
-            std::ifstream vf(req.virtual_extruders_path, std::ios::binary);
-            std::stringstream vs; vs << vf.rdbuf();
-            virtual_extruders_json = vs.str();
-#ifdef NOZZLE_BRIDGE_MIXING
-            std::string why;
-            if (!nozzle_cm::check_virtual_extruders_file(virtual_extruders_json, why))
-                throw BadRequest("Bad virtual extruders file " + req.virtual_extruders_path + ": " + why);
-#else
-            throw BadRequest("Virtual extruders are not supported by this engine build.");
-#endif
-        }
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
         return 2;
@@ -323,7 +284,7 @@ int main(int argc, char** argv) {
         try {
             std::vector<engine::ObjectExtras> extras(req.objects.size());
             for (const auto& [n, key, value] : req.object_settings) extras[n - 1].settings.emplace_back(key, value);
-            engine::slice_multi_object(req.objects, req.out, req.profiles, req.overrides, extras, virtual_extruders_json);
+            engine::slice_multi_object(req.objects, req.out, req.profiles, req.overrides, extras);
         } catch (const engine::SliceCancelled&) {
             code = 3; message = "Slicing cancelled";
         } catch (const std::exception& e) {

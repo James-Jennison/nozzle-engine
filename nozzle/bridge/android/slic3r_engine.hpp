@@ -102,16 +102,11 @@ void slice_multi_object_bambu_bundle(const std::vector<std::tuple<std::string, M
 // ToolAssignmentSlicingDeviceTest's own header comment for the real config_overrides recipe that
 // produces genuine, distinct Tx tool-change commands in the sliced G-code.
 //
-// virtual_extruders_json: PrusaSlicer 2.9.6 virtual extruders (colour-mixing blends and gradients), as the text of a
-// Metadata/Prusa_Slicer_full_spectrum.json sidecar. Empty = none. Objects whose tool index is a virtual id, and
-// painted areas whose state is one, then print by PrusaSlicer's layer cycle. Only an engine built with PrusaSlicer's
-// virtual extruders (the desktop's Snapmaker Orca engine) accepts it; others throw.
 void slice_multi_object(const std::vector<std::tuple<std::string, ModelTransform, int>>& objects,
                          const std::string& output_gcode_path,
                          const std::vector<std::string>& profile_paths,
                          const std::vector<std::pair<std::string, std::string>>& config_overrides = {},
-                         const std::vector<ObjectExtras>& extras = {},
-                         const std::string& virtual_extruders_json = {});
+                         const std::vector<ObjectExtras>& extras = {});
 
 // Loads input_model_path (STL/3MF/OBJ) the same way slice_file() does - real Model::read_from_file,
 // bed-centered - but stops short of slicing. Returns 3 floats (the first object's first
@@ -164,14 +159,9 @@ std::vector<float> get_painted_facets(PaintSessionHandle handle);
 // no re-load from disk, no serialization round-trip for the painted state. Does not close the
 // session; the caller closes it explicitly once done.
 //
-// virtual_extruders_json: same PrusaSlicer 2.9.6 virtual extruders slice_multi_object() takes (empty = none). A
-// painted area whose enforcer state equals a virtual id then prints by PrusaSlicer's layer cycle - the main reason
-// this parameter exists on the paint path at all, since a painted multi-colour model is how a mixed-filament blend
-// actually gets assigned to part of an object today (there being no per-triangle "tool_index" outside painting).
 void slice_paint_session(PaintSessionHandle handle, const std::string& output_gcode_path,
                           const std::vector<std::string>& profile_paths,
-                          const std::vector<std::pair<std::string, std::string>>& config_overrides = {},
-                          const std::string& virtual_extruders_json = {});
+                          const std::vector<std::pair<std::string, std::string>>& config_overrides = {});
 
 void close_paint_session(PaintSessionHandle handle);
 

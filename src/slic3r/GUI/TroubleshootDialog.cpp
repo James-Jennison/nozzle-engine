@@ -1,4 +1,8 @@
 #include "TroubleshootDialog.hpp"
+#include "slic3r/GUI/Widgets/Button.hpp"
+#include "MsgDialog.hpp"
+#include <boost/algorithm/string/predicate.hpp>
+#include <regex>
 #include "I18N.hpp"
 
 #include "BuildCommit.hpp"
@@ -1133,39 +1137,52 @@ bool TroubleshootDialog::RestartApplication()
 
 void TroubleshootDialog::ClearLogs()
 {
-    // Same method with GUI_App::post_init() only LOG_FILES_MAX_NUM replaced with 1
-    auto data_dir = boost::filesystem::path(Slic3r::data_dir());
-    auto log_folder = data_dir / "log";
-    if (boost::filesystem::exists(log_folder)) {
-       std::vector<std::pair<time_t, std::string>> files_vec;
-       for (auto& it : boost::filesystem::directory_iterator(log_folder)) {
-           auto temp_path = it.path();
-           try {
-               if (it.status().type() == boost::filesystem::regular_file) {
-                   std::time_t lw_t = boost::filesystem::last_write_time(temp_path) ;
-                   files_vec.push_back({ lw_t, temp_path.filename().string() });
-               }
-           } catch (const std::exception &) {
-           }
-       }
-       std::sort(files_vec.begin(), files_vec.end(), [](
-           std::pair<time_t, std::string> &a, std::pair<time_t, std::string> &b) {
-           return a.first > b.first;
-       });
+    MessageDialog confirm(this,
+                          _L("Delete all stored logs except the current-session logs?") + "\n\n" +
+                              _L("This cannot be undone. Export the logs first if you may need them."),
+                          wxString(SLIC3R_APP_FULL_NAME) + " - " + _L("Clear stored logs"),
+                          wxICON_WARNING | wxOK | wxCANCEL);
+    if (confirm.ShowModal() != wxID_OK)
+        return;
 
-       while (files_vec.size() > 1) {
-           auto full_path = log_folder / boost::filesystem::path(files_vec[files_vec.size() - 1].second);
-           BOOST_LOG_TRIVIAL(info) << "delete log file over " << LOG_FILES_MAX_NUM << ", filename: "<< files_vec[files_vec.size() - 1].second;
-           try {
-               boost::filesystem::remove(full_path);
-           }
-           catch (const std::exception& ex) {
-               BOOST_LOG_TRIVIAL(error) << "failed to delete log file: "<< files_vec[files_vec.size() - 1].second << ". Error: " << ex.what();
-           }
-           files_vec.pop_back();
+    auto data_dir    = boost::filesystem::path(Slic3r::data_dir());
+    auto log_folder  = data_dir / "log";
+    auto current_log = boost::filesystem::path(get_log_file_name());
+    // Refuse to guess: without a known current log we cannot tell which files are safe to remove.
+    if (current_log.empty() || current_log.parent_path() != log_folder || !boost::filesystem::exists(current_log)) {
+        MessageDialog(this, _L("The current-session log could not be identified. No logs were deleted."),
+                      wxString(SLIC3R_APP_FULL_NAME) + " - " + _L("Clear stored logs"), wxOK | wxICON_WARNING)
+            .ShowModal();
+        return;
+    }
+
+    // The log sink writes "<name>.log.<N>"; every rotation of this session shares the "<name>.log." prefix.
+    // Only files shaped like stored logs are removed, so nothing else that ends up in the folder is touched.
+    const std::string current_prefix = current_log.stem().string() + ".";
+    const std::regex  stored_log_pattern(R"(^debug_.+\.log\.[0-9]+$)");
+    int               failed_count = 0;
+    if (boost::filesystem::exists(log_folder)) {
+        for (const auto& entry : boost::filesystem::directory_iterator(log_folder)) {
+            try {
+                if (!boost::filesystem::is_regular_file(entry.path()))
+                    continue;
+                const std::string filename = entry.path().filename().string();
+                if (boost::algorithm::starts_with(filename, current_prefix) || !std::regex_match(filename, stored_log_pattern))
+                    continue;
+                if (!boost::filesystem::remove(entry.path()))
+                    ++failed_count;
+            } catch (const std::exception& ex) {
+                ++failed_count;
+                BOOST_LOG_TRIVIAL(error) << "Failed to delete a stored log: " << ex.what();
+            }
         }
     }
     UpdateLogsStorage();
+    if (failed_count > 0) {
+        MessageDialog(this, _L("Some stored logs could not be deleted. The current-session logs were preserved."),
+                      wxString(SLIC3R_APP_FULL_NAME) + " - " + _L("Clear stored logs"), wxOK | wxICON_WARNING)
+            .ShowModal();
+    }
 }
 
 void TroubleshootDialog::UpdateLogsStorage()

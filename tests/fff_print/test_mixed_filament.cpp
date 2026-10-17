@@ -430,7 +430,8 @@ ToolShare tool_share(const std::string &gcode, double split_z)
         if (cmd.size() >= 2 && cmd[0] == 'T' && std::isdigit((unsigned char) cmd[1]))
             tool = std::stoi(cmd.substr(1));
         z = self.z();
-        if (line.extruding(self) && tool >= 0 && tool < 2 && line.dist_E(self) > 0.) {
+        // Count printed moves only: the unretract after a tool change has E but no XY travel.
+        if (line.extruding(self) && tool >= 0 && tool < 2 && line.dist_E(self) > 0. && line.dist_XY(self) > 0.) {
             // Only the object, not the prime tower: skip extrusions tagged as wipe tower.
             if (std::string(line.comment()).find("Wipe tower") != std::string::npos)
                 return;
@@ -475,10 +476,8 @@ TEST_CASE("A gradient mixed slot shifts from the first component to the second u
     const double low_first  = s.low[0] / std::max(1e-9, s.low[0] + s.low[1]);
     const double high_first = s.high[0] / std::max(1e-9, s.high[0] + s.high[1]);
     INFO("first-component share: low half " << low_first << ", high half " << high_first);
-    // The 0.9 -> 0.1 range would average 0.7 / 0.3 over the two halves, but walls and solid
-    // layers are not split evenly between sub-layers, so the measured shift is smaller. What
-    // must hold is the direction and a clear gap.
-    CHECK(low_first > 0.5);
-    CHECK(high_first < 0.5);
-    CHECK(low_first - high_first > 0.1);
+    // A 0.9 -> 0.1 range averages about 0.7 over the lower half and 0.3 over the upper half.
+    CHECK(low_first > 0.6);
+    CHECK(high_first < 0.4);
 }
+

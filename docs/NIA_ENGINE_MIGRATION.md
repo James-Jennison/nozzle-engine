@@ -21,3 +21,11 @@ D. Port remaining deltas (4-6) after checking what 2.5.0 already has.
 E. Android (NDK) and wasm builds; re-pin NIA to the new engine.
 F. UI parity in NIA (Compose): object list/manipulation, paint tools (support, seam, colour/MMU, fuzzy skin), per-object and per-region settings, full print/filament/printer settings with Orca's option states. Separate scoping pass against the bridge API.
 G. AI auto-paint in Prepare (SemanticPaint via bridge + provider call from Kotlin).
+
+## Status (2026-10-17)
+- A done: headless `libslic3r` builds from the combined 2.5.0 tree.
+- B partly done: native `nozzle-engine` builds (colour-mixing entry points excluded, `NOZZLE_BRIDGE_MIXING=OFF`).
+  - `tools/nozzle/golden.sh`: all 383 bundled printer profiles slice the 20 mm cube, 0 failures. Hashes differ from the old goldens (expected: new base). Spot check on Elegoo Centauri Carbon COSMOS and Snapmaker U1: same layer count and filament weight as the old engine, print time within 2-3%.
+  - `tools/nozzle/contract_test.py`: FAILS. (1) `--option-states` crashes (SIGSEGV) on a U1 request with tree support, wall_loops 0, infill 0%; (2) `setting_aliases.json` names Snapmaker-only keys that 2.5.0 lacks (`wall_filament`, `sparse_infill_filament`, `solid_infill_filament`, `delta_temperature`, `dithering_local_z_mode`, `graphic_effect_plate_temp[_initial_layer]`, `z_hop_when_prime`); the option-state expectations (no walls greys out outer wall speed, 0% infill hides pattern, organic tree support tip diameter, extrusion-rate smoothing forces arc fitting off) need re-deriving from 2.5.0's `ConfigManipulation`.
+- Variant handling now uses 2.5.0's native `normalize_filament_values_to_variants`; the engine's own `ExtruderVariants.cpp` backport was dropped. Not yet checked against a Bambu H2D profile.
+- Not started: C (mixing), E (Android/wasm builds), F (UI parity), G (AI auto-paint).

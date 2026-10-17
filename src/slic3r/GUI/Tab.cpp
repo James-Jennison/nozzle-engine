@@ -533,8 +533,12 @@ void Tab::create_preset_tab()
 #ifdef __linux__
         // Events queue is opposite On Linux. wxEVT_SET_FOCUS invokes after wxEVT_TAB_SEL_CHANGED,
         // and a result wxEVT_KILL_FOCUS doesn't invoke for the TextCtrls.
-        // So, call SetFocus explicitly for this control before changing of the selection
-        m_tabctrl->SetFocus();
+        // So, call SetFocus explicitly for this control before changing of the selection.
+        // Preset loading also emits this event before the main frame is mapped. Focusing
+        // an unmapped GTK child asks GTK to present its toplevel too early, which Mutter
+        // keeps in ICCCM Iconic state. A hidden tree cannot accept useful input anyway.
+        if (m_tabctrl->IsShownOnScreen())
+            m_tabctrl->SetFocus();
 #endif
             if (!m_disable_tree_sel_changed_event && !m_pages.empty()) {
                 if (m_page_switch_running)

@@ -3688,6 +3688,32 @@ bool GUI_App::on_init_inner()
     if (scrn) { scrn->SetText(_L("Showing main window") + dots, 100); scrn->Destroy(); scrn = nullptr; }
     BOOST_LOG_TRIVIAL(info) << "main frame firstly shown";
 
+#ifdef __WXGTK__
+    // wxGTK can defer the initial native map while it requests frame extents.
+    // Complete the native presentation synchronously while GNOME's launch
+    // timestamp is still authoritative, before startup notification expires.
+    {
+        guint32 startup_time = GDK_CURRENT_TIME;
+        if (const char* startup_id = std::getenv("DESKTOP_STARTUP_ID")) {
+            const std::string id(startup_id);
+            const size_t marker = id.rfind("_TIME");
+            if (marker != std::string::npos) {
+                const char* value = id.c_str() + marker + 5;
+                char* end = nullptr;
+                const unsigned long parsed = std::strtoul(value, &end, 10);
+                if (end != value && *end == '\0')
+                    startup_time = static_cast<guint32>(parsed);
+            }
+        }
+        if (GtkWidget* widget = static_cast<GtkWidget*>(mainframe->GetHandle()); GTK_IS_WINDOW(widget)) {
+            gtk_widget_show(widget);
+            gtk_window_deiconify(GTK_WINDOW(widget));
+            gtk_window_present_with_time(GTK_WINDOW(widget), startup_time);
+            BOOST_LOG_TRIVIAL(info) << "GTK startup window presented synchronously at timestamp " << startup_time;
+        }
+    }
+#endif
+
 //#if BBL_HAS_FIRST_PAGE
     //BBS: set tp3DEditor firstly
     /*plater_->canvas3D()->enable_render(false);

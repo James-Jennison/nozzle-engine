@@ -26,6 +26,7 @@
 #include "libslic3r/PrintConfig.hpp"
 
 #include "mixed_filament.hpp"
+#include "semantic_paint_op.hpp"
 
 namespace {
 
@@ -161,6 +162,23 @@ Java_org_orcaslicer_engine_NativeEngine_nativeMixedFilament(JNIEnv* env, jclass,
     }
     jstring result = env->NewStringUTF(response.c_str());
     if (result == nullptr) throw_java_exception(env, "Could not allocate the mixed filament response string.");
+    return result;
+}
+
+// AI auto-paint: same request/response JSON as `nozzle-engine --semantic-paint <request.json>` (semantic_paint_op.hpp). The
+// engine makes no provider calls; the app sends the prompt and views to the provider the user chose.
+extern "C" JNIEXPORT jstring JNICALL
+Java_org_orcaslicer_engine_NativeEngine_nativeSemanticPaint(JNIEnv* env, jclass, jstring jRequestJson) {
+    std::string response;
+    try {
+        (void) nozzle_sp::run_semantic_paint(jstring_to_string(env, jRequestJson), response);
+    } catch (const std::exception& ex) {
+        response = json_error(ex.what());
+    } catch (...) {
+        response = json_error("Unknown native error during auto-paint operation");
+    }
+    jstring result = env->NewStringUTF(response.c_str());
+    if (result == nullptr) throw_java_exception(env, "Could not allocate the auto-paint response string.");
     return result;
 }
 

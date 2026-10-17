@@ -21,6 +21,7 @@ add_library(slic3r_engine STATIC
     nanosvg_impl.cpp
     option_states.cpp
     ${NOZZLE_NATIVE_BRIDGE}/mixed_filament.cpp
+    ${NOZZLE_NATIVE_BRIDGE}/semantic_paint_op.cpp
 )
 target_include_directories(slic3r_engine PUBLIC ${NOZZLE_NATIVE_BRIDGE})
 target_link_libraries(slic3r_engine PUBLIC

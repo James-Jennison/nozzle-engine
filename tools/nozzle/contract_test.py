@@ -65,6 +65,40 @@ expect("extrusion fuzzy skin without Arachne asks", any(c["id"] == "fuzzy_skin_n
 r = call("--config-checks", "generic_klipper")
 expect("a stock profile has no conflicts", r["conflicts"] == [])
 
+# Setting Overrides page (TabFilament::update_filament_overrides_page).
+r = call("--option-states", "generic_klipper", {"filament_retraction_length": "0.8", "filament_z_hop": "nil"}, scope="filament")
+o = r.get("overrides", {})
+expect("an own retraction length is a checked override", o.get("filament_retraction_length", {}).get("checked") is True
+       and o["filament_retraction_length"]["fieldEnabled"] is True)
+expect("an unset z hop is unchecked and shows the printer's value", o.get("filament_z_hop", {}).get("checked") is False
+       and o["filament_z_hop"]["fieldEnabled"] is False and o["filament_z_hop"]["inherited"] != "")
+r = call("--option-states", "generic_klipper", {"filament_retraction_length": "0"}, scope="filament")
+o = r.get("overrides", {})
+expect("a zero filament retraction length locks the other retraction overrides",
+       o.get("filament_z_hop", {}).get("checkboxEnabled") is False and o.get("filament_retraction_length", {}).get("checkboxEnabled") is True)
+expect("the long-retraction rows are hidden unless the printer allows them per filament",
+       o.get("filament_long_retractions_when_cut", {}).get("visible") is False)
+expect("ironing overrides are always clickable", o.get("filament_ironing_flow", {}).get("checkboxEnabled") is True)
+
+# IDEX tool layout dropdown (TabPrinter::toggle_options).
+r = call("--option-states", "generic_klipper", {"is_imex": "1", "imex_gantry_count": "1", "imex_tool_layout": "rear-left"}, scope="printer")
+expect("a single gantry offers Left and Right", [c["value"] for c in r.get("choices", {}).get("imex_tool_layout", [])] == ["front-left", "front-right"]
+       and [c["label"] for c in r["choices"]["imex_tool_layout"]] == ["Left", "Right"])
+expect("a stored rear layout is normalised to the front one on a single gantry", r["forced"].get("imex_tool_layout") == "front-left")
+r = call("--option-states", "generic_klipper", {"is_imex": "1", "imex_gantry_count": "2", "imex_tool_layout": "rear-left"}, scope="printer")
+expect("two gantries offer all four corners and keep the stored one", len(r.get("choices", {}).get("imex_tool_layout", [])) == 4
+       and "imex_tool_layout" not in r["forced"])
+r = call("--option-states", "generic_klipper", {}, scope="printer")
+expect("no layout choices without IDEX", "imex_tool_layout" not in r.get("choices", {}))
+
+# Mixed sub-layer + variable layer height warning.
+r = call("--config-checks", "generic_klipper", {"enable_mixed_color_sublayer": "1"}, variableLayer=True)
+expect("mixed sub-layers with a variable layer height warn", any(n["id"] == "mixed_sublayer_variable_layer" for n in r["notices"]))
+r = call("--config-checks", "generic_klipper", {"enable_mixed_color_sublayer": "1"}, variableLayer=False)
+expect("mixed sub-layers alone do not warn", not any(n["id"] == "mixed_sublayer_variable_layer" for n in r["notices"]))
+r = call("--config-checks", "generic_klipper", {}, variableLayer=True)
+expect("a variable layer height alone does not warn", not any(n["id"] == "mixed_sublayer_variable_layer" for n in r["notices"]))
+
 # Aliases name only real settings and choice values.
 schema = json.loads(subprocess.run([ENGINE, "--schema"], capture_output=True, text=True).stdout)
 opts = {o["key"]: o for o in schema["options"]}

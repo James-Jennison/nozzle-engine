@@ -28,6 +28,10 @@ struct ModelTransform {
     double offset_y_mm = 0.0;
     double rotation_z_deg = 0.0;
     double scale = 1.0;
+    // Per-axis scale on top of `scale` (the object's own axes, as Orca's object manipulation panel scales an unlocked
+    // instance) and mirroring about each axis (ModelInstance::set_mirror).
+    double scale_x = 1.0, scale_y = 1.0, scale_z = 1.0;
+    bool mirror_x = false, mirror_y = false, mirror_z = false;
 };
 
 // config_overrides are applied (via ConfigBase::set_deserialize) after
@@ -63,7 +67,14 @@ void slice_bambu_bundle(const std::string& input_model_path,
 // Parallel to the objects vector (empty string = none).
 // settings: per-object print settings (key, value), as Orca's object list sets them on ModelObject::config; only keys of
 // PrintObjectConfig or PrintRegionConfig are accepted (SettingsFactory::get_options(false)), anything else is an error.
-struct ObjectExtras { std::string paint_strokes; std::string volume_specs; std::vector<std::pair<std::string, std::string>> settings; };
+// volume_specs may also hold "negative" (a negative volume) and "part" (an added part) volumes beside modifier / blocker / enforcer.
+// layer_ranges: Orca's height range modifiers (ModelObject::layer_config_ranges): settings for the layers between z0 and z1
+// (mm up the object). layer_profile: a variable layer height profile, z / height pairs (ModelObject::layer_height_profile).
+struct LayerRange { double z0 = 0.0, z1 = 0.0; std::vector<std::pair<std::string, std::string>> settings; };
+struct ObjectExtras {
+    std::string paint_strokes; std::string volume_specs; std::vector<std::pair<std::string, std::string>> settings;
+    std::vector<LayerRange> layer_ranges; std::vector<double> layer_profile;
+};
 
 void slice_multi_object_bambu_bundle(const std::vector<std::pair<std::string, ModelTransform>>& objects,
                                       const std::string& output_bundle_path,
@@ -191,6 +202,12 @@ struct ArrangeOptions { double distance_mm = 0.0; bool allow_rotations = false; 
 struct ArrangeResult { double dx_mm = 0.0; double dy_mm = 0.0; double rotation_deg = 0.0; int plate = 0; };
 std::vector<ArrangeResult> arrange_models(const std::vector<ArrangeItem>& items, const std::vector<std::string>& profile_paths,
                                           const std::vector<std::pair<std::string, std::string>>& config_overrides, const ArrangeOptions& options);
+
+// Orca's adaptive variable layer height (the layer editing "Adaptive" button, layer_height_profile_adaptive): the z / height
+// profile for a mesh (mesh coordinates, scaled by [scale]) under the profiles' layer settings; [quality] is 0 (finest) to 1.
+std::vector<double> adaptive_layer_profile(const std::vector<float>& soup, const std::vector<std::string>& profile_paths,
+                                           const std::vector<std::pair<std::string, std::string>>& config_overrides,
+                                           const ModelTransform& transform, float quality);
 
 // Orca's Auto orient for one object (libslic3r/Orient.cpp orient(ModelInstance*), AutoOrienter): the rotation that puts
 // the mesh (a triangle soup, 9 floats per triangle) on its best face, row-major 3x3.

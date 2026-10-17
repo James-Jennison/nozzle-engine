@@ -34,6 +34,7 @@
 #include <libslic3r/PrintConfig.hpp>
 #include <libslic3r/Preset.hpp>
 
+#include <algorithm>
 #include <atomic>
 #include <cfloat>
 #include <chrono>
@@ -60,6 +61,10 @@ struct Request {
     std::vector<std::pair<std::string, std::string>> overrides;
     std::vector<std::tuple<std::string, engine::ModelTransform, int>> objects;
     std::vector<std::tuple<size_t, std::string, std::string>> object_settings;
+    std::vector<std::pair<size_t, std::string>> object_parts;                       // object number, volume spec
+    std::vector<std::tuple<size_t, double, double, std::string, std::string>> object_ranges; // object number, z0, z1, key, value
+    std::vector<std::pair<size_t, std::vector<double>>> object_layers;              // object number, z / height pairs
+    std::vector<std::tuple<size_t, double, double, double, std::string>> object_scales; // object number, sx, sy, sz, mirror axes ("xz")
 };
 
 // Same parser as nozzle/bridge/wasm/wasm_engine.cpp, so a request written for one engine works for the other.
@@ -88,11 +93,36 @@ Request parse(const std::string& text) {
             size_t n = 0;
             try { n = std::stoul(f[1]); } catch (const std::logic_error&) { throw BadRequest("Bad object number in object_set line: " + line); }
             r.object_settings.emplace_back(n, f[2], f.size() == 4 ? f[3] : "");
+        } else if ((f[0] == "object_part" && f.size() == 3) || (f[0] == "object_range" && (f.size() == 6 || f.size() == 5)) ||
+                   (f[0] == "object_layers" && f.size() == 3) || (f[0] == "object_scale" && (f.size() == 5 || f.size() == 6))) {
+            size_t n = 0;
+            try {
+                n = std::stoul(f[1]);
+                if (f[0] == "object_part") r.object_parts.emplace_back(n, f[2]);
+                else if (f[0] == "object_range") r.object_ranges.emplace_back(n, std::stod(f[2]), std::stod(f[3]), f[4], f.size() == 6 ? f[5] : "");
+                else if (f[0] == "object_scale") r.object_scales.emplace_back(n, std::stod(f[2]), std::stod(f[3]), std::stod(f[4]), f.size() == 6 ? f[5] : "");
+                else {
+                    std::vector<double> v; std::stringstream ns(f[2]); std::string num;
+                    while (std::getline(ns, num, ',')) v.push_back(std::stod(num));
+                    r.object_layers.emplace_back(n, v);
+                }
+            } catch (const std::logic_error&) { throw BadRequest("Bad number in " + f[0] + " line: " + line); }
         } else throw BadRequest("Unrecognised request line: " + f[0]);
     }
     if (r.out.empty() || r.objects.empty() || r.profiles.empty()) throw BadRequest("The slice request is incomplete.");
     for (const auto& s : r.object_settings)
         if (std::get<0>(s) < 1 || std::get<0>(s) > r.objects.size()) throw BadRequest("object_set names an object that isn't in the request.");
+    auto known = [&](size_t n, const char* what) { if (n < 1 || n > r.objects.size()) throw BadRequest(std::string(what) + " names an object that isn't in the request."); };
+    for (const auto& p : r.object_parts) known(p.first, "object_part");
+    for (const auto& p : r.object_ranges) known(std::get<0>(p), "object_range");
+    for (const auto& p : r.object_layers) known(p.first, "object_layers");
+    for (const auto& [n, sx, sy, sz, mirror] : r.object_scales) {
+        known(n, "object_scale");
+        if (!(sx > 0 && sy > 0 && sz > 0)) throw BadRequest("object_scale factors must be positive; mirror with the axes field.");
+        engine::ModelTransform& t = std::get<1>(r.objects[n - 1]);
+        t.scale_x = sx; t.scale_y = sy; t.scale_z = sz;
+        t.mirror_x = mirror.find('x') != std::string::npos; t.mirror_y = mirror.find('y') != std::string::npos; t.mirror_z = mirror.find('z') != std::string::npos;
+    }
     // The shared pipeline skips a profile path it cannot read; here a missing input is a request error instead.
     auto readable = [](const std::string& p) { std::ifstream f(p, std::ios::binary); return f.good(); };
     for (const auto& p : r.profiles) if (!readable(p)) throw BadRequest("Cannot read profile " + p);
@@ -290,6 +320,14 @@ int main(int argc, char** argv) {
         try {
             std::vector<engine::ObjectExtras> extras(req.objects.size());
             for (const auto& [n, key, value] : req.object_settings) extras[n - 1].settings.emplace_back(key, value);
+            for (const auto& [n, spec] : req.object_parts) extras[n - 1].volume_specs += (extras[n - 1].volume_specs.empty() ? "" : ";") + spec;
+            for (const auto& [n, z0, z1, key, value] : req.object_ranges) {
+                auto& ranges = extras[n - 1].layer_ranges;
+                auto it = std::find_if(ranges.begin(), ranges.end(), [&](const engine::LayerRange& lr) { return lr.z0 == z0 && lr.z1 == z1; });
+                if (it == ranges.end()) { ranges.push_back({z0, z1, {}}); it = ranges.end() - 1; }
+                it->settings.emplace_back(key, value);
+            }
+            for (const auto& [n, profile] : req.object_layers) extras[n - 1].layer_profile = profile;
             engine::slice_multi_object(req.objects, req.out, req.profiles, req.overrides, extras);
         } catch (const engine::SliceCancelled&) {
             code = 3; message = "Slicing cancelled";

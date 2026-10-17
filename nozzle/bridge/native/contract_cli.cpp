@@ -31,6 +31,7 @@ static int run_contract(const std::string& request, std::string& response, bool 
         context.printer_model_id = req.value("printerModelId", std::string());
         context.is_plate_config = req.value("plate", false);
         context.filament_count = req.value("filamentCount", 1);
+        context.has_variable_layer = req.value("variableLayer", false);
         const std::string scope = req.value("scope", std::string("all"));
         const engine::OptionStates result = checks ? engine::print_config_checks(config, context)
                                           : scope == "process"  ? engine::print_option_states(config, context)
@@ -43,6 +44,16 @@ static int run_contract(const std::string& request, std::string& response, bool 
             out["states"][key] = {{"enabled", state.enabled}, {"visible", state.visible}};
         out["forced"] = json::object();
         for (const auto& [key, value] : result.forced) out["forced"][key] = value;
+        out["overrides"] = json::object();
+        for (const auto& [key, o] : result.overrides)
+            out["overrides"][key] = {{"checkboxEnabled", o.checkbox_enabled}, {"checked", o.checked}, {"fieldEnabled", o.field_enabled},
+                                     {"visible", o.visible}, {"inherited", o.inherited}};
+        out["choices"] = json::object();
+        for (const auto& [key, list] : result.choices) {
+            json items = json::array();
+            for (const auto& [value, label] : list) items.push_back({{"value", value}, {"label", label}});
+            out["choices"][key] = items;
+        }
         out["conflicts"] = json::array();
         for (const auto& c : result.conflicts) {
             json choices = json::array();

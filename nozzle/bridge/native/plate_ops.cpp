@@ -5,6 +5,8 @@
 //        -> {"objects":[{"dx":mm,"dy":mm,"rotation":deg,"plate":n}]}  (x/y relative to the bed centre, as for slicing)
 //   {"op":"orient","model":stl}  -> {"matrix":[9 numbers, row-major]}
 //   {"op":"cut","model":stl,"z":mm,"upper":stl out,"lower":stl out}  -> {"upper":triangles,"lower":triangles}
+//   {"op":"adaptive_layers","model":stl,"profiles":[paths],"overrides":{key:value},"scale":[sx,sy,sz],"quality":0..1}
+//        -> {"profile":[z,h,z,h,...]}  Orca's adaptive variable layer height for the mesh
 // Models are binary STL files in the mesh's own coordinates.
 #include "plate_ops.hpp"
 #include "slic3r_engine.hpp"
@@ -82,6 +84,20 @@ json op_arrange(const json& req) {
 
 json op_orient(const json& req) { return {{"matrix", engine::orient_mesh_soup(read_stl(text(req, "model")))}}; }
 
+json op_adaptive_layers(const json& req) {
+    std::vector<std::string> profiles;
+    for (const auto& p : req.value("profiles", json::array())) profiles.push_back(p.get<std::string>());
+    std::vector<std::pair<std::string, std::string>> overrides;
+    const json override_map = req.value("overrides", json::object());
+    for (const auto& [k, v] : override_map.items()) overrides.emplace_back(k, v.get<std::string>());
+    engine::ModelTransform t;
+    if (req.contains("scale") && req["scale"].is_array() && req["scale"].size() == 3) {
+        t.scale_x = req["scale"][0].get<double>(); t.scale_y = req["scale"][1].get<double>(); t.scale_z = req["scale"][2].get<double>();
+    }
+    const std::vector<double> profile = engine::adaptive_layer_profile(read_stl(text(req, "model")), profiles, overrides, t, req.value("quality", 0.5f));
+    return {{"profile", profile}};
+}
+
 json op_cut(const json& req) {
     if (!req.contains("z") || !req["z"].is_number()) throw BadRequest("The request needs \"z\"");
     const engine::CutResult r = engine::cut_mesh_soup(read_stl(text(req, "model")), req["z"].get<float>());
@@ -100,6 +116,7 @@ int run_plate(const std::string& request_text, std::string& response) {
         if (op == "arrange") out = op_arrange(req);
         else if (op == "orient") out = op_orient(req);
         else if (op == "cut") out = op_cut(req);
+        else if (op == "adaptive_layers") out = op_adaptive_layers(req);
         else throw BadRequest("Unknown op: " + op);
         response = out.dump();
         return 0;

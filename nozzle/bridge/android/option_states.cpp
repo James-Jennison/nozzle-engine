@@ -801,6 +801,21 @@ OptionStates printer_option_states(const DynamicPrintConfig& input, const Option
         toggle_option("input_shaping_damp_x", input_shaping_emit);
         toggle_option("input_shaping_damp_y", input_shaping_emit && !gcf_is_reprap_firmware);
     }
+    // IDEX/IQEX: the tool_layout dropdown carries 4 corner values, but front/rear is meaningless on single-gantry setups: it
+    // collapses to "Left" / "Right" (front-left / front-right) and a stored rear-* value is normalised to its front-* one.
+    if (is_imex) {
+        const int gantry_count = std::max(1, get_int(*m_config, "imex_gantry_count"));
+        if (gantry_count >= 2) {
+            out.choices["imex_tool_layout"] = { {"front-left", L("Front-left")}, {"front-right", L("Front-right")},
+                                                {"rear-left", L("Rear-left")}, {"rear-right", L("Rear-right")} };
+        } else {
+            out.choices["imex_tool_layout"] = { {"front-left", L("Left")}, {"front-right", L("Right")} };
+            const auto* layout_opt = m_config->option<ConfigOptionEnum<ImexToolLayout>>("imex_tool_layout");
+            const int current = layout_opt ? int(layout_opt->value) : 0;
+            if (current == int(ImexToolLayout::RearLeft) || current == int(ImexToolLayout::RearRight))
+                force("imex_tool_layout", new ConfigOptionEnum<ImexToolLayout>(current == int(ImexToolLayout::RearLeft) ? ImexToolLayout::FrontLeft : ImexToolLayout::FrontRight));
+        }
+    }
     return out;
 }
 
@@ -915,6 +930,81 @@ OptionStates filament_option_states(const DynamicPrintConfig& input, const Optio
     const bool is_BBL_multi_extruder = is_BBL_printer && nozzles != nullptr && nozzles->values.size() > 1;
     toggle_line("long_retractions_when_ec", is_BBL_multi_extruder);
     toggle_line("retraction_distances_when_ec", is_BBL_multi_extruder && get_bool(*m_config, "long_retractions_when_ec", variant_index));
+    // Setting Overrides page: TabFilament::update_filament_overrides_page (the Retraction group, then Ironing).
+    {
+        static const char* const retraction_keys[] = {
+            "filament_retraction_length", "filament_z_hop", "filament_z_hop_types", "filament_retract_lift_above", "filament_retract_lift_below",
+            "filament_retract_lift_enforce", "filament_retraction_speed", "filament_deretraction_speed", "filament_retract_restart_extra",
+            "filament_retract_length_toolchange", "filament_retract_restart_extra_toolchange", "filament_retraction_minimum_travel",
+            "filament_retract_when_changing_layer", "filament_wipe", "filament_wipe_distance", "filament_retract_before_wipe",
+            "filament_retract_after_wipe", "filament_long_retractions_when_cut", "filament_retraction_distances_when_cut" };
+        static const char* const ironing_keys[] = { "filament_ironing_flow", "filament_ironing_spacing", "filament_ironing_inset", "filament_ironing_speed" };
+        auto nil_at = [&](const std::string& key, size_t idx) {
+            const auto* v = dynamic_cast<const ConfigOptionVectorBase*>(m_config->option(key));
+            return v == nullptr || idx >= v->size() || v->is_nil(idx);
+        };
+        auto shown = [&](const std::string& key, size_t idx) -> std::string {
+            const ConfigOption* o = m_config->option(key);
+            if (o == nullptr) return "";
+            if (const auto* v = dynamic_cast<const ConfigOptionVectorBase*>(o)) {
+                // A single element, serialized by a copy holding just that one.
+                std::unique_ptr<ConfigOption> one(o->clone());
+                if (auto* ov = dynamic_cast<ConfigOptionVectorBase*>(one.get())) {
+                    if (idx < v->size() && !v->is_nil(idx)) { ov->set_at(o, 0, idx); ov->resize(1); }
+                    return ov->serialize();
+                }
+            }
+            return o->serialize();
+        };
+        auto vec_size = [&](const char* key) { const auto* v = dynamic_cast<const ConfigOptionVectorBase*>(m_config->option(key)); return v ? v->size() : size_t(0); };
+        // A configuration holds only the options its profiles set; an override the filament doesn't carry is unset (nil), as it
+        // is in the GUI's full preset.
+        for (const char* key : retraction_keys)
+            if (m_config->option(key) == nullptr && print_config_def.get(key) != nullptr && print_config_def.get(key)->default_value)
+                m_config->set_key_value(key, print_config_def.get(key)->default_value->clone());
+        for (const char* key : ironing_keys)
+            if (m_config->option(key) == nullptr && print_config_def.get(key) != nullptr && print_config_def.get(key)->default_value)
+                m_config->set_key_value(key, print_config_def.get(key)->default_value->clone());
+        const size_t length_count = vec_size("filament_retraction_length");
+        if (length_count > 0) {
+            const size_t extruder_idx = std::min<size_t>(context.flow_variant_index, length_count - 1);
+            const bool have_retract_length = nil_at("filament_retraction_length", extruder_idx) || get_float(*m_config, "filament_retraction_length", int(extruder_idx)) > 0;
+            const int machine_level = get_int(*m_config, "enable_long_retraction_when_cut");
+            const bool machine_enabled = machine_level == int(LongRectrationLevel::EnableFilament);
+            for (const char* key : retraction_keys) {
+                if (m_config->option(key) == nullptr) continue;
+                OverrideState s;
+                bool checked = std::string(key) == "filament_retraction_length" ? true : have_retract_length;
+                s.checkbox_enabled = checked;
+                checked = checked && !nil_at(key, extruder_idx);
+                s.checked = checked;
+                s.field_enabled = checked;
+                const std::string base = std::string(key).substr(std::string("filament_").size());
+                if (std::string(key) == "filament_long_retractions_when_cut") {
+                    s.visible = machine_enabled;
+                    s.field_enabled = checked && machine_enabled;
+                } else if (std::string(key) == "filament_retraction_distances_when_cut") {
+                    const bool filament_enabled = get_bool(*m_config, "filament_long_retractions_when_cut", int(extruder_idx));
+                    s.visible = filament_enabled && machine_enabled;
+                    s.field_enabled = checked && filament_enabled && machine_enabled;
+                }
+                if (!checked) s.inherited = shown(base, extruder_idx);
+                out.overrides[key] = s;
+            }
+            for (const char* key : ironing_keys) {
+                if (m_config->option(key) == nullptr) continue;
+                OverrideState s;
+                s.checkbox_enabled = true;
+                s.checked = !nil_at(key, extruder_idx);
+                s.field_enabled = s.checked;
+                if (!s.checked) {
+                    const std::string base = std::string(key).substr(std::string("filament_").size());
+                    if (const ConfigOption* o = m_config->option(base)) s.inherited = o->serialize();
+                }
+                out.overrides[key] = s;
+            }
+        }
+    }
     return out;
 }
 
@@ -1090,6 +1180,11 @@ OptionStates print_config_checks(const DynamicPrintConfig& input, const OptionCo
                  "Both [Extrusion] and [Combined] modes of Fuzzy Skin require the Arachne Wall Generator to be enabled.",
                  { { "Enable Arachne Wall Generator", { {"wall_generator", "arachne"} } },
                    { "Use Displacement fuzzy skin mode", { {"fuzzy_skin_mode", "displacement"} } } });
+    // ConfigManipulation::toggle_print_fff_options / ObjectList::layers_editing: sub-layer splitting divides each layer by the mix
+    // ratio, and a variable layer height or height ranges make those sub-layer heights vary per layer, which degrades the blend.
+    if (context.has_variable_layer && config->opt_bool("enable_mixed_color_sublayer"))
+        out.notices.push_back({ "mixed_sublayer_variable_layer",
+                                "Using variable layer height together with mixed color sublayer may result in poor color mixing quality.", {} });
     return out;
 }
 
@@ -1102,6 +1197,8 @@ OptionStates all_option_states(const DynamicPrintConfig& config, const OptionCon
         for (auto& [key, state] : part.states) out.states[key] = state;
         for (auto& f : part.forced) out.forced.push_back(f);
         for (auto& c : part.conflicts) out.conflicts.push_back(c);
+        for (auto& [key, o] : part.overrides) out.overrides[key] = o;
+        for (auto& [key, ch] : part.choices) out.choices[key] = ch;
     }
     return out;
 }

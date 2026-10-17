@@ -22,6 +22,7 @@
 #include "libslic3r/AABBMesh.hpp"
 #include "libslic3r/BoundingBox.hpp"
 #include "libslic3r/Model.hpp"
+#include "libslic3r/Slicing.hpp"
 #include "libslic3r/Print.hpp"
 #include "libslic3r/PrintConfig.hpp"
 #include "libslic3r/Preset.hpp"
@@ -231,12 +232,21 @@ Slic3r::Model load_and_place_model(const std::string& input_model_path, Slic3r::
     // so a rotated/scaled model's on-screen position and its sliced position agree exactly.
     // ensure_on_bed() runs again afterward because scaling or rotating can change which point of
     // the mesh is lowest, and only ensure_on_bed() (not this function) knows how to find that.
-    if (transform.scale != 1.0 || transform.rotation_z_deg != 0.0 ||
+    const bool shaped = transform.scale_x != 1.0 || transform.scale_y != 1.0 || transform.scale_z != 1.0 ||
+                        transform.mirror_x || transform.mirror_y || transform.mirror_z;
+    if (shaped || transform.scale != 1.0 || transform.rotation_z_deg != 0.0 ||
         transform.offset_x_mm != 0.0 || transform.offset_y_mm != 0.0) {
         for (ModelObject* object : model.objects) {
             for (ModelInstance* instance : object->instances) {
                 if (transform.scale != 1.0) {
                     instance->set_scaling_factor(instance->get_scaling_factor() * transform.scale);
+                }
+                if (shaped) {
+                    instance->set_scaling_factor(Vec3d(instance->get_scaling_factor(X) * transform.scale_x, instance->get_scaling_factor(Y) * transform.scale_y,
+                                                       instance->get_scaling_factor(Z) * transform.scale_z));
+                    if (transform.mirror_x) instance->set_mirror(X, -1.0);
+                    if (transform.mirror_y) instance->set_mirror(Y, -1.0);
+                    if (transform.mirror_z) instance->set_mirror(Z, -1.0);
                 }
                 if (transform.rotation_z_deg != 0.0) {
                     instance->set_rotation(Z, instance->get_rotation(Z) + Geometry::deg2rad(transform.rotation_z_deg));
@@ -331,6 +341,8 @@ void apply_volume_specs(Slic3r::ModelObject* object, const std::string& text) {
         if (size.minCoeff() <= 0.0) continue;
         ModelVolumeType type;
         if (p[0] == "modifier") type = ModelVolumeType::PARAMETER_MODIFIER;
+        else if (p[0] == "negative") type = ModelVolumeType::NEGATIVE_VOLUME;
+        else if (p[0] == "part") type = ModelVolumeType::MODEL_PART;
         else if (p[0] == "blocker") type = ModelVolumeType::SUPPORT_BLOCKER;
         else if (p[0] == "enforcer") type = ModelVolumeType::SUPPORT_ENFORCER;
         else continue;
@@ -341,7 +353,7 @@ void apply_volume_specs(Slic3r::ModelObject* object, const std::string& text) {
         else continue;
         ModelVolume* volume = object->add_volume(std::move(mesh), type);
         volume->set_offset(center); // already in the object's frame
-        if (type == ModelVolumeType::PARAMETER_MODIFIER && p.size() == 5 && !p[4].empty()) {
+        if ((type == ModelVolumeType::PARAMETER_MODIFIER || type == ModelVolumeType::MODEL_PART) && p.size() == 5 && !p[4].empty()) {
             ConfigSubstitutionContext substitutions(ForwardCompatibilitySubstitutionRule::Disable);
             for (const std::string& kv : split_text(p[4], '|')) {
                 size_t eq = kv.find('=');
@@ -359,6 +371,23 @@ void apply_object_extras(Slic3r::ModelObject* object, const ObjectExtras& extras
     if (object == nullptr) return;
     apply_paint_strokes(object, parse_strokes(extras.paint_strokes));
     apply_volume_specs(object, extras.volume_specs);
+    for (const LayerRange& range : extras.layer_ranges) {
+        if (!(range.z1 > range.z0) || range.z0 < 0.0) throw std::runtime_error("A height range needs 0 <= from < to.");
+        static const Slic3r::PrintObjectConfig range_object_options;
+        static const Slic3r::PrintRegionConfig range_region_options;
+        Slic3r::ModelConfig& range_config = object->layer_config_ranges[{range.z0, range.z1}];
+        for (const auto& [key, value] : range.settings) {
+            if (range_object_options.option(key) == nullptr && range_region_options.option(key) == nullptr)
+                throw std::runtime_error("\"" + key + "\" can't be set for a height range.");
+            Slic3r::ConfigSubstitutionContext ctx(Slic3r::ForwardCompatibilitySubstitutionRule::Disable);
+            try { range_config.set_deserialize(key, value, ctx); }
+            catch (const std::exception& e) { throw std::runtime_error("Bad value for \"" + key + "\" in a height range: " + e.what()); }
+        }
+    }
+    if (!extras.layer_profile.empty()) {
+        if (extras.layer_profile.size() % 2 != 0) throw std::runtime_error("A layer height profile is z / height pairs.");
+        object->layer_height_profile.set(extras.layer_profile);
+    }
     // Per-object settings: the options Orca's object list offers for an object (region and object options).
     static const Slic3r::PrintObjectConfig object_options;
     static const Slic3r::PrintRegionConfig region_options;
@@ -751,6 +780,35 @@ indexed_triangle_set soup_to_its(const std::vector<float>& soup) {
     return mesh;
 }
 } // namespace
+
+std::vector<double> adaptive_layer_profile(const std::vector<float>& soup, const std::vector<std::string>& profile_paths,
+                                           const std::vector<std::pair<std::string, std::string>>& config_overrides,
+                                           const ModelTransform& transform, float quality) {
+    using namespace Slic3r;
+    DynamicPrintConfig config = DynamicPrintConfig::full_print_config();
+    for (const auto& profile_path : profile_paths) {
+        DynamicPrintConfig profile_config;
+        profile_config.load(profile_path, ForwardCompatibilitySubstitutionRule::Enable);
+        drop_unset_feature_filaments(profile_config);
+        config.apply(profile_config);
+    }
+    for (const auto& [key, value] : config_overrides) config.set_deserialize_strict(key, value);
+    expand_filament_variants(config, 0, config_overrides);
+
+    Model model;
+    ModelObject* object = model.add_object();
+    object->add_volume(TriangleMesh(soup_to_its(soup)));
+    ModelInstance* instance = object->add_instance();
+    instance->set_scaling_factor(Vec3d(transform.scale * transform.scale_x, transform.scale * transform.scale_y, transform.scale * transform.scale_z));
+    object->ensure_on_bed();
+    PrintObjectConfig object_config;
+    object_config.apply(config, true);
+    PrintConfig print_config;
+    print_config.apply(config, true);
+    const double height = object->bounding_box_exact().size().z();
+    const SlicingParameters params = SlicingParameters::create_from_config(print_config, object_config, height, std::vector<unsigned int>{1}, Vec3d::Ones());
+    return layer_height_profile_adaptive(params, *object, std::min(1.f, std::max(0.f, quality)));
+}
 
 std::vector<double> orient_mesh_soup(const std::vector<float>& soup) {
     using namespace Slic3r;

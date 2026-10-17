@@ -32,6 +32,16 @@ struct OptionNotice {
     std::vector<std::pair<std::string, std::string>> changes;
 };
 
+// One row of the filament "Setting Overrides" page (Orca's TabFilament::update_filament_overrides_page): a checkbox that
+// turns the override on, and the field it unlocks. An unchecked override shows the printer's (or process's) value.
+struct OverrideState {
+    bool checkbox_enabled = true; // the checkbox can be clicked (retraction overrides need a retraction length)
+    bool checked = false;         // the filament carries its own value (the option is not nil)
+    bool field_enabled = false;   // the value can be edited
+    bool visible = true;          // the row is shown (the cut-retraction rows need the printer to allow them)
+    std::string inherited;        // the value shown while unchecked, from the printer / process, serialized
+};
+
 struct OptionStates {
     // Only settings a rule mentions appear here; every other setting is enabled and visible. Per-extruder settings are
     // keyed "key#index" (extruder index from 0), Orca's own naming for a vector option's line.
@@ -41,6 +51,10 @@ struct OptionStates {
     // Values Orca's GUI forces while applying the rules (for example arc fitting is switched off when extrusion-rate
     // smoothing is on), as {key, serialized value}. Callers apply them so the project matches what Orca would slice.
     std::vector<std::pair<std::string, std::string>> forced;
+    // Setting Overrides page rows, keyed by the filament option (filament_option_states only).
+    std::map<std::string, OverrideState> overrides;
+    // Dropdown contents that depend on other settings, as {value, label} (printer_option_states: imex_tool_layout).
+    std::map<std::string, std::vector<std::pair<std::string, std::string>>> choices;
 };
 
 struct OptionContext {
@@ -51,6 +65,7 @@ struct OptionContext {
     std::string printer_model_id;  // the vendor model id (for example "SM_U1", "C11"), for the default bed type
     bool is_plate_config = false;  // settings of one plate (Orca skips the spiral vase check there)
     int filament_count = 1;        // filaments in the project (support filament indices above it are reset)
+    bool has_variable_layer = false; // some object has a variable layer height profile or height ranges (the mixed sub-layer warning)
     bool expert_mode = true;       // Orca's expert mode (a few rules show settings only to experts)
 };
 

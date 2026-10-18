@@ -8,8 +8,13 @@
 #include "libslic3r/BuildVolume.hpp"
 #include "libslic3r/ExPolygon.hpp"
 
+#include "libslic3r/Color.hpp"
+#include "libslic3r/Point.hpp"
+#include <string>
+#include "libslic3r/BoundingBox.hpp"
 #include <tuple>
 #include <array>
+#include <vector>
 
 namespace Slic3r {
 namespace GUI {
@@ -100,6 +105,7 @@ private:
     std::string m_model_filename;
     // Print volume bounding box exteded with axes and model.
     BoundingBoxf3 m_extended_bounding_box;
+    BoundingBoxf3 m_printable_bounding_box;
     // Slightly expanded print bed polygon, for collision detection.
     //Polygon m_polygon;
     GLModel m_triangles;
@@ -109,12 +115,16 @@ private:
     //GLTexture m_temp_texture;
     GLModel m_model;
     Vec3d m_model_offset{ Vec3d::Zero() };
+    GLModel m_gravity_arrow;
+    float   m_gravity_arrow_length{ 0.f };
     Axes m_axes;
 
     float m_scale_factor{ 1.0f };
     //BBS: add part plate related logic
     Vec2d m_position{ Vec2d::Zero() };
     std::vector<Vec2d>  m_bed_shape;
+    std::vector<std::vector<Vec2d>> m_extruder_shapes;
+    std::vector<double> m_extruder_heights;
     bool m_is_dark = false;
 
 public:
@@ -126,15 +136,17 @@ public:
     //FIXME if the build volume max print height is updated, this function still returns zero
     // as this class does not use it, thus there is no need to update the UI.
     // BBS
-    bool set_shape(const Pointfs& printable_area, const double printable_height, const std::string& custom_model, bool force_as_custom = false,
-        const Vec2d& position = Vec2d::Zero(), bool with_reset = true);
+    bool set_shape(const Pointfs& printable_area, const double printable_height, std::vector<Pointfs> extruder_areas, std::vector<double> extruder_heights, const std::string& custom_model, bool force_as_custom = false,
+        const Vec2d position = Vec2d::Zero(), bool with_reset = true);
 
     void set_position(Vec2d& position);
     void set_axes_mode(bool origin);
+    void set_axes_origin(const Vec3d& origin) { m_axes.set_origin(origin); }   // Design tab: triad at bed centre
     const Vec2d& get_position() const { return m_position; }
 
     // Build volume geometry for various collision detection tasks.
     const BuildVolume& build_volume() const { return m_build_volume; }
+    BuildVolume& build_volume() { return m_build_volume; }
 
     // Was the model provided, or was it generated procedurally?
     Type get_type() const { return m_type; }
@@ -146,6 +158,7 @@ public:
 
     // Bounding box around the print bed, axes and model, for rendering.
     const BoundingBoxf3& extended_bounding_box() const { return m_extended_bounding_box; }
+    const BoundingBoxf3 &printable_bounding_box() const { return m_printable_bounding_box; }
 
     // Check against an expanded 2d bounding box.
     //FIXME shall one check against the real build volume?
@@ -159,7 +172,8 @@ public:
 private:
     //BBS: add partplate related logic
     // Calculate an extended bounding box from axes and current model for visualization purposes.
-    BoundingBoxf3 calc_extended_bounding_box(bool consider_model_offset = true) const;
+    BoundingBoxf3 calc_printable_bounding_box() const;
+    BoundingBoxf3 calc_extended_bounding_box() const;
     void update_model_offset();
     //BBS: with offset
     void update_bed_triangles();
@@ -172,7 +186,8 @@ private:
     void render_model(const Transform3d& view_matrix, const Transform3d& projection_matrix);
     void render_custom(GLCanvas3D& canvas, const Transform3d& view_matrix, const Transform3d& projection_matrix, bool bottom);
     void render_default(bool bottom, const Transform3d& view_matrix, const Transform3d& projection_matrix);
-    
+    void render_gravity_arrow(const Transform3d& view_matrix, const Transform3d& projection_matrix);
+
     // BBS: remove the bed picking logic
     // void register_raycasters_for_picking(const GLModel::Geometry& geometry, const Transform3d& trafo);
 };

@@ -1,8 +1,10 @@
 #pragma once
 #include <boost/nowide/cstdio.hpp>
 #include <boost/nowide/fstream.hpp>
-#include "stackwalker.h"
+#include "StackWalker.h"
 #include <eh.h>
+#include <cstddef>
+#include <string>
 
 class CBaseException : public CStackWalker
 {
@@ -25,5 +27,7 @@ protected:
 	PEXCEPTION_POINTERS m_pEp;
 	boost::nowide::ofstream *output_file;
 };
+
+#define SET_DEFULTER_HANDLER() SetUnhandledExceptionFilter(CBaseException::UnhandledExceptionFilter)
 
 #define SET_DEFAUL_EXCEPTION() _set_se_translator(CBaseException::STF)

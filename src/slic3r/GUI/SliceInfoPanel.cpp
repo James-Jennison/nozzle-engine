@@ -1,15 +1,35 @@
 #include "SliceInfoPanel.hpp"
 
+#include <array>
 #include <boost/log/trivial.hpp>
-#include "I18N.hpp"
-#include "Widgets/Label.hpp"
+#include <wx/object.h>
+#include "slic3r/GUI/Widgets/PopupWindow.hpp"
+#include <wx/colour.h>
+#include <string>
+#include <cstddef>
+#include "slic3r/GUI/GUI_Utils.hpp"
+#include "libslic3r/ProjectTask.hpp"
+#include <wx/string.h>
+#include <wx/popupwin.h>
+#include <wx/scrolwin.h>
+#include <wx/event.h>
+#include <wx/sizer.h>
+#include "slic3r/GUI/wxExtensions.hpp"
+#include <wx/gdicmn.h>
+#include <wx/stattext.h>
+#include "slic3r/GUI/Widgets/StaticLine.hpp"
+#include "slic3r/GUI/Widgets/Button.hpp"
+#include <wx/panel.h>
+#include <wx/anybutton.h>
+#include <wx/webrequest.h>
 #include "libslic3r/Utils.hpp"
+
+class wxWindow;
 
 namespace Slic3r {
 namespace GUI {
 
 #define THUMBNAIL_SIZE  (wxSize(FromDIP(60), FromDIP(60)))
-#define ICON_SIZE       (wxSize(FromDIP(16), FromDIP(16)))
 #define PRINT_ICON_SIZE (wxSize(FromDIP(18), FromDIP(18)))
 
 wxIMPLEMENT_CLASS(SliceInfoPopup, PopupWindow);
@@ -22,14 +42,6 @@ wxBEGIN_EVENT_TABLE(SliceInfoPopup, PopupWindow)
 wxEND_EVENT_TABLE()
 
 static wxColour BUTTON_BORDER_COL = wxColour(255, 255, 255);
-
-inline int hex_digit_to_int(const char c)
-{
-    return
-        (c >= '0' && c <= '9') ? int(c - '0') :
-        (c >= 'A' && c <= 'F') ? int(c - 'A') + 10 :
-        (c >= 'a' && c <= 'f') ? int(c - 'a') + 10 : -1;
-}
 
 inline float calc_gray(wxColour color)
 {
@@ -123,7 +135,7 @@ SliceInfoPopup::SliceInfoPopup(wxWindow *parent, wxBitmap bmp, BBLSliceInfo *inf
             f_sizer->Add(f_type, 0, wxEXPAND | wxALL, FromDIP(5));
             f_sizer->Add(f_used_g, 0, wxEXPAND | wxALL, FromDIP(5));
             grid_sizer->Add(f_sizer, 0, wxEXPAND, 0);
-            f_type->Bind(wxEVT_LEFT_DOWN, [this](auto &e) {});
+            f_type->Bind(wxEVT_LEFT_DOWN, [](auto &e) {});
         }
     }
     topSizer->Add(grid_sizer, 0, wxALL, FromDIP(5));
@@ -183,7 +195,7 @@ SliceInfoPanel::SliceInfoPanel(wxWindow *parent, wxBitmap &prediction, wxBitmap 
     this->SetBackgroundColour(*wxWHITE);
 
     m_item_top_sizer = new wxBoxSizer(wxHORIZONTAL);
-    
+
     m_bmp_item_thumbnail = new wxStaticBitmap(this, wxID_ANY, wxNullBitmap, wxDefaultPosition, wxDefaultSize, wxBU_AUTODRAW | 0);
     m_bmp_item_thumbnail->SetMinSize(THUMBNAIL_SIZE);
     m_bmp_item_thumbnail->SetSize(THUMBNAIL_SIZE);

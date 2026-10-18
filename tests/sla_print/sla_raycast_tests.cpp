@@ -1,11 +1,14 @@
+#include <array>
+#include <catch2/catch_all.hpp>
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers.hpp>
-#include <test_utils.hpp>
+#include <catch2/catch_approx.hpp>
 
-#include <libslic3r/SLA/IndexedMesh.hpp>
+#include "libslic3r/Point.hpp"
+#include <cstdlib>
+#include <cmath>
 #include <libslic3r/SLA/Hollowing.hpp>
+#include <utility>
 
-#include "sla_test_utils.hpp"
 
 using namespace Slic3r;
 
@@ -21,8 +24,8 @@ TEST_CASE("Raycaster - find intersections of a line and cylinder")
     s = {-1.f, 0, 5.f};
     dir = {1.f, 0, 0};
     hole.get_intersections(s, dir, out);
-    REQUIRE_THAT(out[0].first, WithinRel(-4.f, 0.001));
-    REQUIRE_THAT(out[1].first, WithinRel(6.f, 0.001));
+    REQUIRE(out[0].first == Catch::Approx(-4.f));
+    REQUIRE(out[1].first == Catch::Approx(6.f));
 
     // Start outside and cast parallel to axis.
     s = {0, 0, -1.f};
@@ -71,25 +74,25 @@ TEST_CASE("Raycaster with loaded drillholes", "[sla_raycast]")
     Vec3d s = center.cast<double>();
     // Fire from center, should hit the interior wall
     auto hit = emesh.query_ray_hit(s, {0, 1., 0.});
-    REQUIRE_THAT(hit.distance(), WithinRel(boxbb.size().x() / 2 - hcfg.min_thickness, 0.001));
+    REQUIRE(hit.distance() == Catch::Approx(boxbb.size().x() / 2 - hcfg.min_thickness));
     
     // Fire upward from hole center, hit distance equals the radius (hits the
     // side of the hole cut.
     s.y() = hcfg.min_thickness / 2;
     hit = emesh.query_ray_hit(s, {0, 0., 1.});
-    REQUIRE_THAT(hit.distance(), WithinRel(radius, 0.001));
+    REQUIRE(hit.distance() == Catch::Approx(radius));
 
     // Fire from outside, hit the back side of the cube interior
     s.y() = -1.;
     hit = emesh.query_ray_hit(s, {0, 1., 0.});
-    REQUIRE_THAT(hit.distance(), WithinRel(boxbb.max.y() - hcfg.min_thickness - s.y(), 0.001));
+    REQUIRE(hit.distance() == Catch::Approx(boxbb.max.y() - hcfg.min_thickness - s.y()));
     
     // Fire downwards from above the hole cylinder. Has to go through the cyl.
     // as it was not there.
     s = center.cast<double>();
     s.z() = boxbb.max.z() - hcfg.min_thickness - 1.;
     hit = emesh.query_ray_hit(s, {0, 0., -1.});
-    REQUIRE_THAT(hit.distance(), WithinRel(s.z() - boxbb.min.z() - hcfg.min_thickness, 0.001));
+    REQUIRE(hit.distance() == Catch::Approx(s.z() - boxbb.min.z() - hcfg.min_thickness));
 
     // Check for support tree correctness
     test_support_model_collision("20mm_cube.obj", {}, hcfg, holes);

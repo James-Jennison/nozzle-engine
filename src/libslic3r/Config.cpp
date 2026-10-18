@@ -1,11 +1,29 @@
 #include "Config.hpp"
+#include "Exception.hpp"
+#include "Point.hpp"
 #include "format.hpp"
+#include "I18N.hpp"
 #include "Utils.hpp"
 #include "LocalesUtils.hpp"
 #include "Preset.hpp"
 
+#include <algorithm>
 #include <assert.h>
+#include <cmath>
+#include <boost/algorithm/string/join.hpp>
+#include <cstdlib>
+#include <exception>
+#include <cctype>
+#include <boost/algorithm/string/trim.hpp>
 #include <fstream>
+#include <functional>
+#include <set>
+#include <initializer_list>
+#include <map>
+#include <list>
+#include <optional>
+#include <memory>
+#include <sstream>
 #include <iostream>
 #include <iomanip>
 #include <regex>
@@ -24,8 +42,15 @@
 #include <boost/nowide/fstream.hpp>
 #include <boost/property_tree/ini_parser.hpp>
 #include <boost/format.hpp>
+#include <stdexcept>
 #include <string.h>
+#include <string>
+#include <vector>
+#include <utility>
+#include <system_error>
 //BBS: add json support
+#include "libslic3r.h"
+#include "libslic3r_version.h"
 #include "nlohmann/json.hpp"
 
 using namespace nlohmann;
@@ -35,6 +60,8 @@ using namespace nlohmann;
 #include "PrintConfig.hpp"
 
 namespace Slic3r {
+
+std::function<std::string(std::string, std::string)> ConfigBase::resolve_capability_fn = nullptr;
 
 //BBS: add json support
 //static const std::string CONFIG_VERSION_KEY = "version";
@@ -84,12 +111,12 @@ std::string escape_strings_cstyle(const std::vector<std::string> &strs)
             // Separate the strings.
             (*outptr ++) = ';';
         const std::string &str = strs[j];
-        // Is the string simple or complex? Complex string contains spaces, tabs, new lines and other
-        // escapable characters. Empty string shall be quoted as well, if it is the only string in strs.
+        // Is the string simple or complex? Complex string contains spaces, tabs, semicolons, new lines
+        // and other escapable characters. Empty string shall be quoted as well, if it is the only string in strs.
         bool should_quote = strs.size() == 1 && str.empty();
         for (size_t i = 0; i < str.size(); ++ i) {
             char c = str[i];
-            if (c == ' ' || c == '\t' || c == '\\' || c == '"' || c == '\r' || c == '\n') {
+            if (c == ' ' || c == '\t' || c == ';' || c == '\\' || c == '"' || c == '\r' || c == '\n') {
                 should_quote = true;
                 break;
             }
@@ -300,22 +327,36 @@ ConfigOption* ConfigOptionDef::create_default_option() const
             return new ConfigOptionEnumGeneric(this->enum_keys_map, this->default_value->getInt());
 
         if (type == coEnums) {
-            auto dft = this->default_value->clone();
-            if (dft->nullable()) {
-                ConfigOptionEnumsGenericNullable *opt = dynamic_cast<ConfigOptionEnumsGenericNullable *>(this->default_value->clone());
-                opt->keys_map = this->enum_keys_map;
-                return opt;
-            } else {
-                ConfigOptionEnumsGeneric *opt = dynamic_cast<ConfigOptionEnumsGeneric *>(this->default_value->clone());
-                opt->keys_map = this->enum_keys_map;
-                return opt;
-            }
-            delete dft;
+            // Enum list defaults are built without a keys map, which the copy needs to deserialize and serialize names.
+            ConfigOption *opt = this->default_value->clone();
+            if (auto *nullable_enums = dynamic_cast<ConfigOptionEnumsGenericNullable *>(opt))
+                nullable_enums->keys_map = this->enum_keys_map;
+            else if (auto *enums = dynamic_cast<ConfigOptionEnumsGeneric *>(opt))
+                enums->keys_map = this->enum_keys_map;
+            return opt;
         }
 
         return this->default_value->clone();
     }
     return this->create_empty_option();
+}
+
+bool ConfigOptionDef::is_value_valid(const double value, const int max_precision /*= 4*/) const
+{
+    // Special handling for the nil values
+    // The nil value is a valid one only for nullable options
+    if (std::isnan(value))
+        return this->nullable;
+
+    // Special handling of 0
+    if (this->min == 0.f && value < 0)
+        return false;
+
+    const double ep = std::pow(0.1, max_precision);
+    if (is_approx(value, (double) this->min, ep) || is_approx(value, (double) this->max, ep))
+        return true;
+
+    return this->min <= value && value <= this->max;
 }
 
 // Assignment of the serialization IDs is not thread safe. The Defs shall be initialized from the main thread!
@@ -440,26 +481,6 @@ std::ostream& ConfigDef::print_cli_help(std::ostream& out, bool show_defaults, s
     return out;
 }
 
-namespace {
-
-bool parse_indexed_option_key(const std::string &key, std::string &base_key, size_t &index)
-{
-    const size_t hash = key.rfind('#');
-    if (hash == std::string::npos || hash == 0 || hash + 1 == key.size())
-        return false;
-    size_t parsed = 0;
-    for (size_t i = hash + 1; i < key.size(); ++i) {
-        if (key[i] < '0' || key[i] > '9')
-            return false;
-        parsed = parsed * 10 + size_t(key[i] - '0');
-    }
-    base_key = key.substr(0, hash);
-    index = parsed;
-    return true;
-}
-
-} // namespace
-
 void ConfigBase::apply_only(const ConfigBase &other, const t_config_option_keys &keys, bool ignore_nonexistent)
 {
     // loop through options and apply them
@@ -469,31 +490,34 @@ void ConfigBase::apply_only(const ConfigBase &other, const t_config_option_keys 
         // an exception is thrown if not ignore_nonexistent.
         ConfigOption *my_opt = this->option(opt_key, true);
         if (my_opt == nullptr) {
-            std::string base_key;
-            size_t index = 0;
-            if (parse_indexed_option_key(opt_key, base_key, index)) {
-                auto *my_vector = dynamic_cast<ConfigOptionVectorBase *>(this->option(base_key, true));
-                const auto *other_vector = dynamic_cast<const ConfigOptionVectorBase *>(other.option(base_key));
-                if (my_vector != nullptr && other_vector != nullptr && index < other_vector->size()) {
-                    if (my_vector->empty())
-                        my_vector->resize(index + 1, other_vector);
-                    else if (index >= my_vector->size())
-                        my_vector->resize(index + 1);
-                    my_vector->set_at(other_vector, index, index);
+            // opt_key does not exist in this ConfigBase and it cannot be created, because it is not defined by this->def().
+            // This is only possible if other is of DynamicConfig type.
+            if (auto n = opt_key.find('#'); n != std::string::npos) {
+                auto opt_key2 = opt_key.substr(0, n);
+                auto my_opt2 = dynamic_cast<ConfigOptionVectorBase*>(this->option(opt_key2));
+                auto other_opt = other.option(opt_key2);
+                if (my_opt2 == nullptr && other_opt) {
+                    my_opt2 = dynamic_cast<ConfigOptionVectorBase *>(this->option(opt_key2, true));
+                    if (my_opt2->empty()) {
+                        my_opt2->resize(1, other_opt);
+                    }
+                }   
+                if (my_opt2) {
+                    int index = std::atoi(opt_key.c_str() + n + 1);
+                    if (other_opt)
+                        my_opt2->set_at(other_opt, index, index);
                     continue;
                 }
             }
-            // opt_key does not exist in this ConfigBase and it cannot be created, because it is not defined by this->def().
-            // This is only possible if other is of DynamicConfig type.
             if (ignore_nonexistent)
                 continue;
             throw UnknownOptionException(opt_key);
         }
-        const ConfigOption *other_opt = other.option(opt_key);
-        if (other_opt == nullptr) {
+		const ConfigOption *other_opt = other.option(opt_key);
+		if (other_opt == nullptr) {
             // The key was not found in the source config, therefore it will not be initialized!
 //			printf("Not found, therefore not initialized: %s\n", opt_key.c_str());
-        } else
+		} else
             my_opt->set(other_opt);
     }
 }
@@ -507,12 +531,8 @@ bool ConfigBase::equals(const ConfigBase &other, const std::set<std::string>* sk
             continue;
         const ConfigOption *this_opt  = this->option(opt_key);
         const ConfigOption *other_opt = other.option(opt_key);
-        if (this_opt != nullptr && other_opt != nullptr) {
-            if (this_opt->type() != other_opt->type())
-                return false;
-            if (*this_opt != *other_opt)
-                return false;
-        }
+        if (this_opt != nullptr && other_opt != nullptr && *this_opt != *other_opt)
+            return false;
     }
     return true;
 }
@@ -524,10 +544,8 @@ t_config_option_keys ConfigBase::diff(const ConfigBase &other) const
     for (const t_config_option_key &opt_key : this->keys()) {
         const ConfigOption *this_opt  = this->option(opt_key);
         const ConfigOption *other_opt = other.option(opt_key);
-        if (this_opt != nullptr && other_opt != nullptr) {
-            if (this_opt->type() != other_opt->type() || *this_opt != *other_opt)
-                diff.emplace_back(opt_key);
-        }
+        if (this_opt != nullptr && other_opt != nullptr && *this_opt != *other_opt)
+            diff.emplace_back(opt_key);
     }
     return diff;
 }
@@ -539,8 +557,7 @@ t_config_option_keys ConfigBase::equal(const ConfigBase &other) const
     for (const t_config_option_key &opt_key : this->keys()) {
         const ConfigOption *this_opt  = this->option(opt_key);
         const ConfigOption *other_opt = other.option(opt_key);
-        if (this_opt != nullptr && other_opt != nullptr &&
-            this_opt->type() == other_opt->type() && *this_opt == *other_opt)
+        if (this_opt != nullptr && other_opt != nullptr && *this_opt == *other_opt)
             equal.emplace_back(opt_key);
     }
     return equal;
@@ -597,7 +614,7 @@ bool ConfigBase::set_deserialize_nothrow(const t_config_option_key &opt_key_src,
 void ConfigBase::set_deserialize(const t_config_option_key &opt_key_src, const std::string &value_src, ConfigSubstitutionContext& substitutions_ctxt, bool append)
 {
 	if (! this->set_deserialize_nothrow(opt_key_src, value_src, substitutions_ctxt, append))
-		throw BadOptionValueException(format("Invalid value provided for parameter %1%: %2%", opt_key_src,  value_src));
+		throw BadOptionValueException(format(_u8L("Invalid value provided for parameter %1%: %2%"), opt_key_src,  value_src));
 }
 
 void ConfigBase::set_deserialize(std::initializer_list<SetDeserializeItem> items, ConfigSubstitutionContext& substitutions_ctxt)
@@ -642,6 +659,12 @@ bool ConfigBase::set_deserialize_raw(const t_config_option_key &opt_key_src, con
 
     ConfigOption *opt = this->option(opt_key, true);
     assert(opt != nullptr);
+    // An enum vector created from its default value has no name table (the initializer-list constructor leaves it null), so setting it
+    // by name (an override, a profile value that was never loaded) dereferenced a null map. Give it the definition's table first.
+    if (optdef->type == coEnums && optdef->enum_keys_map) {
+        if (auto *generic = dynamic_cast<ConfigOptionEnumsGeneric*>(opt)) { if (generic->keys_map == nullptr) generic->keys_map = optdef->enum_keys_map; }
+        else if (auto *nullable = dynamic_cast<ConfigOptionEnumsGenericNullable*>(opt)) { if (nullable->keys_map == nullptr) nullable->keys_map = optdef->enum_keys_map; }
+    }
     bool success     = false;
     bool substituted = false;
     if (optdef->type == coBools && substitutions_ctxt.rule != ForwardCompatibilitySubstitutionRule::Disable) {
@@ -691,6 +714,32 @@ bool ConfigBase::set_deserialize_raw(const t_config_option_key &opt_key_src, con
     return success;
 }
 
+double ConfigBase::get_abs_value_at(const t_config_option_key &opt_key, size_t index) const
+{
+    const ConfigOption *raw_opt = this->option(opt_key);
+    assert(raw_opt != nullptr);
+    if (raw_opt->type() == coFloats) {
+        return static_cast<const ConfigOptionFloats*>(raw_opt)->get_at(index);
+    }
+    if (raw_opt->type() == coFloatsOrPercents) {
+        const ConfigDef *def = this->def();
+        if (def == nullptr) throw NoDefinitionException(opt_key);
+        const ConfigOptionDef *opt_def = def->get(opt_key);
+        assert(opt_def != nullptr);
+
+        if (opt_def->ratio_over.empty()) {
+            return 0;
+        } else {
+            const ConfigOption *ratio_opt = this->option(opt_def->ratio_over);
+            assert(ratio_opt->type() == coFloats);
+            const ConfigOptionFloats *ratio_values = static_cast<const ConfigOptionFloats *>(ratio_opt);
+            return static_cast<const ConfigOptionFloatsOrPercents *>(raw_opt)->get_at(index).get_abs_value(ratio_values->get_at(index));
+        }
+    }
+
+    throw ConfigurationError("ConfigBase::get_abs_value_at(): Not a valid option type for get_abs_value_at()");
+}
+
 // Return an absolute value of a possibly relative config variable.
 // For example, return absolute infill extrusion width, either from an absolute value, or relative to the layer height.
 double ConfigBase::get_abs_value(const t_config_option_key &opt_key) const
@@ -710,12 +759,6 @@ double ConfigBase::get_abs_value(const t_config_option_key &opt_key) const
       return static_cast<const ConfigOptionInt *>(raw_opt)->value;
     if (raw_opt->type() == coBool)
       return static_cast<const ConfigOptionBool *>(raw_opt)->value ? 1 : 0;
-    // Snapmaker: flow-variant
-    if (raw_opt->type() == coFloats) {
-        const auto *floats = static_cast<const ConfigOptionFloats*>(raw_opt);
-        if (!floats->values.empty())
-            return floats->values.front();
-    }
 
     const ConfigOptionPercent *cast_opt = nullptr;
     if (raw_opt->type() == coFloatOrPercent) {
@@ -758,7 +801,9 @@ double ConfigBase::get_abs_value(const t_config_option_key &opt_key, double rati
 {
     // Get stored option value.
     const ConfigOption *raw_opt = this->option(opt_key);
-    assert(raw_opt != nullptr);
+    // Mirror the single-arg overload — assert() is a no-op under NDEBUG.
+    if (raw_opt == nullptr)
+        throw ConfigurationError("ConfigBase::get_abs_value(): \"" + opt_key + "\" is not defined");
     if (raw_opt->type() != coFloatOrPercent)
         throw ConfigurationError("ConfigBase::get_abs_value(): opt_key is not of coFloatOrPercent");
     // Compute absolute value.
@@ -840,6 +885,50 @@ int ConfigBase::load_from_json(const std::string &file, ConfigSubstitutionContex
 
     CNumericLocalesSetter locales_setter;
 
+    std::function<bool(const json::const_iterator&, const char,const char,const bool,std::string&)> parse_str_arr = [&parse_str_arr](const json::const_iterator& it, const char single_sep,const char array_sep,const bool escape_string_style,std::string& value_str)->bool {
+        // must have consistent type name
+        std::string consistent_type;
+        for (auto iter = it.value().begin(); iter != it.value().end(); ++iter) {
+            if (consistent_type.empty())
+                consistent_type = iter.value().type_name();
+            else {
+                if (consistent_type != iter.value().type_name())
+                    return false;
+            }
+        }
+
+        bool first = true;
+        for (auto iter = it.value().begin(); iter != it.value().end(); iter++) {
+            if (iter.value().is_array()) {
+                if (!first)
+                    value_str += array_sep;
+                else
+                    first = false;
+                bool success = parse_str_arr(iter, single_sep, array_sep,escape_string_style, value_str);
+                if (!success)
+                    return false;
+            }
+            else if (iter.value().is_string()) {
+                if (!first)
+                    value_str += single_sep;
+                else
+                    first = false;
+                if (!escape_string_style)
+                    value_str += iter.value();
+                else {
+                    value_str += "\"";
+                    value_str += escape_string_cstyle(iter.value());
+                    value_str += "\"";
+                }
+            }
+            else {
+                //should not happen
+                return false;
+            }
+        }
+        return true;
+        };
+
     try {
         boost::nowide::ifstream ifs(file);
         ifs >> j;
@@ -852,41 +941,44 @@ int ConfigBase::load_from_json(const std::string &file, ConfigSubstitutionContex
         }
         //parse the json elements
         for (auto it = j.begin(); it != j.end(); it++) {
-            if (boost::iequals(it.key(),BBL_JSON_KEY_VERSION)) {
+            if (ascii_iequals(it.key(), BBL_JSON_KEY_VERSION)) {
                 key_values.emplace(BBL_JSON_KEY_VERSION, it.value());
             }
-            else if (boost::iequals(it.key(), BBL_JSON_KEY_IS_CUSTOM)) {
-                key_values.emplace(BBL_JSON_KEY_IS_CUSTOM, it.value());
+            else if (ascii_iequals(it.key(), BBL_JSON_KEY_IS_CUSTOM)) {
+                //skip it
             }
-            else if (boost::iequals(it.key(), BBL_JSON_KEY_NAME)) {
+            else if (ascii_iequals(it.key(), BBL_JSON_KEY_NAME)) {
                 key_values.emplace(BBL_JSON_KEY_NAME, it.value());
                 if (it.value() == "project_settings")
                     is_project_settings = true;
             }
-            else if (boost::iequals(it.key(), BBL_JSON_KEY_URL)) {
+            else if (ascii_iequals(it.key(), BBL_JSON_KEY_URL)) {
                 key_values.emplace(BBL_JSON_KEY_URL, it.value());
             }
-            else if (boost::iequals(it.key(), BBL_JSON_KEY_TYPE)) {
+            else if (ascii_iequals(it.key(), BBL_JSON_KEY_TYPE)) {
                 key_values.emplace(BBL_JSON_KEY_TYPE, it.value());
             }
-            else if (boost::iequals(it.key(), BBL_JSON_KEY_SETTING_ID)) {
+            else if (ascii_iequals(it.key(), BBL_JSON_KEY_SETTING_ID)) {
                 key_values.emplace(BBL_JSON_KEY_SETTING_ID, it.value());
             }
-            else if (boost::iequals(it.key(), BBL_JSON_KEY_FILAMENT_ID)) {
+            else if (ascii_iequals(it.key(), BBL_JSON_KEY_FILAMENT_ID)) {
                 key_values.emplace(BBL_JSON_KEY_FILAMENT_ID, it.value());
             }
-            else if (boost::iequals(it.key(), BBL_JSON_KEY_FROM)) {
+            else if (ascii_iequals(it.key(), BBL_JSON_KEY_FROM)) {
                 key_values.emplace(BBL_JSON_KEY_FROM, it.value());
             }
-            else if (boost::iequals(it.key(), BBL_JSON_KEY_DESCRIPTION)) {
+            else if (ascii_iequals(it.key(), BBL_JSON_KEY_DESCRIPTION)) {
                 key_values.emplace(BBL_JSON_KEY_DESCRIPTION, it.value());
             }
-            else if (boost::iequals(it.key(), BBL_JSON_KEY_INSTANTIATION)) {
+            else if (ascii_iequals(it.key(), BBL_JSON_KEY_INSTANTIATION)) {
                 key_values.emplace(BBL_JSON_KEY_INSTANTIATION, it.value());
             }
-            else if (!load_inherits_to_config && boost::iequals(it.key(), BBL_JSON_KEY_INHERITS)) {
+            else if (!load_inherits_to_config && ascii_iequals(it.key(), BBL_JSON_KEY_INHERITS)) {
                 key_values.emplace(BBL_JSON_KEY_INHERITS, it.value());
-            } else if (boost::iequals(it.key(), ORCA_JSON_KEY_RENAMED_FROM)) {
+            }
+            else if (!load_inherits_to_config && ascii_iequals(it.key(), BBL_JSON_KEY_INCLUDES)) {
+                key_values.emplace(BBL_JSON_KEY_INCLUDES, it.value().dump());
+            } else if (ascii_iequals(it.key(), ORCA_JSON_KEY_RENAMED_FROM)) {
                 key_values.emplace(ORCA_JSON_KEY_RENAMED_FROM, it.value());
             } else {
                 t_config_option_key opt_key = it.key();
@@ -923,8 +1015,7 @@ int ConfigBase::load_from_json(const std::string &file, ConfigSubstitutionContex
                         substitution_context.unrecogized_keys.push_back(opt_key_src);
                         continue;
                     }
-                    bool valid = true, first = true, use_comma = true;
-                    //bool test2 = (it.key() == std::string("filament_end_gcode"));
+                    bool valid = true, first = true;
                     const ConfigOptionDef* optdef = config_def->get(opt_key);
                     if (optdef == nullptr) {
                         // If we didn't find an option, look for any other option having this as an alias.
@@ -941,55 +1032,29 @@ int ConfigBase::load_from_json(const std::string &file, ConfigSubstitutionContex
                         }
                     }
 
-                    if (optdef && optdef->type == coStrings) {
-                        use_comma = false;
-                    }
-                    std::vector<std::string> array_values;
-                    array_values.reserve(it.value().size());
-                    for (auto iter = it.value().begin(); iter != it.value().end(); iter++) {
-                        if (iter.value().is_string()) {
-                            array_values.emplace_back(iter.value());
-                        }
-                        else {
-                            //should not happen
-                            BOOST_LOG_TRIVIAL(error) << __FUNCTION__<< ": parse "<<file<<" error, invalid json array for " << it.key();
-                            valid = false;
+                    char single_sep = ',';
+                    char array_sep = '#';  // currenty not used
+                    bool escape_string_type = false;
+                    if (optdef) {
+                        switch (optdef->type)
+                        {
+                        case coStrings:
+                            escape_string_type = true;
+                            single_sep = ';';
+                            break;
+                        case coPointsGroups:
+                            single_sep = '#';
+                            break;
+                        default:
                             break;
                         }
                     }
-                    if (valid && optdef != nullptr && optdef->is_scalar() && optdef->type != coPoint && optdef->type != coPoint3) {
-                        if (array_values.size() == 1) {
-                            value_str = array_values.front();
-                        } else if (!array_values.empty()) {
-                            const std::string& first_value = array_values.front();
-                            bool all_values_equal = std::all_of(array_values.begin() + 1, array_values.end(),
-                                                                [&first_value](const std::string& value) { return value == first_value; });
-                            if (all_values_equal) {
-                                value_str = first_value;
-                                BOOST_LOG_TRIVIAL(warning)
-                                    << __FUNCTION__ << ": collapsing redundant json array for scalar option " << it.key() << " in " << file;
-                            }
-                        }
-                    }
-                    if (valid && value_str.empty()) {
-                        for (const std::string &array_value : array_values) {
-                            if (!first) {
-                                if (use_comma)
-                                    value_str += ",";
-                                else
-                                    value_str += ";";
-                            }
-                            else
-                                first = false;
 
-                            if (use_comma)
-                                value_str += array_value;
-                            else {
-                                value_str += "\"";
-                                value_str += escape_string_cstyle(array_value);
-                                value_str += "\"";
-                            }
-                        }
+                    // BBS: we only support 2 depth array
+                    valid = parse_str_arr(it, single_sep, array_sep,escape_string_type, value_str);
+                    if (!valid) {
+                        BOOST_LOG_TRIVIAL(error) << __FUNCTION__ << ": parse " << file << " error, invalid json array for " << it.key();
+                        break;
                     }
                     if (valid)
                         this->set_deserialize(opt_key, value_str, substitution_context);
@@ -1015,7 +1080,8 @@ int ConfigBase::load_from_json(const std::string &file, ConfigSubstitutionContex
                 std::vector<std::string>& different_settings = this->option<ConfigOptionStrings>("different_settings_to_system", true)->values;
                 size_t size = different_settings.size();
                 if (size == 0) {
-                    size = this->option<ConfigOptionStrings>("filament_settings_id")->values.size() + 2;
+                    const auto *filament_ids = this->option<ConfigOptionStrings>("filament_settings_id");
+                    size = (filament_ids ? filament_ids->values.size() : 0) + 2;
                     different_settings.resize(size);
                 }
 
@@ -1114,7 +1180,7 @@ ConfigSubstitutions ConfigBase::load_from_ini(const std::string &file, ForwardCo
         boost::property_tree::read_ini(ifs, tree);
         return this->load(tree, compatibility_rule);
     } catch (const ConfigurationError &e) {
-        throw ConfigurationError(format("Failed loading configuration file \"%1%\": %2%", file, e.what()));
+        throw ConfigurationError(format(_u8L("Failed loading configuration file \"%1%\": %2%"), file, e.what()));
     }
 }
 
@@ -1344,19 +1410,16 @@ ConfigSubstitutions ConfigBase::load_from_gcode_file(const std::string &file, Fo
     // Read a 64k block from the end of the G-code.
 	boost::nowide::ifstream ifs(file);
     BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << boost::format(":  before parse_file %1%") % file.c_str();
-    // Look for Slic3r or Snapmaker_Orca header.
+    // Look for Slic3r or OrcaSlicer header.
     // Look for the header across the whole file as the G-code may have been extended at the start by a post-processing script or the user.
     //BBS
     bool has_delimiters = true;
     {
         //BBS
-        std::string bambuslicer_gcode_header      = "; Snapmaker_Orca";
-        std::string legacy_fs_gcode_header        = std::string("; generated by ") + SLIC3R_APP_NAME;
-        std::string compat_snapmaker_gcode_header = "; generated by Snapmaker Orca";
-        // Must stay in sync with GCodeProcessor::Producers: upstream OrcaSlicer G-code
-        // shares our config block format, and rejecting its header here would abort
-        // the whole import even though the producer is already recognized there.
-        std::string upstream_orca_gcode_header    = "; generated by OrcaSlicer";
+        std::string bambuslicer_gcode_header = "; OrcaSlicer";
+
+        std::string orcaslicer_gcode_header = std::string("; generated by ");
+        orcaslicer_gcode_header += SLIC3R_APP_NAME;
 
         std::string header;
         bool        header_found = false;
@@ -1368,17 +1431,14 @@ ConfigSubstitutions ConfigBase::load_from_gcode_file(const std::string &file, Fo
             line_c = skip_whitespaces(line_c);
             // BBS
             if (strncmp(bambuslicer_gcode_header.c_str(), line_c, strlen(bambuslicer_gcode_header.c_str())) == 0 ||
-                strncmp(legacy_fs_gcode_header.c_str(), line_c, strlen(legacy_fs_gcode_header.c_str())) == 0 ||
-                strncmp(compat_snapmaker_gcode_header.c_str(), line_c, strlen(compat_snapmaker_gcode_header.c_str())) == 0 ||
-                strncmp(upstream_orca_gcode_header.c_str(), line_c, strlen(upstream_orca_gcode_header.c_str())) == 0) {
+                strncmp(orcaslicer_gcode_header.c_str(), line_c, strlen(orcaslicer_gcode_header.c_str())) == 0) {
                 header_found = true;
                 break;
             }
         }
         if (!header_found) {
-            std::string error_message = "Not a gcode file generated by ";
-            error_message += SLIC3R_APP_FULL_NAME;
-            error_message += ".";
+            // TRN %1% is the application name.
+            std::string error_message = format(_u8L("Not a gcode file generated by %1%."), SLIC3R_APP_FULL_NAME);
             BOOST_LOG_TRIVIAL(error) << __FUNCTION__ << error_message;
             throw Slic3r::RuntimeError(error_message.c_str());
         }
@@ -1397,78 +1457,15 @@ ConfigSubstitutions ConfigBase::load_from_gcode_file(const std::string &file, Fo
         bool begin_found = false;
         bool end_found   = false;
         std::string line;
-
-        int thumbnail_id = 0;
-        while (std::getline(ifs, line)) {
-            // 找到缩略图开始标记
-            if (line.find("; THUMBNAIL_BLOCK_START") != std::string::npos) {
-                std::string thumb_content = "";
-                int         width         = 0;
-                int         height        = 0;
-                int         data_size     = 0;
-
-                // 跳过空行
-                std::getline(ifs, line);
-                std::getline(ifs, line);
-
-                // 读取缩略图信息行
-                std::getline(ifs, line);
-                if (line.find("; thumbnail begin") != std::string::npos) {
-                    // 解析宽度、高度和数据大小
-                    // 格式: "; thumbnail begin 48x48 1144"
-                    sscanf(line.c_str(), "; thumbnail begin %dx%d %d", &width, &height, &data_size);
-
-                    // 读取Base64编码的数据
-                    std::string base64_data;
-                    while (std::getline(ifs, line)) {
-                        if (line.find("; thumbnail end") != std::string::npos) {
-                            break;
-                        }
-                        // 移除行首的 "; "
-                        if (line.substr(0, 2) == "; ") {
-                            base64_data += line.substr(2);
-                        }
-                    }
-                    thumb_content = base64_data;
-
-                    // Only thumb0/thumb1 are defined; gcode from upstream OrcaSlicer may carry
-                    // more thumbnail blocks. Skip the undefined ones with a warning instead of
-                    // letting set_deserialize abort the whole import with an unknown-option error.
-                    const std::string thumb_key = "thumb" + std::to_string(thumbnail_id++);
-                    if (this->has(thumb_key)) {
-                        this->set_deserialize(thumb_key, thumb_content, substitutions_ctxt);
-                    } else {
-                        BOOST_LOG_TRIVIAL(warning) << __FUNCTION__ << boost::format(
-                            ": no config option for thumbnail block %1% (%2%x%3%), skipping") % (thumbnail_id - 1) % width % height;
-                    }
-
-                }
-
-                // 读取到块结束标记
-                while (std::getline(ifs, line)) {
-                    if (line.find("; THUMBNAIL_BLOCK_END") != std::string::npos) {
-                        break;
-                    }
-                }
-
-                /*if (thumbnail_id == 2)
-                    break;*/
-            }
-        }
-
-        ifs.clear(); // 清除可能的 EOF 标志
-        ifs.seekg(0);
-
-        while (std::getline(ifs, line)) {
-            if (line.rfind("; CONFIG_BLOCK_START", 0) == 0) {
+        while (std::getline(ifs, line))
+            if (line.rfind("; CONFIG_BLOCK_START",0)==0) {
                 begin_found = true;
                 break;
             }
-        }
-            
         if (!begin_found) {
             //BOOST_LOG_TRIVIAL(error) << __FUNCTION__ << format("Configuration block closing tag \"; CONFIG_BLOCK_START\" not found when reading %1%", file);
-            throw Slic3r::RuntimeError(format("Config tag \"; CONFIG_BLOCK_START\" not found"));
+            // TRN %1% is a tag in the G-code file that must not be translated.
+            throw Slic3r::RuntimeError(format(_u8L("Config tag \"%1%\" not found"), "; CONFIG_BLOCK_START"));
         }
         std::string key, value;
         while (std::getline(ifs, line)) {
@@ -1493,7 +1490,7 @@ ConfigSubstitutions ConfigBase::load_from_gcode_file(const std::string &file, Fo
         }
         if (!end_found) {
             //BOOST_LOG_TRIVIAL(error) << __FUNCTION__ << format("Configuration block opening tag \"; CONFIG_BLOCK_END\" not found when reading %1%", file);
-            throw Slic3r::RuntimeError(format("Config tag \"; CONFIG_BLOCK_END\" not found"));
+            throw Slic3r::RuntimeError(format(_u8L("Config tag \"%1%\" not found"), "; CONFIG_BLOCK_END"));
         }
     }
     else
@@ -1513,7 +1510,7 @@ ConfigSubstitutions ConfigBase::load_from_gcode_file(const std::string &file, Fo
 
     if (key_value_pairs < 80) {
         BOOST_LOG_TRIVIAL(error) << __FUNCTION__ << format("Suspiciously low number of configuration values extracted from %1%: %2%", file, key_value_pairs);
-        throw Slic3r::RuntimeError(format("Suspiciously low number of configuration values extracted from %1%: %2%", file, key_value_pairs));
+        throw Slic3r::RuntimeError(format(_u8L("Suspiciously low number of configuration values extracted from %1%: %2%"), file, key_value_pairs));
     }
 
     // Do legacy conversion on a completely loaded dictionary.
@@ -1524,16 +1521,48 @@ ConfigSubstitutions ConfigBase::load_from_gcode_file(const std::string &file, Fo
     return std::move(substitutions_ctxt.substitutions);
 }
 
+std::optional<PluginCapabilityRef> parse_capability_ref(const std::string& value)
+{
+    // Capability references are stored as "<plugin_name>;<cloud_uuid>;<capability_name>".
+    // The cloud UUID is empty for local plugins (two consecutive semicolons).
+    if (value.empty())
+        return std::nullopt;
+
+    const size_t first = value.find(';');
+    if (first == std::string::npos)
+        return std::nullopt;
+    const size_t second = value.find(';', first + 1);
+    if (second == std::string::npos)
+        return std::nullopt;
+
+    std::string name            = value.substr(0, first);
+    std::string uuid            = value.substr(first + 1, second - first - 1);
+    std::string capability_name = value.substr(second + 1);
+    if (name.empty() || capability_name.empty())
+        return std::nullopt;
+
+    return PluginCapabilityRef{ std::move(name), std::move(capability_name), std::move(uuid) };
+}
+
 //BBS: add json support
-void ConfigBase::save_to_json(const std::string &file, const std::string &name, const std::string &from, const std::string &version, const std::string is_custom) const
+void ConfigBase::save_to_json(const std::string &file, const std::string &name, const std::string &from, const std::string &version) const
+{
+    // Serialize first: if that throws (invalid UTF-8), the existing file stays untouched.
+    std::ostringstream ss;
+    this->save_to_json(ss, name, from, version);
+    if (const std::error_code ec = write_file_atomically(file, ss.str()))
+        BOOST_LOG_TRIVIAL(error) << __FUNCTION__ << boost::format(": failed to save config to %1%: %2%") % file % ec.message();
+    else
+        BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ":" <<__LINE__ << boost::format(", saved config to %1%\n")%file;
+}
+
+void ConfigBase::save_to_json(std::ostream &os, const std::string &name, const std::string &from, const std::string &version, bool replace_invalid_utf8) const
 {
     json j;
     //record the headers
     j[BBL_JSON_KEY_VERSION] = version;
     j[BBL_JSON_KEY_NAME] = name;
     j[BBL_JSON_KEY_FROM] = from;
-    if (!is_custom.empty())
-        j[BBL_JSON_KEY_IS_CUSTOM] = is_custom;
 
     //record all the key-values
     for (const std::string &opt_key : this->keys())
@@ -1547,14 +1576,14 @@ void ConfigBase::save_to_json(const std::string &file, const std::string &name, 
                 j[opt_key] = opt->serialize();
         }
         else {
-            const ConfigOptionVectorBase *vec = static_cast<const ConfigOptionVectorBase*>(opt);
+            const ConfigOptionVectorBase* vec = static_cast<const ConfigOptionVectorBase*>(opt);
             //if (!vec->empty())
             std::vector<std::string> string_values = vec->vserialize();
 
             /*for (int i = 0; i < string_values.size(); i++)
             {
-                std::string string_value = escape_string_cstyle(string_values[i]);
-                j[opt_key][i] = string_value;
+            std::string string_value = escape_string_cstyle(string_values[i]);
+            j[opt_key][i] = string_value;
             }*/
 
             json j_array(string_values);
@@ -1562,12 +1591,19 @@ void ConfigBase::save_to_json(const std::string &file, const std::string &name, 
         }
     }
 
-    boost::nowide::ofstream c;
-    c.open(file, std::ios::out | std::ios::trunc);
-    c << std::setw(4) << j << std::endl;
-    c.close();
+    // Serialize the top-level "plugins" manifest: the individual plugin-backed options keep bare
+    // capability names; the full "name;uuid;capability" references are derived here (same helper as
+    // update_plugin_manifest). Only with a resolver (GUI); without one (CLI/headless) leave whatever
+    // the "plugins" option already serialized above, so a round-trip never drops the manifest.
+    if (resolve_capability_fn) {
+        std::vector<std::string> unique_refs = this->collect_plugin_manifest();
+        if (unique_refs.empty())
+            j.erase("plugins");
+        else
+            j["plugins"] = unique_refs;
+    }
 
-    BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << ":" <<__LINE__ << boost::format(", saved config to %1%\n")%file;
+    os << j.dump(1, '\t', false, replace_invalid_utf8 ? json::error_handler_t::replace : json::error_handler_t::strict) << std::endl;
 }
 
 void ConfigBase::save(const std::string &file) const
@@ -1591,6 +1627,69 @@ void ConfigBase::null_nullables()
         if (opt->nullable())
         	opt->deserialize("nil", ForwardCompatibilitySubstitutionRule::Disable);
     }
+}
+
+void ConfigBase::save_plugin_collection(const std::string& opt_key, const ConfigOption* opt, std::vector<std::string>& plugin_refs) const {
+    // Full plugin capability references ("name;uuid;capability") can only be derived through the
+    // resolver registered by the GUI once plugins are loaded. In non-GUI/headless contexts (e.g.
+    // the CLI) it stays null, so skip silently rather than calling an empty std::function.
+    if (!resolve_capability_fn)
+        return;
+
+    // A plugin-backed option declares its capability type via ConfigOptionDef::plugin_type (the same
+    // metadata PluginResolver::find_option_for_capability scans). Deriving off the def rather than a
+    // per-key branch keeps this generic across every plugin-backed option.
+    const ConfigDef*       def     = this->def();
+    const ConfigOptionDef* opt_def = def ? def->get(opt_key) : nullptr;
+    if (opt_def == nullptr || !opt_def->is_plugin_backed())
+        return;
+    const std::string& type = opt_def->plugin_type;
+
+    // Resolve a single bare capability value into its full reference and append it, skipping unset
+    // values, capabilities that could not be resolved (resolver returns ""), and duplicates already
+    // collected (preserving insertion order).
+    const auto append_ref = [&plugin_refs, &type](const std::string& capability_value) {
+        if (capability_value.empty())
+            return;
+        std::string ref = resolve_capability_fn(capability_value, type);
+        if (!ref.empty() && std::find(plugin_refs.begin(), plugin_refs.end(), ref) == plugin_refs.end())
+            plugin_refs.emplace_back(std::move(ref));
+    };
+
+    // Scalar options carry a single capability name; vector options carry a list. Same scalar/vector
+    // dispatch as PluginResolver::find_option_for_capability.
+    if (const auto* string_option = dynamic_cast<const ConfigOptionString*>(opt))
+        append_ref(string_option->value);
+    else if (const auto* vector_option = dynamic_cast<const ConfigOptionVectorBase*>(opt))
+        for (const std::string& val : vector_option->vserialize())
+            append_ref(val);
+}
+
+std::vector<std::string> ConfigBase::collect_plugin_manifest() const
+{
+    std::vector<std::string> refs;
+    if (!resolve_capability_fn)
+        return refs;
+
+    // Each plugin-backed option (ConfigOptionDef::is_plugin_backed) contributes its resolved
+    // reference(s) via save_plugin_collection, which appends in order and skips duplicates, so no
+    // second de-duplication pass is needed here.
+    for (const std::string& opt_key : this->keys())
+        if (const ConfigOption* opt = this->option(opt_key))
+            this->save_plugin_collection(opt_key, opt, refs);
+    return refs;
+}
+
+void ConfigBase::update_plugin_manifest()
+{
+    // Writes the derived manifest back into this config's "plugins" option (save_to_json writes the
+    // same manifest into a JSON document instead), so an in-memory backend config carries a resolved
+    // manifest even when the source preset was never serialized (picked-but-unsaved). Without a
+    // resolver (CLI/headless) leave whatever manifest was loaded from disk untouched.
+    if (!resolve_capability_fn)
+        return;
+    if (auto* manifest = this->option<ConfigOptionStrings>("plugins", true))
+        manifest->values = this->collect_plugin_manifest();
 }
 
 DynamicConfig::DynamicConfig(const ConfigBase& rhs, const t_config_option_keys& keys)
@@ -1654,6 +1753,36 @@ const ConfigOption* DynamicConfig::optptr(const t_config_option_key &opt_key) co
     return (it == options.end()) ? nullptr : it->second.get();
 }
 
+// ConfigOptionBool(s)::deserialize only understands "1" and "0", but scripts commonly spell CLI
+// flags as --opt=true or --opt=no. Map the usual spellings onto what deserialize() accepts, per
+// comma-separated item so vector options keep working, and pass anything else through unchanged
+// so a genuine typo is still reported as invalid.
+static std::string normalize_cli_bool_value(const std::string &value)
+{
+    static const char* true_values[]  = { "1", "true",  "yes", "on",  "enabled"  };
+    static const char* false_values[] = { "0", "false", "no",  "off", "disabled" };
+
+    auto matches = [](const std::string &item, const char* const* candidates, size_t count) {
+        return std::any_of(candidates, candidates + count, [&item](const char* candidate) { return boost::iequals(item, candidate); });
+    };
+
+    std::string        normalized;
+    std::istringstream is(value);
+    std::string        item;
+    while (std::getline(is, item, ',')) {
+        boost::trim(item);
+        if (! normalized.empty())
+            normalized += ",";
+        if (matches(item, true_values, std::size(true_values)))
+            normalized += "1";
+        else if (matches(item, false_values, std::size(false_values)))
+            normalized += "0";
+        else
+            normalized += item;
+    }
+    return normalized;
+}
+
 bool DynamicConfig::read_cli(int argc, const char* const argv[], t_config_option_keys* extra, t_config_option_keys* keys)
 {
     // cache the CLI option => opt_key mapping
@@ -1681,9 +1810,6 @@ bool DynamicConfig::read_cli(int argc, const char* const argv[], t_config_option
             parse_options = false;
             continue;
         }
-        // Handled only in GUI instance_check (InstanceCheck.cpp), not as PrintConfig keys.
-        if (token == "--single-instance" || token == "--no-single-instance")
-            continue;
         // Remove leading dashes (one or two).
         token.erase(token.begin(), token.begin() + (boost::starts_with(token, "--") ? 2 : 1));
         // Read value when supplied in the --key=value form.
@@ -1754,17 +1880,32 @@ bool DynamicConfig::read_cli(int argc, const char* const argv[], t_config_option
             // to the end of the value.
             if (opt_base->type() == coBools && value.empty())
                 static_cast<ConfigOptionBools*>(opt_base)->values.push_back(!no);
-            else
+            else {
                 // Deserialize any other vector value (ConfigOptionInts, Floats, Percents, Points) the same way
                 // they get deserialized from an .ini file. For ConfigOptionStrings, that means that the C-style unescape
                 // will be applied for values enclosed in quotes, while values non-enclosed in quotes are left to be
                 // unescaped by the calling shell.
-				opt_vector->deserialize(value, true);
+                const std::string vector_value = opt_base->type() == coBools ? normalize_cli_bool_value(value) : value;
+                bool deserialized = false;
+                try {
+                    deserialized = opt_vector->deserialize(vector_value, true);
+                } catch (const std::exception &ex) {
+                    // e.g. "nil" deserialized into a non-nullable vector option throws instead of
+                    // returning false - treat that the same as any other invalid value here.
+                    deserialized = false;
+                }
+                if (! deserialized) {
+                    boost::nowide::cerr << "Invalid value for option --" << token.c_str() << std::endl;
+                    return false;
+                }
+            }
         } else if (opt_base->type() == coBool) {
             if (value.empty())
                 static_cast<ConfigOptionBool*>(opt_base)->value = !no;
-            else
-                opt_base->deserialize(value);
+            else if (! opt_base->deserialize(normalize_cli_bool_value(value))) {
+                boost::nowide::cerr << "Invalid value for option --" << token.c_str() << std::endl;
+                return false;
+            }
         } else if (opt_base->type() == coString) {
             // Do not unescape single string values, the unescaping is left to the calling shell.
             static_cast<ConfigOptionString*>(opt_base)->value = value;
@@ -1788,6 +1929,81 @@ t_config_option_keys DynamicConfig::keys() const
     for (const auto &opt : this->options)
         keys.emplace_back(opt.first);
     return keys;
+}
+
+DynamicConfig::DynamicConfigDifference DynamicConfig::diff_report(const DynamicConfig& rhs) const {
+    DynamicConfig::DynamicConfigDifference result;
+
+    std::set<t_config_option_key> all_keys;
+
+    for (const auto& kvp : this->options) {
+	all_keys.insert(kvp.first);
+    }
+    for (const auto& kvp : rhs.options) {
+	all_keys.insert(kvp.first);
+    }
+
+    for (const auto& key : all_keys) {
+	auto left_it = this->options.find(key);
+	auto right_it = rhs.options.find(key);
+
+	bool left_has = (left_it != this->options.end());
+	bool right_has = (right_it != rhs.options.end());
+
+	if (left_has && right_has) {
+	    if (*left_it->second != *right_it->second) {
+		result.differences[key] = {
+		    left_it->second->serialize(),
+		    right_it->second->serialize()
+		};
+	    }
+	} else if (left_has) {
+	    result.differences[key] = {
+		left_it->second->serialize(),
+		std::nullopt
+	    };
+	} else if (right_has) {
+	    result.differences[key] = {
+		std::nullopt,
+		right_it->second->serialize()
+	    };
+	}
+    }
+    return result;
+}
+
+std::ostream& operator<<(std::ostream& os, const DynamicConfig::DynamicConfigDifference& diff) {
+    if (!diff.is_different()) {
+        os << "Configurations are identical.\n";
+        return os;
+    }
+
+    int missing_right=0, missing_left=0, differ=0;
+    os << "DynamicConfig Differences Found (" << diff.differences.size() << " keys):\n";
+    for (const auto& kvp : diff.differences) {
+        const auto& key = kvp.first;
+        const auto& detail = kvp.second;
+
+        os << "  Key: **" << key << "**\n";
+
+        if (detail.is_missing_key()) {
+            // Determine which side is missing the key
+            if (detail.left_value.has_value()) {
+                os << "    - **Missing in Right**: Key exists in left config. Value: " << detail.left_value.value() << "\n";
+		missing_right++;
+            } else {
+                os << "    - **Missing in Left**: Key exists in right config. Value: " << detail.right_value.value() << "\n";
+		missing_left++;
+            }
+        } else if (detail.is_different_value()) {
+	    differ++;
+            os << "    - **Value Differs**:\n";
+            os << "      -> Left Value:  " << detail.left_value.value() << "\n";
+            os << "      -> Right Value: " << detail.right_value.value() << "\n";
+        }
+    }
+    os << "Summary: " << missing_right << " missing on right, " << missing_left << " missing on left, and " << differ << " have differing values\n";
+    return os;
 }
 
 void StaticConfig::set_defaults()
@@ -1848,11 +2064,7 @@ static inline bool dynamic_config_iterate(const DynamicConfig &lhs, const Dynami
 bool DynamicConfig::equals(const DynamicConfig &other, const std::set<std::string>* skipped_keys) const
 {
     return ! dynamic_config_iterate(*this, other,
-        [](const t_config_option_key & /* key */, const ConfigOption *l, const ConfigOption *r) {
-            if (l->type() != r->type())
-                return true;
-            return *l != *r;
-        },
+        [](const t_config_option_key & /* key */, const ConfigOption *l, const ConfigOption *r) { return *l != *r; },
         skipped_keys);
 }
 
@@ -1862,7 +2074,7 @@ t_config_option_keys DynamicConfig::diff(const DynamicConfig &other) const
     t_config_option_keys diff;
     dynamic_config_iterate(*this, other,
         [&diff](const t_config_option_key &key, const ConfigOption *l, const ConfigOption *r) {
-            if (l->type() != r->type() || *l != *r)
+            if (*l != *r)
                 diff.emplace_back(key);
             // Continue iterating.
             return false;
@@ -1876,12 +2088,46 @@ t_config_option_keys DynamicConfig::equal(const DynamicConfig &other) const
     t_config_option_keys equal;
     dynamic_config_iterate(*this, other,
         [&equal](const t_config_option_key &key, const ConfigOption *l, const ConfigOption *r) {
-            if (l->type() == r->type() && *l == *r)
+            if (*l == *r)
                 equal.emplace_back(key);
             // Continue iterating.
             return false;
         });
     return equal;
+}
+
+double& DynamicConfig::opt_float(const t_config_option_key &opt_key, unsigned int idx)
+{
+    if (ConfigOptionFloats *opt_floats = dynamic_cast<ConfigOptionFloats *>(this->option(opt_key))) {
+        return opt_floats->get_at(idx);
+    } else {
+        ConfigOptionFloatsNullable *opt_floats_nullable = dynamic_cast<ConfigOptionFloatsNullable *>(this->option(opt_key));
+        assert(opt_floats_nullable != nullptr);
+        return opt_floats_nullable->get_at(idx);
+    }
+}
+const double& DynamicConfig::opt_float(const t_config_option_key &opt_key, unsigned int idx) const
+{
+    if (const ConfigOptionFloats *opt_floats = dynamic_cast<const ConfigOptionFloats *>(this->option(opt_key))) {
+        return opt_floats->get_at(idx);
+    } else if (const ConfigOptionFloatsNullable *opt_floats_nullable = dynamic_cast<const ConfigOptionFloatsNullable *>(this->option(opt_key))) {
+        return opt_floats_nullable->get_at(idx);
+    } else {
+        assert(false);
+        static const double zero = 0.0;
+        return zero;
+    }
+}
+
+bool DynamicConfig::opt_bool(const t_config_option_key &opt_key, unsigned int idx) const {
+    if (const ConfigOptionBools *opts = dynamic_cast<const ConfigOptionBools *>(this->option(opt_key))) {
+        return opts->get_at(idx) != 0;
+    }
+    else {
+        const ConfigOptionBoolsNullable *opt_s = dynamic_cast<const ConfigOptionBoolsNullable *>(this->option(opt_key));
+        assert(opt_s != nullptr);
+        return opt_s->get_at(idx) != 0;
+    }
 }
 
 }

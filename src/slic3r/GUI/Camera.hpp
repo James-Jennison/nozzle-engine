@@ -3,7 +3,16 @@
 
 #include "libslic3r/BoundingBox.hpp"
 #include "3DScene.hpp"
-#include "../Utils/Frustum.hpp"
+#include <Eigen/Geometry>
+#include <algorithm>
+#include <array>
+#include "libslic3r/Point.hpp"
+#include <utility>
+#include <string>
+#include <cassert>
+#include "libslic3r/Technologies.hpp"
+#include <cstdlib>
+#include "libslic3r/libslic3r.h"
 
 namespace Slic3r {
 namespace GUI {
@@ -31,7 +40,18 @@ struct Camera
         Perspective,
         Num_types
     };
-
+    enum class ViewAngleType : unsigned char {
+        Iso = 0,
+        Top_Front,
+        Left,
+        Right,
+        Top,
+        Bottom,
+        Front,
+        Rear,
+        Count_ViewAngleType,
+        Top_Plate,//for 3mf and Skip parts
+    };
     bool requires_zoom_to_bed{ false };
     //BBS
     bool requires_zoom_to_volumes{ false };
@@ -56,7 +76,6 @@ private:
     std::pair<double, double> m_frustrum_zs;
 
     BoundingBoxf3 m_scene_box;
-    Frustum       m_frustum;
 
 public:
     Camera() { set_default_orientation(); }
@@ -91,7 +110,7 @@ public:
 
 
     void select_view(const std::string& direction);
-
+    void select_view(ViewAngleType type);
     const std::array<int, 4>& get_viewport() const { return m_viewport; }
     const Transform3d& get_view_matrix() const { return m_view_matrix; }
     const Transform3d& get_projection_matrix() const { return m_projection_matrix; }
@@ -167,17 +186,6 @@ public:
 
     double max_zoom() const { return 250.0; }
     double min_zoom() const { return 0.2 * calc_zoom_to_bounding_box_factor(m_scene_box); }
-
-    /// <summary>
-    /// get the current frustrum planes. The planes are in world space and normalized (the normal vector has unit length).
-    /// </summary>
-    /// <returns></returns>
-    const Frustum& GetFrustum() const { return m_frustum; }
-
-    /// <summary>
-    /// extract the planes of the frustrum from the current projection and view matrix and update m_frustrum
-    /// </summary>
-    void UpdateFrustum();
 
 private:
     // returns tight values for nearZ and farZ plane around the given bounding box

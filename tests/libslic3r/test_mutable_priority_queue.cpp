@@ -1,9 +1,15 @@
-#include <catch2/catch_test_macros.hpp>
-
 #include <algorithm>
-#include <queue>
-#include <random>
+#include <catch2/catch_all.hpp>
 
+#include <queue>
+#include <cstddef>
+#include <iterator>
+#include <functional>
+#include <cstdlib>
+#include <random>
+#include <vector>
+
+#include <catch2/catch_test_macros.hpp>
 #include "libslic3r/MutablePriorityQueue.hpp"
 
 // based on https://raw.githubusercontent.com/rollbear/prio_queue/master/self_test.cpp

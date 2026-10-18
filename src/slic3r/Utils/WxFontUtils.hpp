@@ -1,12 +1,17 @@
 #ifndef slic3r_WxFontUtils_hpp_
 #define slic3r_WxFontUtils_hpp_
 
+#include "libslic3r/TextConfiguration.hpp"
 #include <memory>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <boost/bimap.hpp>
+#include <wx/dc.h>
 #include <wx/font.h>
 #include "libslic3r/Emboss.hpp"
+
+class wxDC;
 
 namespace Slic3r::GUI {
 
@@ -40,6 +45,8 @@ public:
 
     static bool is_italic(const wxFont &font);
     static bool is_bold(const wxFont &font);
+
+    static void get_suitable_font_size(int max_height, wxDC &dc);
 
     /// <summary>
     /// Set italic into wx font

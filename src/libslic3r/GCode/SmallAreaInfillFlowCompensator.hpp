@@ -1,14 +1,13 @@
 #ifndef slic3r_GCode_SmallAreaInfillFlowCompensator_hpp_
 #define slic3r_GCode_SmallAreaInfillFlowCompensator_hpp_
 
-#include "../libslic3r.h"
 #include "../PrintConfig.hpp"
-#include "../ExtrusionEntity.hpp"
 #include <memory>
+#include <vector>
+#include <cstdint>
 
-namespace tk {
-class spline;
-} // namespace tk
+class PchipInterpolatorHelper;
+namespace Slic3r { enum ExtrusionRole : uint8_t; }
 
 namespace Slic3r {
 
@@ -26,8 +25,7 @@ private:
     std::vector<double> eLengths;
     std::vector<double> flowComps;
 
-    // TODO: Cubic Spline
-    std::unique_ptr<tk::spline> flowModel;
+    std::unique_ptr<PchipInterpolatorHelper> flowModel;
 
     double flow_comp_model(const double line_length);
 

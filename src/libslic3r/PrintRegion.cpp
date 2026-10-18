@@ -1,31 +1,30 @@
+#include "Config.hpp"
 #include "Exception.hpp"
+#include "Flow.hpp"
 #include "Print.hpp"
-
+#include <cstddef>
+#include "PrintConfig.hpp"
+#include "libslic3r.h"
 #include <cmath>
+#include <vector>
+#include <algorithm>
 
 namespace Slic3r {
-
-namespace {
-
-bool internal_solid_infill_uses_sparse_filament(const PrintRegionConfig &config, FlowRole role)
-{
-    return role == frSolidInfill && std::abs(config.sparse_infill_density.value - 100.) < EPSILON;
-}
-
-} // namespace
 
 // 1-based extruder identifier for this region and role.
 unsigned int PrintRegion::extruder(FlowRole role) const
 {
     size_t extruder = 0;
-    if (role == frPerimeter || role == frExternalPerimeter)
-        extruder = m_config.wall_filament;
+    if (role == frPerimeter)
+        extruder = m_config.inner_wall_filament_id;
+    else if (role == frExternalPerimeter)
+        extruder = m_config.outer_wall_filament_id;
     else if (role == frInfill)
-        extruder = m_config.sparse_infill_filament;
+        extruder = m_config.sparse_infill_filament_id;
     else if (role == frSolidInfill)
-        extruder = internal_solid_infill_uses_sparse_filament(m_config, role) ? m_config.sparse_infill_filament : m_config.solid_infill_filament;
+        extruder = m_config.internal_solid_filament_id;
     else if (role == frTopSolidInfill)
-        extruder = m_config.solid_infill_filament;
+        extruder = m_config.top_surface_filament_id;
     else
         throw Slic3r::InvalidArgument("Unknown role");
     return extruder;
@@ -58,15 +57,18 @@ Flow PrintRegion::flow(const PrintObject &object, FlowRole role, double layer_he
     
     // Get the configured nozzle_diameter for the extruder associated to the flow role requested.
     // Here this->extruder(role) - 1 may underflow to MAX_INT, but then the get_at() will follback to zero'th element, so everything is all right.
-    auto nozzle_diameter = float(print_config.nozzle_diameter.get_at(this->extruder(role) - 1));
+    auto nozzle_diameter = float(nozzle_diameter_for_filament(print_config, this->extruder(role), object.print()->is_BBL_printer()));
     return Flow::new_from_config_width(role, config_width, nozzle_diameter, float(layer_height));
 }
 
 coordf_t PrintRegion::nozzle_dmr_avg(const PrintConfig &print_config) const
 {
-    return (print_config.nozzle_diameter.get_at(m_config.wall_filament.value    - 1) + 
-            print_config.nozzle_diameter.get_at(m_config.sparse_infill_filament.value - 1) +
-            print_config.nozzle_diameter.get_at(m_config.solid_infill_filament.value - 1)) / 3.;
+    return (print_config.nozzle_diameter.get_at(m_config.outer_wall_filament_id.value    - 1) +
+            print_config.nozzle_diameter.get_at(m_config.inner_wall_filament_id.value    - 1) +
+            print_config.nozzle_diameter.get_at(m_config.sparse_infill_filament_id.value       - 1) +
+            print_config.nozzle_diameter.get_at(m_config.internal_solid_filament_id.value - 1) +
+            print_config.nozzle_diameter.get_at(m_config.top_surface_filament_id.value    - 1) +
+            print_config.nozzle_diameter.get_at(m_config.bottom_surface_filament_id.value - 1)) / 6.;
 }
 
 coordf_t PrintRegion::bridging_height_avg(const PrintConfig &print_config) const
@@ -74,32 +76,28 @@ coordf_t PrintRegion::bridging_height_avg(const PrintConfig &print_config) const
     return this->nozzle_dmr_avg(print_config) * sqrt(m_config.bridge_flow.value);
 }
 
-// Nozzle It All engine: the virtual extruder expansion is PrusaSlicer 2.9.6's (PrintRegion.cpp 78-104): a virtual
-// extruder id stands for its physical components.
-void PrintRegion::collect_object_printing_extruders(const PrintConfig &print_config, const PrintRegionConfig &region_config, const bool has_brim, std::vector<unsigned int> &object_extruders,
-                                                    const FullSpectrum::VirtualExtruders &virtual_extruders)
+void PrintRegion::collect_object_printing_extruders(const PrintConfig &print_config, const PrintRegionConfig &region_config, const bool has_brim, std::vector<unsigned int> &object_extruders)
 {
     // These checks reflect the same logic used in the GUI for enabling/disabling extruder selection fields.
     // BBS
     auto num_extruders = (int)print_config.filament_diameter.size();
-    auto emplace_extruder = [num_extruders, &object_extruders, &virtual_extruders](int extruder_id) {
-        if (extruder_id > num_extruders && FullSpectrum::is_virtual_extruder(static_cast<unsigned int>(extruder_id), virtual_extruders)) {
-            for (unsigned int physical_1based : FullSpectrum::expand_virtual_extruders_1based({ static_cast<unsigned int>(extruder_id) }, virtual_extruders)) {
-                object_extruders.emplace_back(physical_1based - 1);
-            }
-
-            return;
-        }
-
+    auto emplace_extruder = [num_extruders, &object_extruders](int extruder_id) {
     	int i = std::max(0, extruder_id - 1);
         object_extruders.emplace_back((i >= num_extruders) ? 0 : i);
     };
-    if (region_config.wall_loops.value > 0 || has_brim)
-    	emplace_extruder(region_config.wall_filament);
+    if (region_config.wall_loops.value > 0 || has_brim) {
+    	emplace_extruder(region_config.outer_wall_filament_id);
+                if (region_config.wall_loops.value > 1)
+			emplace_extruder(region_config.inner_wall_filament_id);
+    }
     if (region_config.sparse_infill_density.value > 0)
-        emplace_extruder(region_config.sparse_infill_filament);
-    if (region_config.top_shell_layers.value > 0 || region_config.bottom_shell_layers.value > 0)
-    	emplace_extruder(region_config.solid_infill_filament);
+    	emplace_extruder(region_config.sparse_infill_filament_id);
+    if (region_config.sparse_infill_density.value > 0 || region_config.top_shell_layers.value > 0 || region_config.bottom_shell_layers.value > 0)
+    	emplace_extruder(region_config.internal_solid_filament_id);
+    if (region_config.top_shell_layers.value > 0)
+    	emplace_extruder(region_config.top_surface_filament_id);
+    if (region_config.bottom_shell_layers.value > 0)
+    	emplace_extruder(region_config.bottom_surface_filament_id);
 }
 
 void PrintRegion::collect_object_printing_extruders(const Print &print, std::vector<unsigned int> &object_extruders) const
@@ -109,16 +107,14 @@ void PrintRegion::collect_object_printing_extruders(const Print &print, std::vec
 #ifndef NDEBUG
     // BBS
     auto num_extruders = int(print.config().filament_diameter.size());
-    // Nozzle It All engine (PrusaSlicer 2.9.6): a virtual extruder id is valid too.
-    auto valid_extruder = [&](int id) {
-        return id <= num_extruders ||
-               FullSpectrum::is_virtual_extruder(static_cast<unsigned int>(id), print.virtual_extruders());
-    };
-    assert(valid_extruder(this->config().wall_filament));
-    assert(valid_extruder(this->config().sparse_infill_filament));
-    assert(valid_extruder(this->config().solid_infill_filament));
+    assert(this->config().outer_wall_filament_id    <= num_extruders);
+    assert(this->config().inner_wall_filament_id    <= num_extruders);
+    assert(this->config().sparse_infill_filament_id       <= num_extruders);
+    assert(this->config().internal_solid_filament_id <= num_extruders);
+    assert(this->config().top_surface_filament_id <= num_extruders);
+    assert(this->config().bottom_surface_filament_id <= num_extruders);
 #endif
-    collect_object_printing_extruders(print.config(), this->config(), print.has_brim(), object_extruders, print.virtual_extruders());
+    collect_object_printing_extruders(print.config(), this->config(), print.has_brim(), object_extruders);
 }
 
 }

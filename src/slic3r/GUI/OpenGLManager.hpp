@@ -2,6 +2,9 @@
 #define slic3r_OpenGLManager_hpp_
 
 #include "GLShadersManager.hpp"
+#include <string>
+#include <utility>
+#include "slic3r/GUI/GLShader.hpp"
 
 class wxWindow;
 class wxGLCanvas;
@@ -24,8 +27,12 @@ public:
     class GLInfo
     {
         bool m_detected{ false };
+        bool m_core_profile{ false };
         int m_max_tex_size{ 0 };
         float m_max_anisotropy{ 0.0f };
+#if ENABLE_OPENGL_AUTO_AA_SAMPLES
+        int m_samples{ 0 };
+#endif // ENABLE_OPENGL_AUTO_AA_SAMPLES
 
         std::string m_version;
         std::string m_glsl_version;
@@ -39,6 +46,11 @@ public:
         const std::string& get_glsl_version() const;
         const std::string& get_vendor() const;
         const std::string& get_renderer() const;
+
+        // False until a GL context has been made current and queried; the getters below detect
+        // on first use, which needs a current context.
+        bool is_detected() const { return m_detected; }
+        bool is_core_profile() const { return m_core_profile; }
 
         bool is_mesa() const;
 
@@ -56,16 +68,6 @@ public:
         void detect() const;
     };
 
-#ifdef __APPLE__
-    // Part of hack to remove crash when closing the application on OSX 10.9.5 when building against newer wxWidgets
-    struct OSInfo
-    {
-        int major{ 0 };
-        int minor{ 0 };
-        int micro{ 0 };
-    };
-#endif //__APPLE__
-
 private:
     enum class EMultisampleState : unsigned char
     {
@@ -78,10 +80,6 @@ private:
     wxGLContext* m_context{ nullptr };
     GLShadersManager m_shaders_manager;
     static GLInfo s_gl_info;
-#ifdef __APPLE__
-    // Part of hack to remove crash when closing the application on OSX 10.9.5 when building against newer wxWidgets
-    static OSInfo s_os_info;
-#endif //__APPLE__
     static bool s_compressed_textures_supported;
     static bool s_force_power_of_two_textures;
 
@@ -93,7 +91,7 @@ public:
     ~OpenGLManager();
 
     bool init_gl(bool popup_error = true);
-    wxGLContext* init_glcontext(wxGLCanvas& canvas);
+    wxGLContext* init_glcontext(wxGLCanvas& canvas, const std::pair<int, int>& required_opengl_version, bool enable_compatibility_profile, bool enable_debug);
 
     GLShaderProgram* get_shader(const std::string& shader_name) { return m_shaders_manager.get_shader(shader_name); }
     GLShaderProgram* get_current_shader() { return m_shaders_manager.get_current_shader(); }

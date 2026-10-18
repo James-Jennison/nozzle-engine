@@ -6,17 +6,28 @@
 // Based on original work by Alexander Þór licensed under the GPLv3:
 // https://github.com/Alexander-T-Moss/Small-Area-Flow-Comp
 
+#include <cmath>
+#include <limits>
+#include <exception>
 #include <math.h>
 #include <cstring>
 #include <cfloat>
+#include <ostream>
+#include <memory>
 #include <regex>
 
-#include "../libslic3r.h"
 #include "../PrintConfig.hpp"
+#include "libslic3r/Exception.hpp"
+#include "libslic3r/GCode/PchipInterpolatorHelper.hpp"
+#include "libslic3r/ExtrusionEntity.hpp"
+#include "libslic3r/I18N.hpp"
+#include "libslic3r/format.hpp"
 
 #include "SmallAreaInfillFlowCompensator.hpp"
-#include "spline/spline.h"
 #include <boost/log/trivial.hpp>
+#include <sstream>
+#include <string>
+#include "libslic3r/Config.hpp"
 
 namespace Slic3r {
 
@@ -46,38 +57,42 @@ SmallAreaInfillFlowCompensator::SmallAreaInfillFlowCompensator(const Slic3r::GCo
                         flowComps.push_back(std::stod(value_str));
                     }
                 } catch (...) {
-                    std::stringstream ss;
-                    ss << "Error parsing data point in small area infill compensation model:" << line << std::endl;
-
-                    throw Slic3r::InvalidArgument(ss.str());
+                    // TRN %1% is the line of the model that could not be parsed.
+                    throw Slic3r::InvalidArgument(Slic3r::format(_u8L("Small Area Flow Compensation: Error parsing data point in small area infill compensation model: %1%"), line) + "\n");
                 }
             }
         }
 
-        for (int i = 0; i < eLengths.size(); i++) {
+        for (size_t i = 0; i < eLengths.size(); i++) {
             if (i == 0) {
                 if (!nearly_equal(eLengths[i], 0.0)) {
-                    throw Slic3r::InvalidArgument("First extrusion length for small area infill compensation model must be 0");
+                    throw Slic3r::InvalidArgument(_u8L("Small Area Flow Compensation: First extrusion length for small area infill compensation model must be 0"));
                 }
             } else {
                 if (nearly_equal(eLengths[i], 0.0)) {
-                    throw Slic3r::InvalidArgument("Only the first extrusion length for small area infill compensation model can be 0");
+                    throw Slic3r::InvalidArgument(_u8L("Small Area Flow Compensation: Only the first extrusion length for small area infill compensation model can be 0"));
                 }
                 if (eLengths[i] <= eLengths[i - 1]) {
-                    throw Slic3r::InvalidArgument("Extrusion lengths for subsequent points must be increasing");
+                    throw Slic3r::InvalidArgument(_u8L("Small Area Flow Compensation: Extrusion lengths for subsequent points must be increasing"));
                 }
+            }
+        }
+
+        for (size_t i = 1; i < flowComps.size(); ++i) {
+            if (flowComps[i] <= flowComps[i - 1]) {
+                throw Slic3r::InvalidArgument(_u8L("Small Area Flow Compensation: Flow compensation factors must strictly increase with extrusion length"));
             }
         }
 
         if (!flowComps.empty() && !nearly_equal(flowComps.back(), 1.0)) {
-            throw Slic3r::InvalidArgument("Final compensation factor for small area infill flow compensation model must be 1.0");
+            throw Slic3r::InvalidArgument(_u8L("Small Area Flow Compensation: Final compensation factor for small area infill flow compensation model must be 1.0"));
         }
 
-        flowModel = std::make_unique<tk::spline>();
-        flowModel->set_points(eLengths, flowComps);
+        flowModel = std::make_unique<PchipInterpolatorHelper>(eLengths, flowComps);
 
     } catch (std::exception& e) {
         BOOST_LOG_TRIVIAL(error) << "Error parsing small area infill compensation model: " << e.what();
+        throw;
     }
 }
 
@@ -92,7 +107,7 @@ double SmallAreaInfillFlowCompensator::flow_comp_model(const double line_length)
         return 1.0;
     }
 
-    return (*flowModel)(line_length);
+    return flowModel->interpolate(line_length);
 }
 
 double SmallAreaInfillFlowCompensator::modify_flow(const double line_length, const double dE, const ExtrusionRole role)

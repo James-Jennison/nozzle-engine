@@ -1,12 +1,18 @@
 #include "BBLStatusBar.hpp"
 
+#include <wx/panel.h>
+#include <wx/event.h>
+#include <wx/gdicmn.h>
+#include <wx/sizer.h>
+#include <wx/stattext.h>
+#include <string>
 #include <wx/timer.h>
 #include <wx/gauge.h>
 #include <wx/button.h>
 #include <wx/statusbr.h>
 #include <wx/frame.h>
+#include <wx/statline.h>
 
-#include "GUI_App.hpp"
 
 #include "I18N.hpp"
 
@@ -54,9 +60,9 @@ BBLStatusBar::BBLStatusBar(wxWindow *parent, int id)
         m_cancelbutton->Hide();
     });
 
-    m_sizer->Add(m_object_info_sizer, 1, wxEXPAND | wxALL | wxALIGN_LEFT, 5);
-    m_sizer->Add(m_slice_info_sizer, 1, wxEXPAND | wxALL | wxALIGN_LEFT, 5);
-    m_sizer->Add(m_status_text, 1, wxEXPAND | wxALL | wxALIGN_LEFT, 5);
+    m_sizer->Add(m_object_info_sizer, 1, wxEXPAND | wxALL, 5);
+    m_sizer->Add(m_slice_info_sizer, 1, wxEXPAND | wxALL, 5);
+    m_sizer->Add(m_status_text, 1, wxEXPAND | wxALL, 5);
     m_sizer->Add(m_prog, 0, wxEXPAND | wxLEFT | wxALL, 5);
     m_sizer->Add(m_cancelbutton, 0, wxEXPAND | wxALL, 5);
     m_sizer->SetSizeHints(m_self);

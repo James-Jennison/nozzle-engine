@@ -1,9 +1,13 @@
 #ifndef slic3r_GUI_StateColor_hpp_
 #define slic3r_GUI_StateColor_hpp_
 
+#include <tuple>
+#include <utility>
+#include <vector>
 #include <wx/colour.h>
 
 #include <map>
+#include <wx/string.h>
 
 class StateColor
 {
@@ -50,6 +54,16 @@ public:
 
     // single color
     StateColor(unsigned long color);
+
+    // operator==
+    bool operator==(StateColor const& other) const{
+        return statesList_ == other.statesList_ && colors_ == other.colors_ && takeFocusedAsHovered_ == other.takeFocusedAsHovered_;
+    };
+
+    // operator!=
+    bool operator!=(StateColor const& other) const{
+        return !(*this == other);
+    };
 
 public:
     void append(wxColour const & color, int states);

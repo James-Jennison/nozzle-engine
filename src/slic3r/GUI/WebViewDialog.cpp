@@ -1,24 +1,56 @@
 #include "WebViewDialog.hpp"
 
+#include "CloudProvider.hpp"
 #include "I18N.hpp"
-#include "slic3r/GUI/wxExtensions.hpp"
 #include "slic3r/GUI/GUI_App.hpp"
 #include "slic3r/GUI/MainFrame.hpp"
-#include "sentry_wrapper/SentryWrapper.hpp"
-#include "../Utils/Http.hpp"
-#include "SSWCP.hpp"
+#include "libslic3r_version.h"
 
+#include <boost/filesystem/path.hpp>
+#include <boost/log/trivial.hpp>
+#include <algorithm>
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/json_parser.hpp>
 
+#include <utility>
+#include <wx/event.h>
+#include <wx/panel.h>
+#include <wx/gdicmn.h>
+#include "slic3r/GUI/GUI.hpp"
+#include "libslic3r/Utils.hpp"
+#include <wx/log.h>
+#include "libslic3r/Config.hpp"
+#include <wx/filefn.h>
+#include <wx/filename.h>
+#include <sstream>
+#include <string>
+#include <nlohmann/json.hpp>
+#include <functional>
+#include <cstddef>
+#include <wx/dialog.h>
 #include <wx/sizer.h>
+#include <wx/string.h>
+#include <wx/timer.h>
+#include <wx/textctrl.h>
 #include <wx/toolbar.h>
 #include <wx/textdlg.h>
+#include <wx/toplevel.h>
 #include <wx/url.h>
+#include <wx/uri.h>
 
 #include <slic3r/GUI/Widgets/WebView.hpp>
+#include <slic3r/GUI/Widgets/WebViewHostDialog.hpp>
+#include <wx/webview.h>
+#include <wx/utils.h>
+#include <wx/window.h>
+
+#ifdef __linux__
+#include <webkit2/webkit2.h>
+#endif
+#include <wx/infobar.h>
 
 namespace pt = boost::property_tree;
+using json = nlohmann::json;
 
 namespace Slic3r {
 namespace GUI {
@@ -27,6 +59,34 @@ namespace GUI {
     wxDEFINE_EVENT(EVT_RESPONSE_MESSAGE, wxCommandEvent);
 
     #define LOGIN_INFO_UPDATE_TIMER_ID 10002
+
+// OrcaCloud is a native pane of its own: the site refuses to be framed
+// (x-frame-options: DENY / CSP frame-ancestors 'none').
+static const char *const kCloudUrl = "https://cloud.orcaslicer.com";
+// #LeftBoard in resources/web/homepage/css/home.css is a 262px column plus a 1px right
+// border; the homepage keeps that width as the nav column while the cloud pane is open.
+static const int kLeftNavWidth = 263;
+
+// The home page's strings (resources/web/homepage), keyed by their data-i18n and T() ids.
+static json home_page_strings()
+{
+    return {
+        {"login", _u8L("Login")},
+        // TRN Short badge on a recent project that was published (a published 3MF). Keep it about three letters long.
+        {"published_badge", _u8L("PUB")},
+        {"not_signed_in", _u8L("Not signed in")},
+        {"plugin_not_detected", _u8L("Bambu Network plug-in not detected. Click <a>here</a> to install it.")},
+        {"log_out", _u8L("Log Out")},
+        {"recent", _u8L("Recent")},
+        {"new_project", _u8L("New Project")},
+        {"create_new_project", _u8L("Create new project")},
+        {"open_project", _u8L("Open Project")},
+        {"recently_opened", _u8L("Recently opened")},
+        {"clear_all", _u8L("Clear all")},
+        {"remove", _u8L("Remove")},
+        {"open_containing_folder", _u8L("Open Containing Folder")},
+    };
+}
 
     BEGIN_EVENT_TABLE(WebViewPanel, wxPanel)
     EVT_TIMER(LOGIN_INFO_UPDATE_TIMER_ID, WebViewPanel::OnFreshLoginStatus)
@@ -37,13 +97,10 @@ namespace GUI {
 WebViewPanel::WebViewPanel(wxWindow *parent)
         : wxPanel(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize)
  {
-    wxString url = wxGetApp().build_flutter_web_url("0");
-    // wxString url = wxString::Format("file://%s/web/homepage/index.html?path=homepage.html", from_u8(resources_dir()));
-    // wxString url     = wxString("http://127.0.0.1:") + wxString(std::to_string(PAGE_HTTP_PORT)) + wxString("/web/flutter_web/index.html?path=1");
-    url = wxGetApp().get_international_url(url);
-
-    // test
-    // url = "http://localhost:13619/web/flutter_web/1.html";
+    m_home_url = file_url_from_path(boost::filesystem::path(resources_dir()) / "web/homepage/index.html");
+    wxString strlang = wxGetApp().current_language_code_safe();
+    if (strlang != "")
+        m_home_url += "?lang=" + strlang;
 
     wxBoxSizer* topsizer = new wxBoxSizer(wxVERTICAL);
     
@@ -51,7 +108,7 @@ WebViewPanel::WebViewPanel(wxWindow *parent)
     // Create the button
     bSizer_toolbar = new wxBoxSizer(wxHORIZONTAL);
 
-    m_button_back = new wxButton(this, wxID_ANY, _L("Back"), wxDefaultPosition, wxDefaultSize, 0);
+    m_button_back = new wxButton(this, wxID_ANY, _L_CONTEXT("Back", "Navigation"), wxDefaultPosition, wxDefaultSize, 0);
     m_button_back->Enable(false);
     bSizer_toolbar->Add(m_button_back, 0, wxALL, 5);
 
@@ -87,17 +144,15 @@ WebViewPanel::WebViewPanel(wxWindow *parent)
     m_info = new wxInfoBar(this);
     topsizer->Add(m_info, wxSizerFlags().Expand());
     // Create the webview
-    m_browser = WebView::CreateWebView(this, url);
-
-    wxGetApp().fltviews().add_webview_panel(this, url);
-
-    if (m_browser == nullptr) {
-        wxLogError("Could not init m_browser");
-        return;
-    }
+    create_browser();
+    m_reset_on_show = WebView::NeedsRecreateOnShow();
     SetSizer(topsizer);
 
-    topsizer->Add(m_browser, wxSizerFlags().Expand().Proportion(1));
+    // The homepage shell is the left nav column; when OrcaCloud opens, its page lives in a
+    // second native pane beside it (the site refuses to be framed).
+    m_content_sizer = new wxBoxSizer(wxHORIZONTAL);
+    m_content_sizer->Add(m_browser, wxSizerFlags().Expand().Proportion(1));
+    topsizer->Add(m_content_sizer, wxSizerFlags().Expand().Proportion(1));
 
     // Log backend information
     /* m_browser->GetUserAgent() may lead crash
@@ -225,6 +280,7 @@ WebViewPanel::WebViewPanel(wxWindow *parent)
     Bind(wxEVT_CLOSE_WINDOW, &WebViewPanel::OnClose, this);
 
     m_LoginUpdateTimer = nullptr;
+    update_mode();
  }
 
 WebViewPanel::~WebViewPanel()
@@ -234,10 +290,6 @@ WebViewPanel::~WebViewPanel()
     
     delete m_tools_menu;
 
-    SSWCP::on_webview_delete(m_browser);
-
-    wxGetApp().fltviews().remove_panel(this);
-
     if (m_LoginUpdateTimer != nullptr) {
         m_LoginUpdateTimer->Stop();
         delete m_LoginUpdateTimer;
@@ -246,17 +298,318 @@ WebViewPanel::~WebViewPanel()
     BOOST_LOG_TRIVIAL(trace) << __FUNCTION__ << " End";
 }
 
-void WebViewPanel::reload() {
-    m_browser->Reload();
+
+void WebViewPanel::create_browser()
+{
+    // Created empty and loaded after the strings are added, so the first load already has them.
+    m_browser = WebView::CreateWebView(this, wxEmptyString);
+    m_browser->AddUserScript(wxString::FromUTF8(WebViewHostDialog::localized_strings_script(home_page_strings())));
+    WebView::LoadUrl(m_browser, m_home_url);
+    m_browser->Hide();
+}
+
+// The cloud page gets its own native view, created on first use and kept alive afterwards
+// so its session and scroll position survive hiding.
+void WebViewPanel::create_cloud_browser()
+{
+    m_cloud_browser = WebView::CreateWebView(this, wxEmptyString);
+
+#ifdef __linux__
+    // The pane's web session is a cookie (guide §3), and WebKitGTK keeps cookies only in memory
+    // unless a persistent store is set up, so without this the sign-in is lost on every restart
+    // (and on every reset_browser). Each wxWebView has its own context, so give the cloud pane its
+    // own store instead of sharing PrinterWebView's. Mirrors PrinterWebView::create_browser.
+    if (auto* wv = static_cast<WebKitWebView*>(m_cloud_browser->GetNativeBackend())) {
+        const auto cookies_path = boost::filesystem::path(data_dir() + "/cache/cloud_cookies.db");
+        auto*      cookie_manager = webkit_web_context_get_cookie_manager(webkit_web_view_get_context(wv));
+        webkit_cookie_manager_set_persistent_storage(cookie_manager, cookies_path.c_str(),
+                                                     WEBKIT_COOKIE_PERSISTENT_STORAGE_SQLITE);
+    }
+#endif
+
+    // Webview events are command events, so they would otherwise propagate up to the
+    // panel's handlers, which drive the homepage view. Keep the cloud pane's events here.
+    m_cloud_browser->Bind(wxEVT_WEBVIEW_NAVIGATING, &WebViewPanel::OnCloudWebViewEvent, this);
+    m_cloud_browser->Bind(wxEVT_WEBVIEW_NAVIGATED, &WebViewPanel::OnCloudWebViewEvent, this);
+    m_cloud_browser->Bind(wxEVT_WEBVIEW_LOADED, &WebViewPanel::OnCloudWebViewEvent, this);
+    m_cloud_browser->Bind(wxEVT_WEBVIEW_TITLE_CHANGED, &WebViewPanel::OnCloudWebViewEvent, this);
+    m_cloud_browser->Bind(wxEVT_WEBVIEW_ERROR, &WebViewPanel::OnCloudWebViewEvent, this);
+    m_cloud_browser->Bind(wxEVT_WEBVIEW_NEWWINDOW, &WebViewPanel::OnCloudWebViewEvent, this);
+    m_cloud_browser->Bind(wxEVT_WEBVIEW_SCRIPT_MESSAGE_RECEIVED, &WebViewPanel::OnCloudWebViewEvent, this);
+
+    m_cloud_browser->Hide();
+    if (m_content_sizer)
+        m_content_sizer->Add(m_cloud_browser, wxSizerFlags().Expand().Proportion(1));
+}
+
+// The scheme://host[:port] origin of an http(s) URL, lower-cased and with the default port
+// dropped, or empty for any other scheme or a malformed URL. Comparing origins (not a string
+// prefix) is what keeps a lookalike host such as "https://cloud.orcaslicer.com.evil.com" out.
+static wxString http_origin_of(const wxString& url)
+{
+    const wxURI uri(url);
+    if (!uri.HasScheme() || !uri.HasServer())
+        return {};
+    const wxString scheme = uri.GetScheme().Lower();
+    if (scheme != "http" && scheme != "https")
+        return {};
+    wxString origin = scheme + "://" + uri.GetServer().Lower();
+    const wxString port = uri.GetPort();
+    if (!port.IsEmpty() && port != (scheme == "https" ? "443" : "80"))
+        origin += ":" + port;
+    return origin;
+}
+
+// Whether a NAVIGATING event will replace the pane's top-level document rather than load a
+// subframe. Edge and macOS report the target frame; WebKitGTK does not (IsTargetMainFrame() is
+// always false there), so a user-gesture navigation stands in: a page's own embedded frames load
+// without a gesture and stay put, while a user following a link to another site does not.
+static bool cloud_navigation_is_top_level(const wxWebViewEvent& evt)
+{
+#ifdef __WXGTK__
+    return evt.GetNavigationAction() == wxWEBVIEW_NAV_ACTION_USER;
+#else
+    return evt.IsTargetMainFrame();
+#endif
+}
+
+// Sends an off-site navigation to the system browser instead of embedding it. Deferred: this runs
+// inside a native webview navigation callback, so launching must not re-enter it.
+static void open_cloud_url_externally(const wxString& url)
+{
+    if (url.empty())
+        return;
+    BOOST_LOG_TRIVIAL(info) << "cloud pane: opening externally " << WebView::RedactUrl(url).ToUTF8().data();
+    wxGetApp().CallAfter([url] { wxLaunchDefaultBrowser(url); });
+}
+
+// Consumed on the cloud view so it never reaches the homepage handlers. {web} pages stay in the
+// pane; every other site (OAuth providers included) opens in the system browser (guide §3).
+void WebViewPanel::OnCloudWebViewEvent(wxWebViewEvent& evt)
+{
+    const wxEventType event_type = evt.GetEventType();
+    if (event_type == wxEVT_WEBVIEW_NAVIGATING) {
+        const wxString url = evt.GetURL();
+        // Guide §3: keep every {web} page in the pane and open other sites (OAuth providers
+        // included) in the system browser. Only top-level navigations are diverted, and
+        // should_divert_cloud_url() excludes same-origin URLs and internal schemes.
+        if (should_divert_cloud_url(url) && cloud_navigation_is_top_level(evt)) {
+            evt.Veto();
+            open_cloud_url_externally(url);
+        }
+    } else if (event_type == wxEVT_WEBVIEW_NEWWINDOW) {
+        const wxString url = evt.GetURL();
+        if (!url.empty()) {
+            if (is_cloud_origin(url))
+                load_cloud_url(url);
+            else
+                open_cloud_url_externally(url);
+        }
+        evt.Veto();
+    } else if (event_type == wxEVT_WEBVIEW_SCRIPT_MESSAGE_RECEIVED) {
+        on_cloud_script_message(evt.GetString().utf8_string());
+    } else if (event_type == wxEVT_WEBVIEW_LOADED || event_type == wxEVT_WEBVIEW_ERROR) {
+        // A Start URL deferred behind a sign-out (see load_cloud_after_signout).
+        if (!m_cloud_after_signout_url.IsEmpty()) {
+            const wxString next = std::exchange(m_cloud_after_signout_url, wxString());
+            load_cloud_url(next);
+        }
+    }
+}
+
+// The page asks for a web session by posting JSON through window.wx; only the newest request
+// counts (tracked in GUI_App). Nothing here touches the UI directly: the desktop login dialog and
+// the network mint must not run on the webview's message-dispatch stack.
+void WebViewPanel::on_cloud_script_message(const std::string& body)
+{
+    const json msg = json::parse(body, nullptr, false);
+    if (msg.is_discarded() || !msg.is_object() || msg.value("command", std::string()) != "request_web_session")
+        return;
+
+    std::string state;
+    if (msg.contains("data") && msg["data"].is_object())
+        state = msg["data"].value("state", std::string());
+    if (state.empty())
+        return;
+
+    wxGetApp().CallAfter([state = std::move(state)] { wxGetApp().request_cloud_web_session(state); });
+}
+
+void WebViewPanel::apply_cloud_layout(bool cloud_on)
+{
+    if (!m_content_sizer)
+        return;
+
+    // Cloud mode pins the homepage to the nav column width; otherwise it fills the panel.
+    if (m_browser) {
+        if (wxSizerItem* item = m_content_sizer->GetItem(m_browser))
+            item->SetProportion(cloud_on ? 0 : 1);
+        // kLeftNavWidth is in DIP: the web view's CSS px are DIP, so scale to physical pixels.
+        m_browser->SetMinSize(cloud_on ? m_browser->FromDIP(wxSize(kLeftNavWidth, -1)) : wxDefaultSize);
+    }
+    Layout();
+}
+
+void WebViewPanel::load_cloud_url(const wxString& url)
+{
+    if (url.empty())
+        return;
+    // Track the origin of whatever the pane is told to load (Start URL, Complete URL, sign-out or
+    // the plain cloud fallback), so navigation policy has the right origin from the first load on.
+    const wxString origin = http_origin_of(url);
+    if (!origin.IsEmpty())
+        m_cloud_base_url = origin;
+    if (!m_cloud_browser)
+        return;
+    // Raw LoadURL: WebView::LoadUrl re-serialises through wxURI, which must not alter the
+    // fragment that carries the one-time handoff token. Log only the redacted URL.
+    BOOST_LOG_TRIVIAL(trace) << __FUNCTION__ << ": " << WebView::RedactUrl(url).ToUTF8().data();
+    m_cloud_browser->LoadURL(url);
+}
+
+bool WebViewPanel::is_cloud_origin(const wxString& url) const
+{
+    const wxString origin = http_origin_of(url);
+    return !origin.IsEmpty() && !m_cloud_base_url.IsEmpty() && origin == m_cloud_base_url;
+}
+
+bool WebViewPanel::should_divert_cloud_url(const wxString& url) const
+{
+    const wxString origin = http_origin_of(url);
+    // Unknown cloud origin or a non-web scheme: never divert (the pane must keep working).
+    if (origin.IsEmpty() || m_cloud_base_url.IsEmpty())
+        return false;
+    return origin != m_cloud_base_url;
+}
+
+// Explicit sign-out ends the pane's own web session. That session is a cookie JS cannot clear
+// (HttpOnly, guide §3/§8) and ClearHistory() is a no-op on WebKitGTK, so drop the pane's stored
+// data natively. wx 3.3.2 ignores the type mask on every backend (any non-zero mask clears
+// everything) and needs an invalid `since` to delete cookies, so the default "all" call is used.
+void WebViewPanel::clear_cloud_storage()
+{
+    if (m_cloud_browser)
+        m_cloud_browser->ClearBrowsingData(wxWEBVIEW_BROWSING_DATA_ALL);
+}
+
+void WebViewPanel::load_cloud_after_signout(const wxString& url)
+{
+    if (m_cloud_pending_signout && !m_cloud_signout_url.IsEmpty()) {
+        // The pane did not exist when the user signed out, so its persisted session must be
+        // cleared before the sign-out page runs and `url` loads once that navigation finishes
+        // (see OnCloudWebViewEvent).
+        m_cloud_pending_signout    = false;
+        m_cloud_after_signout_url  = url;
+        clear_cloud_storage();
+        load_cloud_url(m_cloud_signout_url);
+        return;
+    }
+    load_cloud_url(url);
+}
+
+void WebViewPanel::schedule_cloud_load(const wxString& url)
+{
+    if (!m_cloud_browser) {
+        load_cloud_after_signout(url);
+        return;
+    }
+    // CreateWebView queues the "wx" handler add on the view (macOS/Linux); queue the load behind
+    // it so the page's first scripts already see the bridge (guide §3).
+    m_cloud_browser->CallAfter([this, url]() { load_cloud_after_signout(url); });
+}
+
+void WebViewPanel::cloud_signed_out(const wxString& signout_url)
+{
+    if (signout_url.empty())
+        return;
+    m_cloud_signout_url = signout_url;
+    // The next Start URL must re-seed the pane (it now reflects the signed-out state), so forget
+    // the previous seed regardless of which branch below runs.
+    m_cloud_seed_url.clear();
+    if (m_cloud_browser) {
+        m_cloud_pending_signout = false;
+        // Run the sign-out page (ends the server-side session), then clear the pane's stored data.
+        load_cloud_url(signout_url);
+        clear_cloud_storage();
+    } else {
+        // Pane never opened this run: clear the persisted session on its first open.
+        m_cloud_pending_signout = true;
+    }
+}
+
+void WebViewPanel::set_cloud_mode(bool on, const wxString& url, const wxString& page_url)
+{
+    if (on) {
+        // load_cloud_url records the origin from whatever it loads, including the plain cloud
+        // fallback used when `url` is empty.
+        if (!m_cloud_browser) {
+            create_cloud_browser();
+            m_cloud_seed_url = url;
+            schedule_cloud_load(url.empty() ? wxString(kCloudUrl) : url);
+        } else if (!page_url.empty()) {
+            // The pane already holds a session, so an explicit page loads straight in; the handoff is
+            // only needed to establish one, not to reach an ordinary page.
+            load_cloud_url(page_url);
+        } else if (!url.empty() && url != m_cloud_seed_url) {
+            // Re-seed only when the Start URL actually changed — a login, an account switch or a
+            // sign-out changes it; an ordinary re-open does not (guide §8). Reloading an unchanged
+            // Start URL re-runs the page's auth check on every open, which flashes "Signing you
+            // in…" and re-requests a session (guide §10: mint when the page asks, not per open).
+            // The pane is kept alive, so an unchanged open just shows the page it already holds.
+            m_cloud_seed_url = url;
+            load_cloud_after_signout(url);
+        }
+        m_cloud_browser->Show();
+        // The homepage shell owns the nav highlight and the cloud-mode layout class. A native open
+        // (not the page's own GotoCloud) must ask it to switch; the page's SetCloudMode no-ops if it
+        // already did. OnDocumentLoaded re-applies this when the homepage was still loading.
+        RunScript("SetCloudMode(true)");
+    } else if (m_cloud_browser) {
+        // Closing keeps the pane alive with its session, so re-opening does not have to sign in
+        // again (guide §10). Nothing is cleared here.
+        m_cloud_browser->Hide();
+    }
+    apply_cloud_layout(on && m_cloud_browser != nullptr);
+}
+
+void WebViewPanel::reset_browser()
+{
+    // Rebuild both views the same way, keeping the cloud pane's open/closed state.
+    const bool cloud_on = m_cloud_browser && m_cloud_browser->IsShown();
+
+    m_browser->Destroy(); // also removes it from the sizer
+    create_browser();
+    m_content_sizer->Insert(size_t(0), m_browser, wxSizerFlags().Expand().Proportion(1));
+
+    if (m_cloud_browser) {
+        m_cloud_browser->Destroy();
+        m_cloud_browser = nullptr;
+        create_cloud_browser();
+        schedule_cloud_load(wxString(kCloudUrl));
+        m_cloud_browser->Show(cloud_on);
+        // The rebuilt pane holds no seed, so the next open loads the Start URL again.
+        m_cloud_seed_url.clear();
+    }
+
+    apply_cloud_layout(cloud_on);
+}
+
+bool WebViewPanel::Show(bool show)
+{
+    if (show && std::exchange(m_reset_on_show, false))
+        reset_browser();
+    return wxPanel::Show(show);
 }
 
 void WebViewPanel::load_url(wxString& url)
 {
+    this->Show();
+    this->Raise();
+    m_url->SetLabelText(url);
 
+    if (wxGetApp().get_mode() == comDevelop)
+        wxLogMessage(m_url->GetValue());
     m_browser->LoadURL(url);
-
-    wxGetApp().fltviews().add_webview_panel(this, url);
-
     m_browser->SetFocus();
     UpdateState();
 }
@@ -427,9 +780,14 @@ void WebViewPanel::OnClose(wxCloseEvent& evt)
 
 void WebViewPanel::OnFreshLoginStatus(wxTimerEvent &event)
 {
-    /*auto mainframe = Slic3r::GUI::wxGetApp().mainframe;
-    if (mainframe && mainframe->m_webview == this)
-        Slic3r::GUI::wxGetApp().sm_get_login_info();*/
+    if (WebViewPanel::if_built() == this) {
+        auto* app_config = Slic3r::GUI::wxGetApp().app_config;
+        if (app_config && app_config->get_stealth_mode()) return;
+        Slic3r::GUI::wxGetApp().get_login_info(ORCA_CLOUD_PROVIDER);
+        if (app_config && app_config->has_cloud_provider(BBL_CLOUD_PROVIDER)) {
+            Slic3r::GUI::wxGetApp().get_login_info(BBL_CLOUD_PROVIDER);
+        }
+    }
 }
 
 void WebViewPanel::SetLoginPanelVisibility(bool bshow)
@@ -478,9 +836,9 @@ void WebViewPanel::OpenModelDetail(std::string id, NetworkAgent *agent)
     {
         if (url.find("?") != std::string::npos) 
         { 
-            url += "&from=Snapmaker_Orca";
+            url += "&from=orcaslicer";
         } else {
-            url += "?from=Snapmaker_Orca";
+            url += "?from=orcaslicer";
         }
         
         wxLaunchDefaultBrowser(url); 
@@ -499,11 +857,11 @@ void WebViewPanel::SendLoginInfo()
 void WebViewPanel::ShowNetpluginTip()
 {
     // Install Network Plugin
-    //std::string NP_Installed = wxGetApp().app_config->get("installed_networking");
+    const auto bblnetwork_enabled =wxGetApp().app_config->get_bool("installed_networking");
+    if(!bblnetwork_enabled) {
+        return;
+    }
     bool        bValid       = wxGetApp().is_compatibility_version();
-
-    // SM test
-    bValid = true;
 
     int nShow = 0;
     if (!bValid) nShow = 1;
@@ -517,6 +875,31 @@ void WebViewPanel::ShowNetpluginTip()
 
     wxString strJS = wxString::Format("window.postMessage(%s)", m_Res.dump(-1, ' ', false, json::error_handler_t::ignore));
 
+    RunScript(strJS);
+}
+
+void WebViewPanel::SendCloudProvidersInfo()
+{
+    auto* app_config = wxGetApp().app_config;
+    if (!app_config)
+        return;
+
+    json j;
+    j["command"] = "cloud_providers_info";
+    json data;
+    json provider_array = json::array();
+
+    if (!app_config->get_hide_login_side_panel()) {
+        auto providers = app_config->get_cloud_providers();
+        for (const auto& p : providers) {
+            provider_array.push_back(p);
+        }
+    }
+
+    data["providers"] = provider_array;
+    j["data"] = data;
+
+    wxString strJS = wxString::Format("window.postMessage(%s)", j.dump());
     RunScript(strJS);
 }
 
@@ -558,7 +941,7 @@ void WebViewPanel::update_mode()
     */
 void WebViewPanel::OnNavigationRequest(wxWebViewEvent& evt)
 {
-    BOOST_LOG_TRIVIAL(trace) << __FUNCTION__ << ": " << evt.GetTarget().ToUTF8().data();
+    BOOST_LOG_TRIVIAL(trace) << __FUNCTION__ << ": " << WebView::RedactUrl(evt.GetURL()).ToUTF8().data();
     const wxString &url = evt.GetURL();
     if (url.StartsWith("File://") || url.StartsWith("file://")) {
         if (!url.Contains("/web/homepage/index.html")) {
@@ -602,8 +985,9 @@ void WebViewPanel::OnNavigationRequest(wxWebViewEvent& evt)
     */
 void WebViewPanel::OnNavigationComplete(wxWebViewEvent& evt)
 {
+    m_browser->Show();
     Layout();
-    BOOST_LOG_TRIVIAL(trace) << __FUNCTION__ << ": " << evt.GetTarget().ToUTF8().data();
+    BOOST_LOG_TRIVIAL(trace) << __FUNCTION__ << ": " << WebView::RedactUrl(evt.GetURL()).ToUTF8().data();
     if (wxGetApp().get_mode() == comDevelop)
         wxLogMessage("%s", "Navigation complete; url='" + evt.GetURL() + "'");
     UpdateState();
@@ -622,7 +1006,11 @@ void WebViewPanel::OnDocumentLoaded(wxWebViewEvent& evt)
         if (wxGetApp().get_mode() == comDevelop)
             wxLogMessage("%s", "Document loaded; url='" + evt.GetURL() + "'");
     }
+    // A reloaded homepage loses its cloud-mode class; restore it if the pane is open.
+    if (m_cloud_browser && m_cloud_browser->IsShown())
+        RunScript("SetCloudMode(true)");
     UpdateState();
+    SendCloudProvidersInfo();
 }
 
 void WebViewPanel::OnTitleChanged(wxWebViewEvent &evt)
@@ -636,7 +1024,7 @@ void WebViewPanel::OnTitleChanged(wxWebViewEvent &evt)
     */
 void WebViewPanel::OnNewWindow(wxWebViewEvent& evt)
 {
-    BOOST_LOG_TRIVIAL(trace) << __FUNCTION__ << ": " << evt.GetURL().ToUTF8().data();
+    BOOST_LOG_TRIVIAL(trace) << __FUNCTION__ << ": " << WebView::RedactUrl(evt.GetURL()).ToUTF8().data();
     wxString flag = " (other)";
 
     if (evt.GetNavigationAction() == wxWEBVIEW_NAV_ACTION_USER)
@@ -657,7 +1045,7 @@ void WebViewPanel::OnNewWindow(wxWebViewEvent& evt)
 
 void WebViewPanel::OnScriptMessage(wxWebViewEvent& evt)
 {
-    // BOOST_LOG_TRIVIAL(trace) << __FUNCTION__ << ": " << evt.GetString().ToUTF8().data();
+    BOOST_LOG_TRIVIAL(trace) << __FUNCTION__ << ": " << evt.GetString().ToUTF8().data();
     // update login status
     if (m_LoginUpdateTimer == nullptr) {
         BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << " Create Timer";
@@ -665,12 +1053,8 @@ void WebViewPanel::OnScriptMessage(wxWebViewEvent& evt)
         m_LoginUpdateTimer->Start(2000);
     }
 
-    // if (wxGetApp().get_mode() == comDevelop)
-    //     wxLogMessage("Script message received; value = %s, handler = %s", evt.GetString(), evt.GetMessageHandler());
-
-    // test
-    SSWCP::handle_web_message(evt.GetString().ToUTF8().data(), m_browser);
-
+    if (wxGetApp().get_mode() == comDevelop)
+        wxLogMessage("Script message received; value = %s, handler = %s", evt.GetString(), evt.GetMessageHandler());
     std::string response = wxGetApp().handle_web_request(evt.GetString().ToUTF8().data());
     if (response.empty()) return;
 
@@ -887,21 +1271,37 @@ void WebViewPanel::OnSelectAll(wxCommandEvent& WXUNUSED(evt))
 /**
     * Callback invoked when a loading error occurs
     */
-void WebViewPanel::OnError(wxWebViewEvent& event)
+void WebViewPanel::OnError(wxWebViewEvent& evt)
 {
-    auto e = "unknown error";
-    switch (event.GetInt()) {
-    case wxWEBVIEW_NAV_ERR_CONNECTION: e = "wxWEBVIEW_NAV_ERR_CONNECTION"; break;
-    case wxWEBVIEW_NAV_ERR_CERTIFICATE: e = "wxWEBVIEW_NAV_ERR_CERTIFICATE"; break;
-    case wxWEBVIEW_NAV_ERR_AUTH: e = "wxWEBVIEW_NAV_ERR_AUTH"; break;
-    case wxWEBVIEW_NAV_ERR_SECURITY: e = "wxWEBVIEW_NAV_ERR_SECURITY"; break;
-    case wxWEBVIEW_NAV_ERR_NOT_FOUND: e = "wxWEBVIEW_NAV_ERR_NOT_FOUND"; break;
-    case wxWEBVIEW_NAV_ERR_REQUEST: e = "wxWEBVIEW_NAV_ERR_REQUEST"; break;
-    case wxWEBVIEW_NAV_ERR_USER_CANCELLED: e = "wxWEBVIEW_NAV_ERR_USER_CANCELLED"; break;
-    case wxWEBVIEW_NAV_ERR_OTHER: e = "wxWEBVIEW_NAV_ERR_OTHER"; break;
+#define WX_ERROR_CASE(type) \
+    case type: \
+    category = #type; \
+    break;
+
+    wxString category;
+    switch (evt.GetInt())
+    {
+        WX_ERROR_CASE(wxWEBVIEW_NAV_ERR_CONNECTION);
+        WX_ERROR_CASE(wxWEBVIEW_NAV_ERR_CERTIFICATE);
+        WX_ERROR_CASE(wxWEBVIEW_NAV_ERR_AUTH);
+        WX_ERROR_CASE(wxWEBVIEW_NAV_ERR_SECURITY);
+        WX_ERROR_CASE(wxWEBVIEW_NAV_ERR_NOT_FOUND);
+        WX_ERROR_CASE(wxWEBVIEW_NAV_ERR_REQUEST);
+        WX_ERROR_CASE(wxWEBVIEW_NAV_ERR_USER_CANCELLED);
+        WX_ERROR_CASE(wxWEBVIEW_NAV_ERR_OTHER);
     }
-    BOOST_LOG_TRIVIAL(fatal) << __FUNCTION__<< boost::format(":PrinterWebView error loading page %1% %2% %3% %4%") % event.GetURL() % event.GetTarget() %e % event.GetString();
-    
+
+    BOOST_LOG_TRIVIAL(trace) << __FUNCTION__ << ": [" << category << "] " << evt.GetString().ToUTF8().data();
+
+    if (wxGetApp().get_mode() == comDevelop) 
+    {
+        wxLogMessage("%s", "Error; url='" + evt.GetURL() + "', error='" + category + " (" + evt.GetString() + ")'");
+
+        // Show the info bar with an error
+        m_info->ShowMessage(wxString::Format(_L("An error occurred loading %s"), evt.GetURL()) + "\n" + "'" + category + "'", wxICON_ERROR);
+    }
+
+    UpdateState();
 }
 
 

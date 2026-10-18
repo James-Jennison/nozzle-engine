@@ -1,4 +1,38 @@
 #include "SendSystemInfoDialog.hpp"
+#include "libslic3r/Semver.hpp"
+#include <string>
+#include <wx/string.h>
+#include <wx/gdicmn.h>
+#include <wx/toplevel.h>
+#include <wx/textctrl.h>
+#include "libslic3r_version.h"
+#include <map>
+#include <cstddef>
+#include <cstdio>
+#include <stdio.h>
+#include <algorithm>
+#include <vector>
+#include <cstdint>
+#include <cstring>
+#include <iterator>
+#include <wx/language.h>
+#include <wx/intl.h>
+#include <wx/version.h>
+#include <cmath>
+#include <system_error>
+#include <utility>
+#include <boost/algorithm/string/classification.hpp>
+#include <boost/algorithm/string/constants.hpp>
+#include <functional>
+#include <boost/algorithm/string/trim.hpp>
+#include <sstream>
+#include <wx/dialog.h>
+#include "libslic3r/libslic3r.h"
+#include <cassert>
+#include <wx/colour.h>
+#include <wx/html/htmlwin.h>
+#include <wx/event.h>
+#include "slic3r/GUI/wxExtensions.hpp"
 
 #if __APPLE__
 #import <IOKit/IOKitLib.h>
@@ -12,11 +46,12 @@
 
 #include "slic3r/GUI/format.hpp"
 #include "slic3r/Utils/Http.hpp"
-#include "slic3r/Utils/PresetUpdater.hpp"
 
 #include "GUI_App.hpp"
 #include "GUI_Utils.hpp"
-#include "I18N.hpp"
+#ifdef __WXGTK__
+#include "LinuxDisplayBackend.hpp"
+#endif
 #include "MainFrame.hpp"
 #include "MsgDialog.hpp"
 #include "OpenGLManager.hpp"
@@ -28,7 +63,7 @@
 #include <boost/property_tree/json_parser.hpp>
 #include <boost/uuid/detail/md5.hpp>
 
-#include "GL/glew.h"
+#include <glad/gl.h>
 
 #include <wx/display.h>
 #include <wx/htmllbox.h>
@@ -38,6 +73,11 @@
 
 #include <atomic>
 #include <thread>
+#include "slic3r/GUI/GUI.hpp"
+#include <cstdlib>
+#include <iomanip>
+
+class wxWindow;
 
 #ifdef _WIN32
     #include <windows.h>
@@ -211,7 +251,7 @@ static bool should_dialog_be_shown()
 
 
 
-// Following function saves current Snapmaker Orca version into app config.
+// Following function saves current OrcaSlicer version into app config.
 // It will be later used to decide whether to open the dialog or not.
 static void save_version()
 {
@@ -403,7 +443,7 @@ static std::string generate_system_info_json()
     namespace pt = boost::property_tree;
 
     pt::ptree data_node;
-    data_node.put("Snapmaker_OrcaVersion", SLIC3R_VERSION);
+    data_node.put("OrcaSlicerVersion", SLIC3R_VERSION);
     data_node.put("BuildID", SLIC3R_BUILD_ID);
     data_node.put("UniqueID", unique_id);
     data_node.put("Platform", platform_to_string(platform()));
@@ -420,6 +460,28 @@ static std::string generate_system_info_json()
     data_node.put("Linux_DistroID", distro_id);
     data_node.put("Linux_DistroVer", distro_ver);
     data_node.put("Linux_Wayland", wxGetEnv("WAYLAND_DISPLAY", nullptr));
+#ifdef __WXGTK__
+    const LinuxDisplayBackend display_backend = get_linux_display_backend();
+    const char* display_backend_name = "unknown";
+    const char* gl_backend_hint = "Unknown";
+    switch (display_backend) {
+    case LinuxDisplayBackend::Wayland:
+        display_backend_name = "wayland";
+        gl_backend_hint = "EGL";
+        break;
+    case LinuxDisplayBackend::X11:
+        display_backend_name = "x11";
+        gl_backend_hint = "GLX";
+        break;
+    default:
+        break;
+    }
+    data_node.put("Linux_DisplayBackend", display_backend_name);
+    data_node.put("Linux_GLBackendHint", gl_backend_hint);
+#else
+    data_node.put("Linux_DisplayBackend", "unknown");
+    data_node.put("Linux_GLBackendHint", "Unknown");
+#endif
 #endif
     data_node.put("wxWidgets", wxVERSION_NUM_DOT_STRING);
 #ifdef __WXGTK__
@@ -443,7 +505,7 @@ static std::string generate_system_info_json()
 
     pt::ptree hw_node;
     {
-        hw_node.put("ArchName", wxPlatformInfo::Get().GetArchName());
+        hw_node.put("ArchName", wxPlatformInfo::Get().GetBitnessName());
         size_t num = std::round(Slic3r::total_physical_memory()/107374100.);
         hw_node.put("RAM_GiB", std::to_string(num / 10) + "." + std::to_string(num % 10));
     }
@@ -481,7 +543,7 @@ static std::string generate_system_info_json()
         monitor_node.put("height", display.GetGeometry().GetHeight());
 
         // Only get the scaling on Win, it is not reliable on other platforms.
-        #if defined(_WIN32) && wxCHECK_VERSION(3, 1, 2)
+        #if defined(_WIN32)
             double scaling = display.GetPPI().GetWidth() / 96.;
             std::stringstream ss;
             ss << std::setprecision(3) << scaling;
@@ -608,7 +670,7 @@ SendSystemInfoDialog::SendSystemInfoDialog(wxWindow* parent)
     wxString html = GUI::format_wxstr(
             "<html><body bgcolor=%1%><font color=%2%>"
             "<table><tr><td>"
-            "<img src = \"" + resources_dir() + "/images/Snapmaker_Orca_192px.png\" />"
+            "<img src = \"" + resources_dir() + "/images/OrcaSlicer_192px.png\" />"
             "</td><td align=\"left\">"
             + text0 + "<br / ><br / >"
             + text1 + "<br /><br />"
@@ -728,7 +790,7 @@ bool SendSystemInfoDialog::send_info(wxString& message)
                 if (job_done) // UI thread wants us to cancel.
                     cancel = true;
                 if (cancel)
-                    //result = { Result::Cancelled, _L("Sending system info was cancelled.") };
+                    //result = { Result::Cancelled, _L("Sending system info was canceled.") };
                     result = {Result::Cancelled, wxEmptyString};
             })
             .perform_sync();

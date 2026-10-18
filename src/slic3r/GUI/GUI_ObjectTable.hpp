@@ -1,6 +1,20 @@
 #ifndef slic3r_GUI_ObjectTable_hpp_
 #define slic3r_GUI_ObjectTable_hpp_
 
+#include <wx/event.h>
+#include <cstddef>
+#include <vector>
+#include <wx/arrstr.h>
+#include "libslic3r/Config.hpp"
+#include <wx/dynarray.h>
+#include <wx/dataobj.h>
+#include <string>
+#include <functional>
+#include <list>
+#include <wx/panel.h>
+#include "slic3r/GUI/wxExtensions.hpp"
+#include <wx/rtti.h>
+#include "slic3r/GUI/GUI_Utils.hpp"
 #include <wx/wx.h>
 #include <wx/intl.h>
 #include <wx/generic/gridsel.h>
@@ -344,8 +358,8 @@ public:
         ConfigOptionBool            ori_enable_support;
         ConfigOptionEnum<BrimType>  brim_type;
         ConfigOptionEnum<BrimType>  ori_brim_type;
-        ConfigOptionFloat           speed_perimeter;
-        ConfigOptionFloat           ori_speed_perimeter;
+        ConfigOptionFloatsNullable  speed_perimeter;
+        ConfigOptionFloatsNullable  ori_speed_perimeter;
 
         ModelConfig*                config;
         ModelVolumeType             model_volume_type;
@@ -489,32 +503,6 @@ public:
         }
     }
 
-    // Snapmaker: flow variant — speed keys became vector options (values ordered by
-    // process_flow_support) while the grid keeps editing a scalar: the standard (first) value.
-    ConfigOptionFloat get_global_speed_value(const DynamicPrintConfig& global_config, const std::string& config_option)
-    {
-        const auto* floats = global_config.option<ConfigOptionFloats>(config_option);
-        return ConfigOptionFloat(floats != nullptr && !floats->values.empty() ? floats->values.front() : 0.);
-    }
-
-    ConfigOptionFloat get_object_speed_value(const DynamicPrintConfig& global_config, ModelConfig* obj_config, const std::string& config_option)
-    {
-        if (obj_config->has(config_option)) {
-            const auto* floats = dynamic_cast<const ConfigOptionFloats*>(obj_config->option(config_option));
-            return ConfigOptionFloat(floats != nullptr && !floats->values.empty() ? floats->values.front() : 0.);
-        }
-        return get_global_speed_value(global_config, config_option);
-    }
-
-    ConfigOptionFloat get_volume_speed_value(const DynamicPrintConfig& global_config, ModelConfig* obj_config, ModelConfig* volume_config, const std::string& config_option)
-    {
-        if (volume_config->has(config_option)) {
-            const auto* floats = dynamic_cast<const ConfigOptionFloats*>(volume_config->option(config_option));
-            return ConfigOptionFloat(floats != nullptr && !floats->values.empty() ? floats->values.front() : 0.);
-        }
-        return get_object_speed_value(global_config, obj_config, config_option);
-    }
-
     int get_row_count() { return m_grid_data.size() + 1; }
     int get_col_count() { return m_col_data.size(); }
     ObjectGridCol* get_grid_col(int col) { return m_col_data[col]; }
@@ -617,16 +605,11 @@ private:
     wxColour            m_hover_colour;
     wxBoxSizer*         m_top_sizer{nullptr};
     wxBoxSizer*         m_page_sizer{nullptr};
-    wxBoxSizer*         m_page_top_sizer{nullptr};
-    wxTextCtrl*         m_search_line{ nullptr };
     ObjectGrid*         m_object_grid{nullptr};
     ObjectGridTable*    m_object_grid_table{nullptr};
-    wxStaticText*       m_page_text{nullptr};
-    ScalableButton*     m_global_reset{nullptr};
     wxScrolledWindow*   m_side_window{nullptr};
     ObjectTableSettings* m_object_settings{ nullptr };
     Model*              m_model{nullptr};
-    ModelConfig*        m_config {nullptr};
     Plater*             m_plater{nullptr};
 
     int                 m_cur_row { -1 };
@@ -651,8 +634,6 @@ class ObjectTableDialog : public GUI::DPIDialog
     const int POPUP_HEIGHT  = FromDIP(1024);
 
     //wxPanel*             m_panel{ nullptr };
-    wxBoxSizer*          m_top_sizer{ nullptr };
-    wxStaticText*        m_static_title{ nullptr };
     //wxTimer*             m_refresh_timer;
     ObjectTablePanel*    m_obj_panel{ nullptr };
     Model*               m_model{ nullptr };

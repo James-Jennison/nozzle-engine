@@ -1,6 +1,13 @@
 #ifndef slic3r_GUI_TextInput_hpp_
 #define slic3r_GUI_TextInput_hpp_
 
+#include <wx/containr.h>
+#include <wx/gdicmn.h>
+#include "slic3r/GUI/wxExtensions.hpp"
+#include "slic3r/GUI/Widgets/StateColor.hpp"
+#include <wx/string.h>
+#include <wx/event.h>
+#include <wx/dc.h>
 #include <wx/textctrl.h>
 #include "StaticBox.hpp"
 
@@ -9,9 +16,14 @@ class TextInput : public wxNavigationEnabled<StaticBox>
 
     wxSize labelSize;
     ScalableBitmap icon;
+    ScalableBitmap icon_1;
     StateColor     label_color;
     StateColor     text_color;
     wxTextCtrl * text_ctrl;
+
+    wxString  static_tips;
+    wxSize    static_tips_size;
+    wxBitmap  static_tips_icon;
 
     static const int TextInputWidth = 200;
     static const int TextInputHeight = 50;
@@ -38,11 +50,18 @@ public:
 
     void SetCornerRadius(double radius);
 
-    void SetLabel(const wxString& label);
+    // Only meant to be used by inspector, not public API
+    int GetCornerRadius() const { return static_cast<int>(radius); }
+
+    void SetLabel(const wxString& label) override;
+
+    void SetStaticTips(const wxString& tips, const wxBitmap& bitmap);
 
     void SetIcon(const wxBitmap & icon);
-
     void SetIcon(const wxString & icon);
+
+    void SetIcon_1(const wxString &icon);
+    void SetIcon_1(const wxBitmap &icon);
 
     void SetLabelColor(StateColor const &color);
 
@@ -62,7 +81,7 @@ protected:
     virtual void OnEdit() {}
 
     virtual void DoSetSize(
-        int x, int y, int width, int height, int sizeFlags = wxSIZE_AUTO);
+        int x, int y, int width, int height, int sizeFlags = wxSIZE_AUTO) override;
 
     void DoSetToolTipText(wxString const &tip) override;
 

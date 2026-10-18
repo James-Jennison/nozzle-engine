@@ -1,7 +1,16 @@
+#include <algorithm>
+#include <cassert>
+#include <cfloat>
+#include <math.h>
+#include <limits>
+#include <cstdint>
 #include <stdio.h>
 #include <numeric>
 
 #include <cmath>
+#include <string>
+#include <vector>
+#include <utility>
 #include "../ClipperUtils.hpp"
 #include "../EdgeGrid.hpp"
 #include "../Geometry.hpp"
@@ -13,7 +22,14 @@
 #include "../VariableWidth.hpp"
 
 #include "FillBase.hpp"
+#include "libslic3r/Exception.hpp"
+#include "libslic3r/Config.hpp"
+#include "libslic3r/ExPolygon.hpp"
+#include "libslic3r/ExtrusionEntity.hpp"
+#include "libslic3r/ExtrusionEntityCollection.hpp"
+#include "libslic3r/BoundingBox.hpp"
 #include "FillConcentric.hpp"
+#include "FillSpiralInset.hpp"
 #include "FillHoneycomb.hpp"
 #include "Fill3DHoneycomb.hpp"
 #include "FillGyroid.hpp"
@@ -27,6 +43,12 @@
 // BBS: new infill pattern header
 #include "FillConcentricInternal.hpp"
 #include "FillCrossHatch.hpp"
+#include "libslic3r/Polyline.hpp"
+#include "libslic3r/ShortestPath.hpp"
+#include "libslic3r/Line.hpp"
+#include "libslic3r/Polygon.hpp"
+#include "libslic3r/Utils.hpp"
+#include "libslic3r/Flow.hpp"
 // #define INFILL_DEBUG_OUTPUT
 
 namespace Slic3r {
@@ -40,6 +62,7 @@ Fill* Fill::new_from_type(const InfillPattern type)
 {
     switch (type) {
     case ipConcentric:          return new FillConcentric();
+    case ipSpiralInset:    return new FillSpiralInset();
     case ipHoneycomb:           return new FillHoneycomb();
     case ipLateralHoneycomb:         return new FillLateralHoneycomb();
     case ip3DHoneycomb:         return new Fill3DHoneycomb();
@@ -105,6 +128,9 @@ Polylines Fill::fill_surface(const Surface *surface, const FillParams &params)
 {
     // Perform offset.
     Slic3r::ExPolygons expp = offset_ex(surface->expolygon, float(scale_(this->overlap - 0.5 * this->spacing)));
+    // Orca: Separated infills move the box center onto each body; origin-aligned patterns follow it.
+    const Point shift = this->aligned_to_origin() && ! empty(this->bounding_box) ? this->bounding_box.center() : Point::Zero();
+    translate(expp, -shift);
     // Create the infills for each of the regions.
     Polylines polylines_out;
     for (size_t i = 0; i < expp.size(); ++ i)
@@ -114,6 +140,8 @@ Polylines Fill::fill_surface(const Surface *surface, const FillParams &params)
             _infill_direction(surface),
             std::move(expp[i]),
             polylines_out);
+    for (Polyline &pl : polylines_out)
+        pl.translate(shift);
     return polylines_out;
 }
 
@@ -164,7 +192,11 @@ void Fill::fill_surface_extrusion(const Surface* surface, const FillParams& para
         // ORCA: special flag for flow rate calibration
         auto is_flow_calib = params.extrusion_role == erTopSolidInfill && this->print_object_config->has("calib_flowrate_topinfill_special_order") &&
                              this->print_object_config->option("calib_flowrate_topinfill_special_order")->getBool();
-        if (is_flow_calib) {
+        // Orca: a forced surface fill order must survive the G-code path planner, which would
+        // otherwise re-chain and possibly reverse the paths. The same applies to the flow rate
+        // calibration's special toolpath order.
+        const bool keep_fill_order = params.fill_order != SurfaceFillOrder::Default;
+        if (is_flow_calib || keep_fill_order) {
             eec->no_sort = true;
         }
         size_t idx   = eec->entities.size();
@@ -179,7 +211,7 @@ void Fill::fill_surface_extrusion(const Surface* surface, const FillParams& para
                 params.extrusion_role,
                 flow_mm3_per_mm, float(flow_width), params.flow.height());
         }
-        if (!params.can_reverse || is_flow_calib) {
+        if (!params.can_reverse || is_flow_calib || keep_fill_order) {
             for (size_t i = idx; i < eec->entities.size(); i++)
                 eec->entities[i]->set_reverse();
         }
@@ -238,10 +270,7 @@ void Fill::_create_gap_fill(const Surface* surface, const FillParams& params, Ex
                 return p.length() < scale_(params.config->filter_out_gap_fill.value);
             }), polylines.end());
 
-            ExtrusionEntityCollection gap_fill;
-            variable_width(polylines, erGapFill, params.flow, gap_fill.entities);
-            auto gap = std::move(gap_fill.entities);
-            out->append(gap);
+            variable_width(polylines, erGapFill, params.flow, out->entities);
         }
     }
 }
@@ -304,11 +333,12 @@ std::pair<float, Point> Fill::_infill_direction(const Surface *surface) const
         printf("Filling bridge with angle %f\n", surface->bridge_angle);
 #endif /* SLIC3R_DEBUG */
         out_angle = float(surface->bridge_angle);
-    } else if (this->layer_id != size_t(-1)) {
+    } else if (this->layer_id != size_t(-1) && !fixed_angle) {
         // alternate fill direction
-        //Orca: if template angle is not empty, don't apply layer angle
-        if(!is_using_template_angle) 
+        //Orca: Do not alternate direction if Fill.fixed_angle is true
+        if (!this->dont_alternate_fill_direction) {
             out_angle += this->_layer_angle(this->layer_id / surface->thickness_layers);
+        }
     } else {
 //    	printf("Layer_ID undefined!\n");
     }
@@ -1023,7 +1053,7 @@ void mark_boundary_segments_touching_infill(
 #endif // INFILL_DEBUG_OUTPUT
 
 	EdgeGrid::Grid grid;
-    // Make sure that the the grid is big enough for queries against the thick segment.
+    // Make sure that the grid is big enough for queries against the thick segment.
 	grid.set_bbox(boundary_bbox.inflated(distance_colliding * 1.43));
 	// Inflate the bounding box by a thick line width.
 	grid.create(boundary, coord_t(std::max(clip_distance, distance_colliding) + scale_(10.)));
@@ -1566,13 +1596,18 @@ BoundaryInfillGraph create_boundary_infill_graph(const Polylines &infill_ordered
 // The extended bounding box of the whole object that covers any rotation of every layer.
 BoundingBox Fill::extended_object_bounding_box() const
 {
-    BoundingBox out = bounding_box;
+    // Orca: Extend about the box center, which separated infills move off the origin.
+    const Point c   = this->bounding_box.center();
+    BoundingBox out = this->bounding_box;
+    out.translate(-c.x(), -c.y());
     out.merge(Point(out.min.y(), out.min.x()));
     out.merge(Point(out.max.y(), out.max.x()));
 
     // The bounding box is scaled by sqrt(2.) to ensure that the bounding box
     // covers any possible rotations.
-    return out.scaled(sqrt(2.));
+    out = out.scaled(sqrt(2.));
+    out.translate(c.x(), c.y());
+    return out;
 }
 
 void Fill::connect_infill(Polylines &&infill_ordered, const std::vector<const Polygon*> &boundary_src, const BoundingBox &bbox, Polylines &polylines_out, const double spacing, const FillParams &params)
@@ -1707,6 +1742,12 @@ void Fill::connect_infill(Polylines &&infill_ordered, const std::vector<const Po
             size_t                    polyline_idx1  = get_and_update_merged_with(((cp1 - graph.map_infill_end_point_to_boundary.data()) / 2));
             size_t                    polyline_idx2  = get_and_update_merged_with(((cp2 - graph.map_infill_end_point_to_boundary.data()) / 2));
             const Points             &contour        = graph.boundary[cp1->contour_idx];
+
+            // Orca: If multiline infill is requested, skip connections that are too short.
+            if (params.multiline > 1 && arc.arc_length < scale_(spacing) * params.multiline) {
+                continue;
+            }
+
             const std::vector<double> &contour_params = graph.boundary_params[cp1->contour_idx];
             if (polyline_idx1 != polyline_idx2) {
                 Polyline &polyline1 = infill_ordered[polyline_idx1];
@@ -1845,12 +1886,12 @@ static inline void base_support_extend_infill_lines(Polylines &infill, BoundaryI
         const bool                   first           = graph.first(cp);
         int                          extend_next_idx = -1;
         int                          extend_prev_idx = -1;
-        coord_t                      dist_y_prev;
-        coord_t                      dist_y_next;
-        double                       arc_len_prev;
-        double                       arc_len_next;
+        coord_t                      dist_y_prev     = 0;
+        coord_t                      dist_y_next     = 0;
+        double                       arc_len_prev    = 0;
+        double                       arc_len_next    = 0;
 
-        if (! graph.next_vertical(cp)){
+        if (! graph.next_vertical(cp)) {
             size_t i = cp.point_idx;
             size_t j = next_idx_modulo(i, contour);
             while (j != cp.next_on_contour->point_idx) {
@@ -2453,9 +2494,11 @@ void Fill::connect_base_support(Polylines &&infill_ordered, const std::vector<co
 #endif // INFILL_DEBUG_OUTPUT
 
     const std::vector<SupportArcCost> arches = evaluate_support_arches(infill_ordered, graph, spacing, params);
-    static const double cost_low      = line_spacing * 1.3;
-    static const double cost_high     = line_spacing * 2.;
-    static const double cost_veryhigh = line_spacing * 3.;
+    // Must not be static: line_spacing varies per call (base vs interface fills differ),
+    // and a static here would fix these to whichever call ran first, order depending on thread count.
+    const double cost_low      = line_spacing * 1.3;
+    const double cost_high     = line_spacing * 2.;
+    const double cost_veryhigh = line_spacing * 3.;
 
     {
         std::vector<const SupportArcCost*> selected;
@@ -2700,55 +2743,59 @@ void Fill::connect_base_support(Polylines &&infill_ordered, const Polygons &boun
     connect_base_support(std::move(infill_ordered), polygons_src, bbox, polylines_out, spacing, params);
 }
 
-//Fill  Multiline
+// Fill Multiline -Clipper2 version
 void multiline_fill(Polylines& polylines, const FillParams& params, float spacing)
 {
-    if (params.multiline > 1) {
-        const int n_lines = params.multiline;
-        const int n_polylines = static_cast<int>(polylines.size());
-        Polylines all_polylines;
-        all_polylines.reserve(n_lines * n_polylines);
+    if (params.multiline <= 1)
+        return;
 
-        const float center = (n_lines - 1) / 2.0f;
+    const int n_lines     = params.multiline;
+    const int n_polylines = static_cast<int>(polylines.size());
+    Polylines all_polylines;
+    all_polylines.reserve(n_lines * n_polylines);
 
-        for (int line = 0; line < n_lines; ++line) {
-            float offset = (static_cast<float>(line) - center) * spacing;
+    // Remove invalid polylines
+    polylines.erase(std::remove_if(polylines.begin(), polylines.end(),
+                              [](const Polyline& p) { return p.size() < 2; }),
+               polylines.end());
 
-            for (const Polyline& pl : polylines) {
-                const size_t n = pl.points.size();
-                if (n < 2) {
-                    all_polylines.emplace_back(pl);
-                    continue;
-                }
+    if (polylines.empty())
+    return;
 
-                Points new_points;
-                new_points.reserve(n);
-                for (size_t i = 0; i < n; ++i) {
-                    Vec2f tangent;
-                    if (i == 0)
-                        tangent = Vec2f(pl.points[1].x() - pl.points[0].x(), pl.points[1].y() - pl.points[0].y());
-                    else if (i == n - 1)
-                        tangent = Vec2f(pl.points[n - 1].x() - pl.points[n - 2].x(), pl.points[n - 1].y() - pl.points[n - 2].y());
-                    else
-                        tangent = Vec2f(pl.points[i + 1].x() - pl.points[i - 1].x(), pl.points[i + 1].y() - pl.points[i - 1].y());
+    const int rings = n_lines / 2;
 
-                    float len = std::hypot(tangent.x(), tangent.y());
-                    if (len == 0)
-                        len = 1.0f;
-                    tangent /= len;
-                    Vec2f normal(-tangent.y(), tangent.x());
+    // Compute offsets (in units of spacing)
+    std::vector<double> offsets;
+    offsets.reserve(n_lines);
 
-                    Point p = pl.points[i];
-                    p.x() += scale_(normal.x() * offset);
-                    p.y() += scale_(normal.y() * offset);
-                    new_points.push_back(p);
-                }
+    if (n_lines % 2 != 0) {
+        // Odd: center line at offset = 0
+        offsets.push_back(0.0);
 
-                all_polylines.emplace_back(std::move(new_points));
-            }
-        }
-        polylines = std::move(all_polylines);
+        for (int i = 1; i <= rings; ++i)
+            offsets.push_back(i * spacing);
+    } else {
+        // Even: no center, start at 0.5 * spacing
+        double start = 0.5 * spacing;
+        for (int i = 0; i < rings; ++i)
+            offsets.push_back(start + i * spacing);
     }
+
+    for (double t : offsets) {
+        if (t == 0.0) {
+            // Center line (only applies when n_lines is odd)
+            all_polylines.insert(all_polylines.end(), polylines.begin(), polylines.end());
+            continue;
+        }
+
+        const float delta = float(scale_(t));
+        // Arc tolerance of 1/500 of the offset, Clipper2's default.
+        for (const Polygon &ring : offset(polylines, delta, jtRound, 0.002 * delta, etOpenRound))
+            if (ring.size() >= 3)
+                all_polylines.emplace_back(ring.split_at_first_point());
+    }
+
+    polylines = std::move(all_polylines);
 }
 
 } // namespace Slic3r

@@ -1,7 +1,10 @@
 #ifndef slic3r_ThumbnailData_hpp_
 #define slic3r_ThumbnailData_hpp_
 
+#include <functional>
+#include <string>
 #include <vector>
+#include "libslic3r/libslic3r.h"
 #include "libslic3r/Point.hpp"
 #include "nlohmann/json.hpp"
 
@@ -32,12 +35,13 @@ using ThumbnailsList = std::vector<ThumbnailData>;
 
 struct ThumbnailsParams
 {
-	const Vec2ds 	sizes;
+	const Vec2ds 	sizes{};
 	bool 			printable_only;
 	bool 			parts_only;
 	bool 			show_bed;
 	bool 			transparent_background;
     int             plate_id;
+    bool            use_plate_box{true};
 };
 
 typedef std::function<ThumbnailsList(const ThumbnailsParams&)> ThumbnailsGeneratorCallback;
@@ -77,6 +81,7 @@ struct PlateBBoxData
     int first_extruder = 0;
     float nozzle_diameter = 0.4;
     std::string bed_type;
+    float first_layer_time = 0.0f;
     // version 1: use view type ColorPrint (filament color)
     // version 2: use view type FilamentId (filament id)
     int version = 2;
@@ -90,6 +95,7 @@ struct PlateBBoxData
         j["nozzle_diameter"] = nozzle_diameter;
         j["version"]         = version;
         j["bed_type"]        = bed_type;
+        j["first_layer_time"] = first_layer_time;
         for (const auto& bbox : bbox_objs) {
             nlohmann::json j_bbox;
             bbox.to_json(j_bbox);

@@ -1,7 +1,11 @@
 #include "FileHelp.hpp"
+#include <algorithm>
 #include <boost/filesystem.hpp>
+#include <boost/filesystem/operations.hpp>
+#include <boost/filesystem/exception.hpp>
 #include <boost/log/trivial.hpp>
-#include <regex>
+#include <string>
+#include <cstdint>
 namespace Slic3r {
     namespace Utils {
 
@@ -20,8 +24,7 @@ bool is_file_too_large(std::string file_path, bool &try_ok)
 }
 
 void slash_to_back_slash(std::string &file_path) {
-    std::regex regex("\\\\");
-    file_path = std::regex_replace(file_path, regex, "/");
+    std::replace(file_path.begin(), file_path.end(), '\\', '/');
 }
 
 }} // namespace Slic3r::Utils

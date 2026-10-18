@@ -1,11 +1,20 @@
 #ifndef slic3r_OptionsGroup_hpp_
 #define slic3r_OptionsGroup_hpp_
 
+#include <exception>
+#include <wx/sizer.h>
+#include <memory>
+#include <string>
+#include <cstddef>
+#include <vector>
+#include <utility>
+#include <boost/any.hpp>
 #include <wx/stattext.h>
 #include <wx/settings.h>
 
 #include <map>
 #include <functional>
+#include <wx/string.h>
 
 #include "libslic3r/Config.hpp"
 #include "libslic3r/PrintConfig.hpp"
@@ -13,7 +22,7 @@
 #include "Field.hpp"
 #include "I18N.hpp"
 
-// Translate the ifdef 
+// Translate the ifdef
 #ifdef __WXOSX__
     #define wxOSX true
 #else
@@ -45,7 +54,6 @@ struct Option {
 	Option(const ConfigOptionDef& _opt, t_config_option_key id) :
 		opt(_opt), opt_id(id) {}
 };
-using t_option = std::unique_ptr<Option>;	//!
 
 /// Represents option lines
 class Line : public UndoValueUIManager
@@ -53,15 +61,17 @@ class Line : public UndoValueUIManager
 	bool		m_is_separator{ false };
 public:
     wxString	label;
+    wxString	label_en; // untranslated English of `label`, searchable by the Speed Dial in any UI language
     wxString	label_tooltip;
 	std::string	label_path;
     bool        undo_to_sys{false}; // BBS: object config
     bool        toggle_visible{true}; // BBS: hide some line
 
-    size_t		full_width {0}; 
+    size_t		full_width {0};
     widget_t	widget {nullptr};
     std::function<wxWindow*(wxWindow*)>	near_label_widget{ nullptr };
 	wxWindow*	near_label_widget_win {nullptr};
+    wxStaticText* label_widget {nullptr};
     wxSizer*	widget_sizer {nullptr};
     wxSizer*	extra_widget_sizer {nullptr};
     //BBS: export the extra colume widget
@@ -77,9 +87,21 @@ public:
 	void append_widget(const widget_t widget) {
 		m_extra_widgets.push_back(widget);
     }
+	// `label` and `tooltip` are the untranslated English msgids; they are translated for display.
 	Line(wxString label, wxString tooltip) :
-		label(_(label)), label_tooltip(_(tooltip)) {}
+		label(_(label)), label_en(label), label_tooltip(_(tooltip)) {}
 	Line() : m_is_separator(true) {}
+
+    // `new_label` is the untranslated English msgid (an L("...") string), like the ctor's label:
+    // it is translated for display and kept as label_en.
+    void set_label(const wxString& new_label) {
+        label    = _(new_label);
+        label_en = new_label;
+        if (label_widget != nullptr) {
+            label_widget->SetLabel(label + (label.IsEmpty() ? "" : ": "));
+            label_widget->Refresh();
+        }
+    }
 
 	bool is_separator() const { return m_is_separator; }
 	bool has_only_option(const std::string& opt_key) const { return m_options.size() == 1 && m_options[0].opt_id == opt_key; }
@@ -103,9 +125,10 @@ public:
     bool split_multi_line{false};
     bool option_label_at_right{false};
     // BBS: new layout
-    wxWindow *     stb;
+    wxWindow *     stb{ nullptr };
     const wxString  icon;
     const wxString  title;
+    bool            m_labels_hidden{false};
     size_t			label_width = 20 ;// {200};
     wxSizer*		sizer {nullptr};
 	OG_CustomCtrl*  custom_ctrl{ nullptr };
@@ -123,11 +146,12 @@ public:
     std::function<void(wxWindow* win)> rescale_near_label_widget { nullptr };
 
     std::function<void(const t_config_option_key& opt_key)> edit_custom_gcode { nullptr };
-    
+
     wxFont			sidetext_font {wxSystemSettings::GetFont(wxSYS_DEFAULT_GUI_FONT) };
     wxFont			label_font {wxSystemSettings::GetFont(wxSYS_DEFAULT_GUI_FONT) };
 	int				sidetext_width{ -1 };
 	int				sublabel_width{ -1 };
+	bool			draw_multi_extruder { false };
 
     /// Returns a copy of the pointer of the parent wxWindow.
     /// Accessor function is because users are not allowed to change the parent
@@ -151,7 +175,7 @@ public:
     void		append_single_option_line(const Option& option, const std::string& path = std::string()) { append_line(create_single_option_line(option, path)); }
 	void		append_separator();
 
-    // return a non-owning pointer reference 
+    // return a non-owning pointer reference
     inline Field*	get_field(const t_config_option_key& id) const{
 							if (m_fields.find(id) == m_fields.end()) return nullptr;
 							return m_fields.at(id).get();
@@ -163,9 +187,9 @@ public:
 							return true;
     }
 	boost::any		get_value(const t_config_option_key& id) {
-							boost::any out; 
+							boost::any out;
     						if (m_fields.find(id) == m_fields.end()) ;
-							else 
+							else
 								out = m_fields.at(id)->get_value();
 							return out;
     }
@@ -184,21 +208,22 @@ public:
 
     void            clear_fields_except_of(const std::vector<std::string> left_fields);
 
-    void            hide_labels() { label_width = 0; }
+    void            hide_labels() { label_width = 0; m_labels_hidden = true; }
 
-	OptionsGroup(wxWindow *_parent, const wxString &title, const wxString &icon, bool is_tab_opt = false, 
+	OptionsGroup(wxWindow *_parent, const wxString &title, const wxString &icon, bool is_tab_opt = false,
                     column_t extra_clmn = nullptr);
-	~OptionsGroup() { clear(true); }
+	virtual ~OptionsGroup() { clear(true); }
 
     wxGridSizer*        get_grid_sizer() { return m_grid_sizer; }
 	const std::vector<Line>& get_lines() { return m_lines; }
 	bool				is_legend_line();
-	// if we have to set the same control alignment for different option groups, 
+	// if we have to set the same control alignment for different option groups,
     // we have to set same max contrtol width to all of them
 	void				set_max_win_width(int max_win_width);
 
 	bool				is_activated() { return sizer != nullptr; }
 
+	void remove_option_if(std::function<bool(std::string const &)> const & comp);
 protected:
 	std::map<t_config_option_key, Option>	m_options;
     wxWindow*				m_parent {nullptr};
@@ -208,7 +233,7 @@ protected:
     std::vector<Line>                       m_lines;
 
     /// Field list, contains unique_ptrs of the derived type.
-    /// using types that need to know what it is beyond the public interface 
+    /// using types that need to know what it is beyond the public interface
     /// need to cast based on the related ConfigOptionDef.
     t_optionfield_map		m_fields;
     bool					m_disabled {false};
@@ -220,7 +245,7 @@ protected:
 	bool					m_use_custom_ctrl_as_parent { false };
 
 	// This panel is needed for correct showing of the ToolTips for Button, StaticText and CheckBox
-	// Tooltips on GTK doesn't work inside wxStaticBoxSizer unless you insert a panel 
+	// Tooltips on GTK doesn't work inside wxStaticBoxSizer unless you insert a panel
 	// inside it before you insert the other controls.
 #if 0//#ifdef__WXGTK__
 	wxPanel*				m_panel {nullptr};
@@ -238,35 +263,40 @@ protected:
 	virtual void		back_to_initial_value(const std::string& opt_key) {}
 	virtual void		back_to_sys_value(const std::string& opt_key) {}
 
+	// Preset::Type of a settings group; -1 for groups not tied to a preset. Used by append_line to
+	// register each option's wiki path with the searcher. Overridden by ConfigOptionsGroup.
+	virtual int			config_type() const { return -1; }
+
 public:
 	static wxString		get_url(const std::string& path_end);
 	static bool			launch_browser(const std::string& path_end);
+
+protected:
+    std::string         pick_plugin(const ConfigOptionDef& opt);
 };
 
 class ConfigOptionsGroup: public OptionsGroup {
 public:
-	ConfigOptionsGroup(	wxWindow* parent, const wxString& title, const wxString& icon, DynamicPrintConfig* config = nullptr, 
+	ConfigOptionsGroup(	wxWindow* parent, const wxString& title, const wxString& icon, DynamicPrintConfig* config = nullptr,
 						bool is_tab_opt = false, column_t extra_clmn = nullptr) :
 		OptionsGroup(parent, title, icon, is_tab_opt, extra_clmn), m_config(config) {}
-	ConfigOptionsGroup(	wxWindow* parent, const wxString& title, DynamicPrintConfig* config = nullptr, 
+	ConfigOptionsGroup(	wxWindow* parent, const wxString& title, DynamicPrintConfig* config = nullptr,
 						bool is_tab_opt = false, column_t extra_clmn = nullptr) :
 		ConfigOptionsGroup(parent, title, wxEmptyString, config, is_tab_opt, extra_clmn) {}
-	ConfigOptionsGroup(	wxWindow* parent, const wxString& title, ModelConfig* config, 
+	ConfigOptionsGroup(	wxWindow* parent, const wxString& title, ModelConfig* config,
 						bool is_tab_opt = false, column_t extra_clmn = nullptr) :
 		OptionsGroup(parent, title, wxEmptyString, is_tab_opt, extra_clmn), m_config(&config->get()), m_modelconfig(config) {}
 	ConfigOptionsGroup(	wxWindow* parent) :
 		OptionsGroup(parent, wxEmptyString, wxEmptyString, true, nullptr) {}
 
 	const wxString& config_category() const throw() { return m_config_category; }
-	int config_type() const throw() { return m_config_type; }
+	int config_type() const throw() override { return m_config_type; }
 	const t_opt_map&   opt_map() const throw() { return m_opt_map; }
 
 	void 		set_config_category_and_type(const wxString &category, int type) { m_config_category = category; m_config_type = type; }
     void        set_config(DynamicPrintConfig* config) {
 		m_config = config; m_modelconfig = nullptr; }
-	const DynamicPrintConfig* get_config() const { return m_config; }
 	Option		get_option(const std::string& opt_key, int opt_index = -1);
-	bool        set_option_index(const std::string& opt_key, int opt_index);
 	Line		create_single_option_line(const std::string& title, const std::string& path = std::string(), int idx = -1) /*const*/{
 		Option option = get_option(title, idx);
 		return OptionsGroup::create_single_option_line(option, path);
@@ -282,7 +312,7 @@ public:
 		Option option = get_option(title, idx);
 		append_single_option_line(option, path);
 	}
-	
+
 	void		on_change_OG(const t_config_option_key& opt_id, const boost::any& value) override;
 	void		back_to_initial_value(const std::string& opt_key) override;
 	void		back_to_sys_value(const std::string& opt_key) override;
@@ -298,7 +328,7 @@ public:
     void        sys_color_changed();
     void        refresh();
 	boost::any	config_value(const std::string& opt_key, int opt_index, bool deserialize);
-	// return option value from config 
+	// return option value from config
 	boost::any	get_config_value(const DynamicPrintConfig& config, const std::string& opt_key, int opt_index = -1);
 	// BBS: restore all pages in preset
 	boost::any	get_config_value2(const DynamicPrintConfig& config, const std::string& opt_key, int opt_index = -1);

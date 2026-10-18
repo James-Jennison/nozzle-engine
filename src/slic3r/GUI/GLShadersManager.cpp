@@ -6,11 +6,16 @@
 
 #include <cassert>
 #include <algorithm>
+#include <string>
+#include <initializer_list>
+#include <memory>
+#include "slic3r/GUI/OpenGLManager.hpp"
+#include "libslic3r/Technologies.hpp"
 #include <string_view>
+#include <utility>
 using namespace std::literals;
 
-#include <boost/log/trivial.hpp>
-#include <GL/glew.h>
+#include <glad/gl.h>
 
 namespace Slic3r {
 
@@ -30,47 +35,50 @@ std::pair<bool, std::string> GLShadersManager::init()
         return true;
     };
 
-    auto appendOptionalShader = [&append_shader, &error](const std::string& name,
-                                                          const GLShaderProgram::ShaderFilenames& filenames) {
-        const size_t errorLength = error.size();
-        if (append_shader(name, filenames))
-            return;
-
-        error.erase(errorLength);
-        BOOST_LOG_TRIVIAL(warning) << "Selection highlight shader unavailable: " << name;
-    };
-
     assert(m_shaders.empty());
 
     bool valid = true;
 
+#if SLIC3R_OPENGL_ES
+    const std::string prefix = "ES/";
+    // used to render wireframed triangles
+    valid &= append_shader("wireframe", { prefix + "wireframe.vs", prefix + "wireframe.fs" });
+#else
     const std::string prefix = GUI::wxGetApp().is_gl_version_greater_or_equal_to(3, 1) ? "140/" : "110/";
+#endif // SLIC3R_OPENGL_ES
     // imgui shader
     valid &= append_shader("imgui", { prefix + "imgui.vs", prefix + "imgui.fs" });
     // basic shader, used to render all what was previously rendered using the immediate mode
     valid &= append_shader("flat", { prefix + "flat.vs", prefix + "flat.fs" });
-    // used to render selected geometry into the unified mask and stencil fallback
-    appendOptionalShader("selection_mask", { prefix + "flat.vs", prefix + "selection_mask.fs" });
     // basic shader with plane clipping, used to render volumes in picking pass
     valid &= append_shader("flat_clip", { prefix + "flat_clip.vs", prefix + "flat_clip.fs" });
     // basic shader for textures, used to render textures
     valid &= append_shader("flat_texture", { prefix + "flat_texture.vs", prefix + "flat_texture.fs" });
+    // used to apply post-processing antialiasing in screen space
+    valid &= append_shader("fxaa", { prefix + "fxaa.vs", prefix + "fxaa.fs" });
+    // used to apply screen-space ambient occlusion in post process
+    valid &= append_shader("ssao", { prefix + "ssao.vs", prefix + "ssao.fs" });
     // used to render 3D scene background
     valid &= append_shader("background", { prefix + "background.vs", prefix + "background.fs" });
-    // used to composite the selection fill and outline over the completed scene
-    appendOptionalShader("selection_composite", { prefix + "background.vs", prefix + "selection_composite.fs" });
-    // used to extract the selection edge from the low-resolution selection mask
-    appendOptionalShader("selection_edge", { prefix + "background.vs", prefix + "selection_edge.fs" });
-    // used to area-downsample the full-resolution selection mask before edge extraction
-    appendOptionalShader("selection_area_downsample", { prefix + "background.vs", prefix + "selection_area_downsample.fs" });
-    // used to apply directional Gaussian blur to selection edge textures
-    appendOptionalShader("selection_gaussian", { prefix + "background.vs", prefix + "selection_gaussian.fs" });
+#if SLIC3R_OPENGL_ES
+    // used to render dashed lines
+    valid &= append_shader("dashed_lines", { prefix + "dashed_lines.vs", prefix + "dashed_lines.fs" });
+#else
+    if (GUI::OpenGLManager::get_gl_info().is_core_profile())
+        // used to render thick and/or dashed lines
+        valid &= append_shader("dashed_thick_lines", { prefix + "dashed_thick_lines.vs", prefix + "dashed_thick_lines.fs", prefix + "dashed_thick_lines.gs" });
+#endif // SLIC3R_OPENGL_ES
     // used to render bed axes and model, selection hints, gcode sequential view marker model, preview shells, options in gcode preview
     valid &= append_shader("gouraud_light", { prefix + "gouraud_light.vs", prefix + "gouraud_light.fs" });
     //used to render thumbnail
     valid &= append_shader("thumbnail", { prefix + "thumbnail.vs", prefix + "thumbnail.fs"});
     // used to render printbed
     valid &= append_shader("printbed", { prefix + "printbed.vs", prefix + "printbed.fs" });
+#if !SLIC3R_OPENGL_ES
+    // used to cast the object shadow map onto the build plate (realistic view)
+    valid &= append_shader("printbed_shadow", { prefix + "printbed_shadow.vs", prefix + "printbed_shadow.fs" });
+#endif // !SLIC3R_OPENGL_ES
+    valid &= append_shader("hotbed", {prefix + "hotbed.vs", prefix + "hotbed.fs"});
     // used to render options in gcode preview
     if (GUI::wxGetApp().is_gl_version_greater_or_equal_to(3, 3)) {
         valid &= append_shader("gouraud_light_instanced", { prefix + "gouraud_light_instanced.vs", prefix + "gouraud_light_instanced.fs" });
@@ -82,6 +90,14 @@ std::pair<bool, std::string> GLShadersManager::init()
         , { "ENABLE_ENVIRONMENT_MAP"sv }
 #endif // ENABLE_ENVIRONMENT_MAP
         );
+    // used to render objects in 3d editor with phong shading
+    valid &= append_shader("phong", { prefix + "phong.vs", prefix + "phong.fs" }
+#if ENABLE_ENVIRONMENT_MAP
+        , { "ENABLE_ENVIRONMENT_MAP"sv }
+#endif // ENABLE_ENVIRONMENT_MAP
+        );
+    // used to render objects as translucent, edge weighted surfaces in the X-Ray view
+    valid &= append_shader("xray", { prefix + "xray.vs", prefix + "xray.fs" });
     // used to render variable layers heights in 3d editor
     valid &= append_shader("variable_layer_height", { prefix + "variable_layer_height.vs", prefix + "variable_layer_height.fs" });
     // used to render highlight contour around selected triangles inside the multi-material gizmo
@@ -96,6 +112,11 @@ std::pair<bool, std::string> GLShadersManager::init()
         valid &= append_shader("mm_gouraud", { prefix + "mm_gouraud.vs", prefix + "mm_gouraud.fs" }, { "FLIP_TRIANGLE_NORMALS"sv });
     else
         valid &= append_shader("mm_gouraud", { prefix + "mm_gouraud.vs", prefix + "mm_gouraud.fs" });
+    // Fast shaded preview for the texture displacement gizmo (see libslic3r/TextureDisplacement.hpp).
+    valid &= append_shader("texture_displacement_shaded", { prefix + "texture_displacement_shaded.vs", prefix + "texture_displacement_shaded.fs" });
+    // UV-check overlay for the same gizmo: a procedural checker or a distortion heatmap over the
+    // painted patch, to sanity-check the unwrap.
+    valid &= append_shader("texture_displacement_uvcheck", { prefix + "texture_displacement_uvcheck.vs", prefix + "texture_displacement_uvcheck.fs" });
 
     return { valid, error };
 }

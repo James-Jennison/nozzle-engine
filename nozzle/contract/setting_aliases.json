@@ -3130,50 +3130,6 @@
     "approx": false
    }
   ],
-  "wall_filament": [
-   {
-    "alias": "perimeter_extruder",
-    "slicer": "PrusaSlicer",
-    "kind": "key",
-    "approx": false
-   },
-   {
-    "alias": "Perimeter extruder",
-    "slicer": "PrusaSlicer",
-    "kind": "label",
-    "approx": false
-   },
-   {
-    "alias": "perimeter_extruder",
-    "slicer": "SuperSlicer",
-    "kind": "key",
-    "approx": false
-   },
-   {
-    "alias": "Perimeter extruder",
-    "slicer": "SuperSlicer",
-    "kind": "label",
-    "approx": false
-   },
-   {
-    "alias": "Walls filament",
-    "slicer": "BambuStudio",
-    "kind": "label",
-    "approx": false
-   },
-   {
-    "alias": "wall_extruder_nr",
-    "slicer": "Cura",
-    "kind": "key",
-    "approx": false
-   },
-   {
-    "alias": "Wall Extruder",
-    "slicer": "Cura",
-    "kind": "label",
-    "approx": false
-   }
-  ],
   "support_bottom_z_distance": [
    {
     "alias": "support_material_bottom_contact_distance",
@@ -3208,82 +3164,6 @@
    {
     "alias": "Support Bottom Distance",
     "slicer": "Cura",
-    "kind": "label",
-    "approx": false
-   }
-  ],
-  "sparse_infill_filament": [
-   {
-    "alias": "infill_extruder",
-    "slicer": "PrusaSlicer",
-    "kind": "key",
-    "approx": false
-   },
-   {
-    "alias": "Infill extruder",
-    "slicer": "PrusaSlicer",
-    "kind": "label",
-    "approx": false
-   },
-   {
-    "alias": "infill_extruder",
-    "slicer": "SuperSlicer",
-    "kind": "key",
-    "approx": false
-   },
-   {
-    "alias": "Infill extruder",
-    "slicer": "SuperSlicer",
-    "kind": "label",
-    "approx": false
-   },
-   {
-    "alias": "Sparse infill filament",
-    "slicer": "BambuStudio",
-    "kind": "label",
-    "approx": false
-   },
-   {
-    "alias": "infill_extruder_nr",
-    "slicer": "Cura",
-    "kind": "key",
-    "approx": false
-   },
-   {
-    "alias": "Infill Extruder",
-    "slicer": "Cura",
-    "kind": "label",
-    "approx": false
-   }
-  ],
-  "solid_infill_filament": [
-   {
-    "alias": "solid_infill_extruder",
-    "slicer": "PrusaSlicer",
-    "kind": "key",
-    "approx": false
-   },
-   {
-    "alias": "Solid infill extruder",
-    "slicer": "PrusaSlicer",
-    "kind": "label",
-    "approx": false
-   },
-   {
-    "alias": "solid_infill_extruder",
-    "slicer": "SuperSlicer",
-    "kind": "key",
-    "approx": false
-   },
-   {
-    "alias": "Solid infill extruder",
-    "slicer": "SuperSlicer",
-    "kind": "label",
-    "approx": false
-   },
-   {
-    "alias": "Solid infill filament",
-    "slicer": "BambuStudio",
     "kind": "label",
     "approx": false
    }
@@ -3374,20 +3254,6 @@
     "slicer": "Cura",
     "kind": "label",
     "approx": false
-   }
-  ],
-  "delta_temperature": [
-   {
-    "alias": "preheat_temperature_delta",
-    "slicer": "CrealityPrint",
-    "kind": "key",
-    "approx": true
-   },
-   {
-    "alias": "Preheat temperature",
-    "slicer": "CrealityPrint",
-    "kind": "label",
-    "approx": true
    }
   ],
   "line_width": [
@@ -5760,20 +5626,6 @@
     "approx": false
    }
   ],
-  "dithering_local_z_mode": [
-   {
-    "alias": "Local Z dithering mode",
-    "slicer": "CrealityPrint",
-    "kind": "label",
-    "approx": false
-   },
-   {
-    "alias": "Advanced dithering",
-    "slicer": "Snapmaker Orca",
-    "kind": "label",
-    "approx": true
-   }
-  ],
   "filament_diameter": [
    {
     "alias": "material_diameter",
@@ -6517,22 +6369,6 @@
    },
    {
     "alias": "Bed temperature",
-    "slicer": "Snapmaker Orca",
-    "kind": "label",
-    "approx": false
-   }
-  ],
-  "graphic_effect_plate_temp": [
-   {
-    "alias": "Bed temperature",
-    "slicer": "Snapmaker Orca",
-    "kind": "label",
-    "approx": false
-   }
-  ],
-  "graphic_effect_plate_temp_initial_layer": [
-   {
-    "alias": "Initial layer bed temperature",
     "slicer": "Snapmaker Orca",
     "kind": "label",
     "approx": false
@@ -7656,20 +7492,6 @@
     "approx": false
    }
   ],
-  "z_hop_when_prime": [
-   {
-    "alias": "retraction_hop_after_extruder_switch",
-    "slicer": "Cura",
-    "kind": "key",
-    "approx": true
-   },
-   {
-    "alias": "Z Hop After Extruder Switch",
-    "slicer": "Cura",
-    "kind": "label",
-    "approx": true
-   }
-  ],
   "travel_slope": [
    {
     "alias": "Ramping slope angle",
@@ -8684,6 +8506,184 @@
     "slicer": "SuperSlicer",
     "kind": "label",
     "approx": false
+   }
+  ],
+  "outer_wall_filament_id": [
+   {
+    "alias": "perimeter_extruder",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Perimeter extruder",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "perimeter_extruder",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Perimeter extruder",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "Walls filament",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "wall_extruder_nr",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Wall Extruder",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "inner_wall_filament_id": [
+   {
+    "alias": "perimeter_extruder",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Perimeter extruder",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "perimeter_extruder",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Perimeter extruder",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "Walls filament",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": true
+   },
+   {
+    "alias": "wall_extruder_nr",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Wall Extruder",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": true
+   }
+  ],
+  "sparse_infill_filament_id": [
+   {
+    "alias": "infill_extruder",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Infill extruder",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "infill_extruder",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Infill extruder",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Sparse infill filament",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "infill_extruder_nr",
+    "slicer": "Cura",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Infill Extruder",
+    "slicer": "Cura",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "internal_solid_filament_id": [
+   {
+    "alias": "solid_infill_extruder",
+    "slicer": "PrusaSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Solid infill extruder",
+    "slicer": "PrusaSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "solid_infill_extruder",
+    "slicer": "SuperSlicer",
+    "kind": "key",
+    "approx": false
+   },
+   {
+    "alias": "Solid infill extruder",
+    "slicer": "SuperSlicer",
+    "kind": "label",
+    "approx": false
+   },
+   {
+    "alias": "Solid infill filament",
+    "slicer": "BambuStudio",
+    "kind": "label",
+    "approx": false
+   }
+  ],
+  "filament_preheat_temperature_delta": [
+   {
+    "alias": "preheat_temperature_delta",
+    "slicer": "CrealityPrint",
+    "kind": "key",
+    "approx": true
+   },
+   {
+    "alias": "Preheat temperature",
+    "slicer": "CrealityPrint",
+    "kind": "label",
+    "approx": true
    }
   ]
  },

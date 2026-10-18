@@ -1,11 +1,29 @@
 #include "ConflictChecker.hpp"
+#include "libslic3r/Point.hpp"
+#include "libslic3r/Line.hpp"
+#include "libslic3r/libslic3r.h"
+#include "libslic3r/ExtrusionEntityCollection.hpp"
+#include "libslic3r/ExtrusionEntity.hpp"
+#include "libslic3r/Layer.hpp"
+#include "libslic3r/Print.hpp"
+#include "libslic3r/GCode/GCodeProcessor.hpp"
 
+#include <cstdint>
+#include <cstdlib>
+#include <cfloat>
+#include <cassert>
+#include <optional>
+#include <cstddef>
+#include <algorithm>
 #include <tbb/parallel_for.h>
 #include <tbb/concurrent_vector.h>
 
 #include <map>
 #include <functional>
 #include <atomic>
+#include <utility>
+#include <vector>
+#include "libslic3r/Model.hpp"
 
 namespace Slic3r {
 
@@ -220,17 +238,43 @@ ConflictComputeOpt ConflictChecker::find_inter_of_lines(const LineWithIDs &lines
 ConflictResultOpt ConflictChecker::find_inter_of_lines_in_diff_objs(PrintObjectPtrs                      objs,
                                                                     std::optional<const FakeWipeTower *> wtdptr) // find the first intersection point of lines in different objects
 {
-    if (objs.size() <= 1 && !wtdptr) { return {}; }
+    if (objs.empty() && !wtdptr) { return {}; }
+    
+    // Orca: check if we have enough items to potentially conflict (instances count)
+    size_t total_instances = 0;
+    for (auto obj : objs) total_instances += obj->instances().size();
+    if (total_instances <= 1 && !wtdptr) return {};
+
     LinesBucketQueue conflictQueue;
 
     if (wtdptr.has_value()) { // wipe tower at 0 by default
+        //auto            wtpaths = wtdptr.value()->getFakeExtrusionPathsFromWipeTower();
         ExtrusionLayers wtels = wtdptr.value()->getTrueExtrusionLayersFromWipeTower();
+        //wtels.type = ExtrusionLayersType::WIPE_TOWER;
+        //for (int i = 0; i < wtpaths.size(); ++i) { // assume that wipe tower always has same height
+        //    ExtrusionLayer el;
+        //    el.paths    = wtpaths[i];
+        //    el.bottom_z = wtpaths[i].front().height * (float) i;
+        //    el.layer    = nullptr;
+        //    wtels.push_back(el);
+        //}
         conflictQueue.emplace_back_bucket(std::move(wtels), wtdptr.value(), {wtdptr.value()->plate_origin.x(), wtdptr.value()->plate_origin.y()});
     }
     for (PrintObject *obj : objs) {
         auto layers = getAllLayersExtrusionPathsFromObject(obj);
-        conflictQueue.emplace_back_bucket(std::move(layers.perimeters), obj, obj->instances().front().shift);
-        conflictQueue.emplace_back_bucket(std::move(layers.support), obj, obj->instances().front().shift);
+        // Orca: check for collisions between all instances
+        const auto& instances = obj->instances();
+        for (size_t inst_idx = 0; inst_idx < instances.size(); ++inst_idx) {
+            const PrintInstance& inst = instances[inst_idx];
+            const bool is_last_instance = inst_idx + 1 == instances.size();
+            if (is_last_instance) {
+                conflictQueue.emplace_back_bucket(std::move(layers.perimeters), &inst, inst.shift);
+                conflictQueue.emplace_back_bucket(std::move(layers.support), &inst, inst.shift);
+            } else {
+                conflictQueue.emplace_back_bucket(ExtrusionLayers(layers.perimeters), &inst, inst.shift);
+                conflictQueue.emplace_back_bucket(ExtrusionLayers(layers.support), &inst, inst.shift);
+            }
+        }
     }
 
     std::vector<LineWithIDs> layersLines;
@@ -263,13 +307,18 @@ ConflictResultOpt ConflictChecker::find_inter_of_lines_in_diff_objs(PrintObjectP
             const FakeWipeTower *wtdp = wtdptr.value();
             if (ptr1 == wtdp || ptr2 == wtdp) {
                 if (ptr2 == wtdp) { std::swap(ptr1, ptr2); }
-                const PrintObject *obj2 = reinterpret_cast<const PrintObject *>(ptr2);
-                return std::make_optional<ConflictResult>("WipeTower", obj2->model_object()->name, conflictPrintZ, nullptr, ptr2);
+                // ptr1 is now wipe tower, ptr2 is PrintInstance*
+                const PrintInstance *inst2 = reinterpret_cast<const PrintInstance *>(ptr2);
+                const PrintObject *obj2 = inst2->print_object;
+                return std::make_optional<ConflictResult>("WipeTower", obj2->model_object()->name, conflictPrintZ, nullptr, inst2);
             }
         }
-        const PrintObject *obj1 = reinterpret_cast<const PrintObject *>(ptr1);
-        const PrintObject *obj2 = reinterpret_cast<const PrintObject *>(ptr2);
-        return std::make_optional<ConflictResult>(obj1->model_object()->name, obj2->model_object()->name, conflictPrintZ, ptr1, ptr2);
+        
+        const PrintInstance *inst1 = reinterpret_cast<const PrintInstance *>(ptr1);
+        const PrintInstance *inst2 = reinterpret_cast<const PrintInstance *>(ptr2);
+        const PrintObject *obj1 = inst1->print_object;
+        const PrintObject *obj2 = inst2->print_object;
+        return std::make_optional<ConflictResult>(obj1->model_object()->name, obj2->model_object()->name, conflictPrintZ, inst1, inst2);
     } else
         return {};
 }
@@ -279,6 +328,9 @@ ConflictComputeOpt ConflictChecker::line_intersect(const LineWithID &l1, const L
     constexpr double SUPPORT_THRESHOLD = 100;  // this large almost disables conflict check of supports
     constexpr double OTHER_THRESHOLD   = 0.01;
     if (l1._id == l2._id) { return {}; } // return true if lines are from same object
+    double overlap_length = 0.;
+    bool   overlap  = l1._line.overlap(l2._line, overlap_length);
+    if (overlap && overlap_length > scaled(OTHER_THRESHOLD)) return std::make_optional<ConflictComputeResult>(l1._id, l2._id);
     Point inter;
     bool  intersect = l1._line.intersection(l2._line, &inter);
 

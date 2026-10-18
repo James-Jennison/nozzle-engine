@@ -8,9 +8,21 @@
 #include <boost/filesystem/path.hpp>
 #include <boost/log/trivial.hpp>
 #include <boost/regex.hpp>
-#include <curl/curl.h>
-
+#include <string>
+#include <wx/utils.h>
+#include <utility>
+#include <cstddef>
+#include <wx/event.h>
+#include <cassert>
+#include <memory>
+#include "slic3r/GUI/DownloaderFileGet.hpp"
 #include "libslic3r/Utils.hpp"
+#include <functional>
+#include "slic3r/GUI/GUI.hpp"
+#include "slic3r/GUI/I18N.hpp"
+#include "slic3r/GUI/Gizmos/GLGizmoBase.hpp"
+#include <wx/arrstr.h>
+#include <wx/string.h>
 
 namespace Slic3r {
 namespace GUI {
@@ -21,15 +33,13 @@ void open_folder(const std::string& path)
 	// Code taken from NotificationManager.cpp
 
 	// Execute command to open a file explorer, platform dependent.
-	// FIXME: The const_casts aren't needed in wxWidgets 3.1, remove them when we upgrade.
-
 #ifdef _WIN32
 	const wxString widepath = from_u8(path);
 	const wchar_t* argv[] = { L"explorer", widepath.GetData(), nullptr };
-	::wxExecute(const_cast<wchar_t**>(argv), wxEXEC_ASYNC, nullptr);
+	::wxExecute(argv, wxEXEC_ASYNC, nullptr);
 #elif __APPLE__
 	const char* argv[] = { "open", path.data(), nullptr };
-	::wxExecute(const_cast<char**>(argv), wxEXEC_ASYNC, nullptr);
+	::wxExecute(argv, wxEXEC_ASYNC, nullptr);
 #else
 	const char* argv[] = { "xdg-open", path.data(), nullptr };
 
@@ -57,90 +67,28 @@ void open_folder(const std::string& path)
 			exec_env.cwd = std::move(owd);
 		}
 
-		::wxExecute(const_cast<char**>(argv), wxEXEC_ASYNC, nullptr, &exec_env);
+		::wxExecute(argv, wxEXEC_ASYNC, nullptr, &exec_env);
 	}
 	else {
 		// Looks like we're NOT running from AppImage, we'll make no changes to the environment.
-		::wxExecute(const_cast<char**>(argv), wxEXEC_ASYNC, nullptr, nullptr);
+		::wxExecute(argv, wxEXEC_ASYNC, nullptr, nullptr);
 	}
 #endif
 }
 
 std::string filename_from_url(const std::string& url)
 {
-    std::string result = "";
-    CURLU* h = curl_url();
-    if (h) {
-        if (curl_url_set(h, CURLUPART_URL, url.c_str(), 0) == CURLUE_OK) {
-            char* path = nullptr;
-            if (curl_url_get(h, CURLUPART_PATH, &path, 0) == CURLUE_OK) {
-                std::string p(path);
-                curl_free(path);
-                size_t slash = p.find_last_of('/');
-                if (slash != std::string::npos)
-                    result = p.substr(slash + 1);
-            }
-        }
-        curl_url_cleanup(h);
-    }
-    // fallback: strip query string manually if curl URL parsing failed
-    if (result.empty()) {
-        size_t slash = url.find_last_of('/');
-        if (slash != std::string::npos) {
-            result       = url.substr(slash + 1);
-            size_t query = result.find('?');
-            if (query != std::string::npos)
-                result = result.substr(0, query);
-        }
-    }
-    return result;
-}
-
-// Payload is the part after "?file=" in a custom-scheme URL (still URL-encoded).
-struct SchemeDownloadPayload {
-    std::string file_url;
-    std::string name_param;
-};
-
-static SchemeDownloadPayload split_scheme_file_payload(const std::string& payload)
-{
-    SchemeDownloadPayload out{ payload, {} };
-    static const std::string name_sep = "&name=";
-    const auto               pos    = payload.find(name_sep);
-
-    if (pos != std::string::npos) {
-        out.file_url    = payload.substr(0, pos);
-        out.name_param  = payload.substr(pos + name_sep.size());
-    }
-
-    return out;
-}
-
-static std::string resolve_download_filename(const std::string& http_url, const std::string& name_param_encoded)
-{
-    if (name_param_encoded.empty())
-        return filename_from_url(http_url);
-
-    std::string name = FileGet::escape_url(name_param_encoded);
-    name             = sanitize_filename(name);
-    if (name.empty())
-        return filename_from_url(http_url);
-
-    boost::filesystem::path name_path(name);
-    if (name_path.extension().empty()) {
-        std::string ext = boost::filesystem::path(filename_from_url(http_url)).extension().string();
-        if (ext.empty())
-            ext = ".3mf";
-        name += ext;
-    }
-    return name;
+	// TODO: can it be done with curl?
+	size_t slash = url.find_last_of("/");
+	if (slash == std::string::npos && slash != url.size() - 1)
+		return {};
+	return url.substr(slash + 1, url.size() - slash + 1);
 }
 }
 
-Download::Download(int ID, std::string url, wxEvtHandler* evt_handler, const boost::filesystem::path& dest_folder,
-                   const std::string& preferred_filename)
+Download::Download(int ID, std::string url, wxEvtHandler* evt_handler, const boost::filesystem::path& dest_folder)
     : m_id(ID)
-	, m_filename(preferred_filename.empty() ? filename_from_url(url) : preferred_filename)
+	, m_filename(filename_from_url(url))
 	, m_dest_folder(dest_folder)
 {
 	assert(boost::filesystem::is_directory(dest_folder));
@@ -180,10 +128,15 @@ void Download::resume()
 Downloader::Downloader()
 	: wxEvtHandler()
 {
+	//Bind(EVT_DWNLDR_FILE_COMPLETE, [](const wxCommandEvent& evt) {});
+	//Bind(EVT_DWNLDR_FILE_PROGRESS, [](const wxCommandEvent& evt) {});
+	//Bind(EVT_DWNLDR_FILE_ERROR, [](const wxCommandEvent& evt) {});
+	//Bind(EVT_DWNLDR_FILE_NAME_CHANGE, [](const wxCommandEvent& evt) {});
+
 	Bind(EVT_DWNLDR_FILE_COMPLETE, &Downloader::on_complete, this);
 	Bind(EVT_DWNLDR_FILE_PROGRESS, &Downloader::on_progress, this);
 	Bind(EVT_DWNLDR_FILE_ERROR, &Downloader::on_error, this);
-	//Bind(EVT_DWNLDR_FILE_NAME_CHANGE, &Downloader::on_name_change, this); //not work
+	Bind(EVT_DWNLDR_FILE_NAME_CHANGE, &Downloader::on_name_change, this);
 	Bind(EVT_DWNLDR_FILE_PAUSED, &Downloader::on_paused, this);
 	Bind(EVT_DWNLDR_FILE_CANCELED, &Downloader::on_canceled, this);
 }
@@ -197,7 +150,7 @@ void Downloader::start_download(const std::string& full_url)
     Plater* plater = wxGetApp().plater();
 
     mainframe->Freeze();
-    mainframe->select_tab((size_t)MainFrame::TabPosition::tp3DEditor);
+    mainframe->select_tab(TAB_ID_PREPARE);
     plater->select_view_3D("3D");
     plater->select_view("plate");
     plater->get_current_canvas3D()->zoom_to_bed();
@@ -205,7 +158,7 @@ void Downloader::start_download(const std::string& full_url)
 
     // Orca: Replace PS workaround for "mysterious slash" with a more dynamic approach
     // Windows seems to have fixed the issue and this provides backwards compatability for those it still affects
-    boost::regex  re(R"(^(snapmaker-orca|Snapmaker_Orca|prusaslicer|bambustudio|cura):\/\/open[\/]?\?file=)", boost::regbase::icase);
+	boost::regex re(R"(^(orcaslicer|prusaslicer|bambustudio|cura):\/\/open[\/]?\?file=)", boost::regbase::icase);
 	boost::regex re2(R"(^(bambustudioopen):\/\/)", boost::regex::icase);
     boost::smatch results;
 
@@ -214,24 +167,17 @@ void Downloader::start_download(const std::string& full_url)
         // Orca: show error
         NotificationManager* ntf_mngr = wxGetApp().notification_manager();
         ntf_mngr->push_notification(NotificationType::CustomNotification, NotificationManager::NotificationLevel::ErrorNotificationLevel,
-                                    "Could not start download due to malformed URL");
+                                    _u8L("Could not start download due to malformed URL"));
 		return;
 	}
     size_t id = get_next_id();
-    const auto  payload_parts = split_scheme_file_payload(full_url.substr(results.length()));
-    std::string escaped_url   = FileGet::escape_url(payload_parts.file_url);
-
-    // MakerWorld path uses Plater::import_model_id which already splits "&name=".
-    if (is_bambustudio_open(full_url) || (is_orca_open(full_url) && is_makerworld_link(full_url))) {        
-        const std::string makerworld_arg = payload_parts.name_param.empty() ? escaped_url: (escaped_url + "&name=" + payload_parts.name_param);
-        plater->request_model_download(wxString::FromUTF8(makerworld_arg));
-
-    } else {
-        const std::string filename = resolve_download_filename(escaped_url, payload_parts.name_param);
-        m_downloads.emplace_back(std::make_unique<Download>(id, std::move(escaped_url), this, m_dest_folder, filename));
-
+    std::string escaped_url = FileGet::escape_url(full_url.substr(results.length()));
+    if (is_bambustudio_open(full_url) || (is_orca_open(full_url) && is_makerworld_link(full_url)))
+        plater->request_model_download(wxString::FromUTF8(escaped_url));
+    else {
+        std::string text(escaped_url);
+        m_downloads.emplace_back(std::make_unique<Download>(id, std::move(escaped_url), this, m_dest_folder));
         NotificationManager* ntf_mngr = wxGetApp().notification_manager();
-
         ntf_mngr->push_download_URL_progress_notification(id, m_downloads.back()->get_filename(),
                                                           std::bind(&Downloader::user_action_callback, this, std::placeholders::_1,
                                                                     std::placeholders::_2));

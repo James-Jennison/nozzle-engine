@@ -9,10 +9,25 @@
 #include "3DScene.hpp"
 #include "OpenGLManager.hpp"
 #include "GUI_App.hpp"
+#include "GUI.hpp"
 #include "GLModel.hpp"
 
-#include <GL/glew.h>
+#include <cassert>
+#include <atomic>
+#include <boost/filesystem/operations.hpp>
+#include <cstddef>
+#include <cstring>
+#include <cstdint>
+#include <array>
+#include <glad/gl.h>
 
+#include <utility>
+#include <wx/app.h>
+#include <string>
+#include <wx/colour.h>
+#include <wx/gdicmn.h>
+#include <wx/dcclient.h>
+#include "libslic3r/Point.hpp"
 #include <wx/image.h>
 #include <boost/filesystem.hpp>
 #include <boost/algorithm/string/predicate.hpp>
@@ -20,7 +35,10 @@
 #include <vector>
 #include <algorithm>
 #include <thread>
-
+#include <wx/string.h>
+#include <wx/types.h>
+#include <wx/intl.h>
+#include "FileHelp.hpp"
 #define STB_DXT_IMPLEMENTATION
 #include "stb_dxt/stb_dxt.h"
 
@@ -28,9 +46,9 @@
 #include "nanosvg/nanosvgrast.h"
 
 #include "libslic3r/Utils.hpp"
-#include "GUI_App.hpp"
 #include <boost/log/trivial.hpp>
 #include <wx/dcgraph.h>
+#include <wx/dcmemory.h>
 namespace Slic3r {
 namespace GUI {
 
@@ -101,6 +119,8 @@ void GLTexture::Compressor::send_compressed_data_to_gpu()
     	this->reset();
 }
 
+std::atomic<bool> GLTexture::Compressor::m_dirty = false;
+
 void GLTexture::Compressor::compress()
 {
     // reference: https://github.com/Cyan4973/RygsDXTc
@@ -123,6 +143,11 @@ void GLTexture::Compressor::compress()
         level.src_data.clear();
         ++ m_num_levels_compressed;
     }
+
+    // Trigger an idle event to refresh the scene once the texture data is ready
+    // This fixes the issue that the bed texture is black after switching printer model until mouse moves to the 3d scene
+    m_dirty = true;
+    wxWakeUpIdle();
 }
 
 GLTexture::Quad_UVs GLTexture::FullTextureUVs = { { 0.0f, 1.0f }, { 1.0f, 1.0f }, { 1.0f, 0.0f }, { 0.0f, 0.0f } };
@@ -153,17 +178,19 @@ bool GLTexture::load_from_file(const std::string& filename, bool use_mipmaps, EC
 bool GLTexture::load_from_svg_file(const std::string& filename, bool use_mipmaps, bool compress, bool apply_anisotropy, unsigned int max_size_px)
 {
     reset();
-
-    if (!boost::filesystem::exists(filename))
+    auto svg_file = filename;
+    Utils::slash_to_back_slash(svg_file);
+    if (!boost::filesystem::exists(svg_file))
         return false;
 
-    if (boost::algorithm::iends_with(filename, ".svg"))
-        return load_from_svg(filename, use_mipmaps, compress, apply_anisotropy, max_size_px);
+    if (boost::algorithm::iends_with(svg_file, ".svg"))
+        return load_from_svg(svg_file, use_mipmaps, compress, apply_anisotropy, max_size_px);
     else
         return false;
 }
 
-bool GLTexture::load_from_raw_data(std::vector<unsigned char> data, unsigned int w, unsigned int h, bool apply_anisotropy)
+bool GLTexture::load_from_raw_data(std::vector<unsigned char> data, unsigned int w, unsigned int h, bool apply_anisotropy,
+                                   bool use_mipmaps)
 {
     m_width = w;
     m_height = h;
@@ -187,18 +214,51 @@ bool GLTexture::load_from_raw_data(std::vector<unsigned char> data, unsigned int
 
     glsafe(::glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, (GLsizei)m_width, (GLsizei)m_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, (const void*)data.data()));
 
-    bool use_mipmaps = true;
     if (use_mipmaps) {
-        // we manually generate mipmaps because glGenerateMipmap() function is not reliable on all graphics cards
-        int lod_w = m_width;
-        int lod_h = m_height;
+        // We generate the mipmap chain ourselves rather than calling glGenerateMipmap(), which this
+        // codebase has historically considered unreliable on some graphics cards.
+        //
+        // Each level is a 2x2 box filter of the level above it. Note this used to re-upload the
+        // *level-0* buffer at every level instead, which does not downscale anything - it just
+        // reinterprets the image's first lod_w * lod_h texels as the whole smaller level, i.e. every
+        // level below 0 held a crop of the top-left corner. It went unnoticed for as long as every
+        // caller drew these textures at roughly their native size (where only level 0 is ever
+        // sampled); it shows up the moment one is drawn small enough to select a lower level, as a
+        // texture that visibly turns into something else as it shrinks.
+        std::vector<unsigned char> scratch;
+        const std::vector<unsigned char> *src = &data;
+        int src_w = m_width;
+        int src_h = m_height;
         GLint level = 0;
-        while (lod_w > 1 || lod_h > 1) {
+        while (src_w > 1 || src_h > 1) {
             ++level;
-            lod_w = std::max(lod_w / 2, 1);
-            lod_h = std::max(lod_h / 2, 1);
-            n_pixels = lod_w * lod_h;
-            glsafe(::glTexImage2D(GL_TEXTURE_2D, level, GL_RGBA, (GLsizei)lod_w, (GLsizei)lod_h, 0, GL_RGBA, GL_UNSIGNED_BYTE, (const void*)data.data()));
+            const int lod_w = std::max(src_w / 2, 1);
+            const int lod_h = std::max(src_h / 2, 1);
+
+            std::vector<unsigned char> lod(size_t(lod_w) * size_t(lod_h) * 4);
+            for (int y = 0; y < lod_h; ++y) {
+                // min() rather than a plain 2*y+1: an odd source extent leaves the last output texel
+                // with only one source row/column to average, not two.
+                const int y0 = std::min(2 * y, src_h - 1);
+                const int y1 = std::min(2 * y + 1, src_h - 1);
+                for (int x = 0; x < lod_w; ++x) {
+                    const int x0 = std::min(2 * x, src_w - 1);
+                    const int x1 = std::min(2 * x + 1, src_w - 1);
+                    for (int c = 0; c < 4; ++c) {
+                        const unsigned int sum = (*src)[(size_t(y0) * size_t(src_w) + size_t(x0)) * 4 + size_t(c)] +
+                                                 (*src)[(size_t(y0) * size_t(src_w) + size_t(x1)) * 4 + size_t(c)] +
+                                                 (*src)[(size_t(y1) * size_t(src_w) + size_t(x0)) * 4 + size_t(c)] +
+                                                 (*src)[(size_t(y1) * size_t(src_w) + size_t(x1)) * 4 + size_t(c)];
+                        lod[(size_t(y) * size_t(lod_w) + size_t(x)) * 4 + size_t(c)] = (unsigned char)(sum / 4);
+                    }
+                }
+            }
+            glsafe(::glTexImage2D(GL_TEXTURE_2D, level, GL_RGBA, (GLsizei)lod_w, (GLsizei)lod_h, 0, GL_RGBA, GL_UNSIGNED_BYTE, (const void*)lod.data()));
+
+            scratch = std::move(lod);
+            src     = &scratch;
+            src_w   = lod_w;
+            src_h   = lod_h;
         }
 
         glsafe(::glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, level));
@@ -534,18 +594,9 @@ bool GLTexture::generate_from_text(const std::string &text_str, wxFont &font, wx
     glsafe(::glPixelStorei(GL_UNPACK_ALIGNMENT, 1));
     glsafe(::glGenTextures(1, &m_id));
     glsafe(::glBindTexture(GL_TEXTURE_2D, (GLuint)m_id));
-    if (OpenGLManager::are_compressed_textures_supported()) {
-        constexpr size_t kDxt5BlockPixels = 4u;  // DXT5 4×4 pixel blocks
-        constexpr size_t kDxt5BlockBytes  = 16u; // Each block is 16 bytes
-        size_t dxt5_blocks = ((static_cast<size_t>(m_width)  + kDxt5BlockPixels - 1u) / kDxt5BlockPixels)
-                           * ((static_cast<size_t>(m_height) + kDxt5BlockPixels - 1u) / kDxt5BlockPixels);
-        std::vector<unsigned char> compressed(dxt5_blocks * kDxt5BlockBytes, 0);
-        int compressed_size = 0;
-        rygCompress(compressed.data(), data.data(), m_width, m_height, 1, compressed_size);
-        compressed.resize(compressed_size);
-        glsafe(::glCompressedTexImage2D(GL_TEXTURE_2D, 0, GL_COMPRESSED_RGBA_S3TC_DXT5_EXT,
-            (GLsizei)m_width, (GLsizei)m_height, 0, compressed_size, compressed.data()));
-    } else
+    if (OpenGLManager::are_compressed_textures_supported())
+        glsafe(::glTexImage2D(GL_TEXTURE_2D, 0, GL_COMPRESSED_RGBA_S3TC_DXT5_EXT, (GLsizei)m_width, (GLsizei)m_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, (const void*)data.data()));
+    else
         glsafe(::glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, (GLsizei)m_width, (GLsizei)m_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, (const void*)data.data()));
     glsafe(::glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR));
     glsafe(::glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR));
@@ -663,82 +714,66 @@ void GLTexture::render_texture(unsigned int tex_id, float left, float right, flo
 
 void GLTexture::render_sub_texture(unsigned int tex_id, float left, float right, float bottom, float top, const GLTexture::Quad_UVs& uvs)
 {
-    GLModel& model = InitModelForRenderImage();
-
-    // position and scale from normalized unit quad
-    const float center_x = (left + right) * 0.5f;
-    const float center_y = (bottom + top) * 0.5f;
-    const float scale_x  = (right - left);
-    const float scale_y  = (top - bottom);
-
-    Transform3d model_matrix = Transform3d::Identity();
-    model_matrix.data()[3 * 4 + 0] = center_x;
-    model_matrix.data()[3 * 4 + 1] = center_y;
-    model_matrix.data()[0 * 4 + 0] = scale_x;
-    model_matrix.data()[1 * 4 + 1] = scale_y;
-
-    // UV transform — maps unit UVs to sprite atlas sub-region
-    const float center_u = (uvs.right_bottom.u + uvs.left_bottom.u) * 0.5f;
-    const float center_v = (uvs.right_top.v + uvs.right_bottom.v) * 0.5f;
-    const float scale_u  = (uvs.right_bottom.u - uvs.left_bottom.u);
-    const float scale_v  = (uvs.right_bottom.v - uvs.right_top.v);
-
-    Matrix3f uv_matrix = Matrix3f::Identity();
-    uv_matrix(0, 2) = center_u;
-    uv_matrix(1, 2) = center_v;
-    uv_matrix(0, 0) = scale_u;
-    uv_matrix(1, 1) = scale_v;
-
     glsafe(::glEnable(GL_BLEND));
-    glsafe(::glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
-
-    glsafe(::glEnable(GL_TEXTURE_2D));
-    glsafe(::glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE));
+    // Orca: fix washed-out toolbar icons on Wayland: keep destination alpha at 1.0 so the compositor
+    // does not treat anti-aliased icon edges as window transparency.
+    glsafe(::glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA));
 
     glsafe(::glBindTexture(GL_TEXTURE_2D, (GLuint)tex_id));
+
+    GLModel::Geometry init_data;
+    init_data.format = { GLModel::Geometry::EPrimitiveType::Triangles, GLModel::Geometry::EVertexLayout::P2T2 };
+    init_data.reserve_vertices(4);
+    init_data.reserve_indices(6);
+
+    // vertices
+    init_data.add_vertex(Vec2f(left, bottom),  Vec2f(uvs.left_bottom.u, uvs.left_bottom.v));
+    init_data.add_vertex(Vec2f(right, bottom), Vec2f(uvs.right_bottom.u, uvs.right_bottom.v));
+    init_data.add_vertex(Vec2f(right, top),    Vec2f(uvs.right_top.u, uvs.right_top.v));
+    init_data.add_vertex(Vec2f(left, top),     Vec2f(uvs.left_top.u, uvs.left_top.v));
+
+    // indices
+    init_data.add_triangle(0, 1, 2);
+    init_data.add_triangle(2, 3, 0);
+
+    GLModel model;
+    model.init_from(std::move(init_data));
 
     GLShaderProgram* shader = wxGetApp().get_shader("flat_texture");
     if (shader != nullptr) {
         shader->start_using();
-        shader->set_uniform("view_model_matrix", model_matrix);
+        shader->set_uniform("view_model_matrix", Transform3d::Identity());
         shader->set_uniform("projection_matrix", Transform3d::Identity());
-        shader->set_uniform("u_uvTransformMatrix", uv_matrix);
         model.render();
         shader->stop_using();
     }
 
     glsafe(::glBindTexture(GL_TEXTURE_2D, 0));
 
-    glsafe(::glDisable(GL_TEXTURE_2D));
     glsafe(::glDisable(GL_BLEND));
 }
 
-GLModel& GLTexture::GetModelForRenderImage()
+void GLTexture::copy_from_framebuffer(unsigned int& tex_id, std::array<unsigned int, 2>& tex_size, unsigned int width, unsigned int height, int filter)
 {
-    static GLModel g_model_for_render_image;
-    return g_model_for_render_image;
-}
-
-GLModel& GLTexture::InitModelForRenderImage()
-{
-    auto& model = GetModelForRenderImage();
-    if (!model.is_initialized()) {
-        GLModel::Geometry init_data;
-        init_data.format = { GLModel::Geometry::EPrimitiveType::Triangles, GLModel::Geometry::EVertexLayout::P3 };
-        init_data.reserve_vertices(4);
-        init_data.reserve_indices(6);
-
-        init_data.add_vertex(Vec3f(-0.5f, -0.5f, 0.0f)/*, Vec2f(-0.5f, 0.5f)*/);
-        init_data.add_vertex(Vec3f( 0.5f, -0.5f, 0.0f)/*, Vec2f( 0.5f, 0.5f)*/);
-        init_data.add_vertex(Vec3f( 0.5f,  0.5f, 0.0f)/*, Vec2f( 0.5f, -0.5f)*/);
-        init_data.add_vertex(Vec3f(-0.5f,  0.5f, 0.0f)/*, Vec2f(-0.5f, -0.5f)*/);
-
-        init_data.add_triangle(0, 1, 2);
-        init_data.add_triangle(2, 3, 0);
-
-        model.init_from(std::move(init_data));
+    if (tex_id == 0) {
+        glsafe(::glGenTextures(1, &tex_id));
+        glsafe(::glBindTexture(GL_TEXTURE_2D, tex_id));
+        glsafe(::glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter));
+        glsafe(::glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter));
+        glsafe(::glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
+        glsafe(::glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
     }
-    return model;
+    else
+        glsafe(::glBindTexture(GL_TEXTURE_2D, tex_id));
+
+    if (tex_size[0] != width || tex_size[1] != height) {
+        glsafe(::glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr));
+        tex_size = { width, height };
+    }
+
+    // Copying from the default framebuffer resolves its multisampling.
+    glsafe(::glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, width, height));
+    glsafe(::glBindTexture(GL_TEXTURE_2D, 0));
 }
 
 static bool to_squared_power_of_two(const std::string& filename, int max_size_px, int& w, int& h)

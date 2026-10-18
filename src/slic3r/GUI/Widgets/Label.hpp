@@ -1,7 +1,11 @@
 #ifndef slic3r_GUI_Label_hpp_
 #define slic3r_GUI_Label_hpp_
 
+#include <wx/gdicmn.h>
+#include <wx/event.h>
+#include <wx/colour.h>
 #include <wx/stattext.h>
+#include <wx/string.h>
 
 #define LB_HYPERLINK 0x0020
 #define LB_PROPAGATE_MOUSE_EVENT 0x0040
@@ -53,12 +57,12 @@ public:
 	static wxFont Body_11;
 	static wxFont Body_9;
 	static wxFont Body_8;
-	
+
 	static void initSysFont();
 
     static wxFont sysFont(int size, bool bold = false);
 
-    static wxSize split_lines(wxDC &dc, int width, const wxString &text, wxString &multiline_text);
+    static wxSize split_lines(wxDC &dc, int width, const wxString &text, wxString &multiline_text, int max_count = 0);
 };
 
 #endif // !slic3r_GUI_Label_hpp_

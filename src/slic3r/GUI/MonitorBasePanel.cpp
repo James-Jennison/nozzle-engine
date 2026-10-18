@@ -6,8 +6,19 @@
 ///////////////////////////////////////////////////////////////////////////
 
 #include "MonitorBasePanel.h"
-#include "Printer/PrinterFileSystem.h"
-#include "Widgets/Label.hpp"
+#include <wx/string.h>
+#include <wx/gdicmn.h>
+#include <wx/panel.h>
+#include <wx/sizer.h>
+#include <wx/splitter.h>
+#include <wx/event.h>
+#include <cstddef>
+#include <wx/chartype.h>
+#include <wx/stattext.h>
+#include <wx/font.h>
+#include "slic3r/GUI/Widgets/StaticLine.hpp"
+
+class wxWindow;
 
 ///////////////////////////////////////////////////////////////////////////
 using namespace Slic3r::GUI;
@@ -21,7 +32,6 @@ MonitorBasePanel::MonitorBasePanel(wxWindow* parent, wxWindowID id, const wxPoin
 
 	m_splitter = new wxSplitterWindow(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxSP_3D | wxSP_BORDER);
 	m_splitter->SetSashGravity(0);
-	m_splitter->SetSashSize(0);
 	m_splitter->Connect(wxEVT_IDLE, wxIdleEventHandler(MonitorBasePanel::m_splitterOnIdle), NULL, this);
 	m_splitter->SetMinimumPaneSize(182);
 
@@ -281,10 +291,8 @@ VideoMonitoringBasePanel::~VideoMonitoringBasePanel()
 // PLEASE DO *NOT* EDIT THIS FILE!
 ///////////////////////////////////////////////////////////////////////////
 
-#include "MonitorBasePanel.h"
 
 ///////////////////////////////////////////////////////////////////////////
-using namespace Slic3r::GUI;
 
 TaskListBasePanel::TaskListBasePanel(wxWindow* parent, wxWindowID id, const wxPoint& pos, const wxSize& size, long style, const wxString& name) : wxPanel(parent, id, pos, size, style, name)
 {

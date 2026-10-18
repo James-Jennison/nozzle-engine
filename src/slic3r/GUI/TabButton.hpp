@@ -3,6 +3,14 @@
 
 #include "wxExtensions.hpp"
 #include "Widgets/StaticBox.hpp"
+#include <wx/gdicmn.h>
+#include "slic3r/GUI/Widgets/StateColor.hpp"
+#include <wx/string.h>
+#include <wx/event.h>
+#include <wx/dc.h>
+
+class wxDC;
+class wxWindow;
 
 class TabButton : public StaticBox
 {
@@ -40,11 +48,12 @@ public:
 
     void SetBitmap(ScalableBitmap &bitmap);
 
-    bool Enable(bool enable = true);
+    bool Enable(bool enable = true) override;
 
     void Rescale();
 
     void ShowNewTag(bool tag = false) {show_new_tag = tag; Refresh();};
+    bool GetShowNewTag() const { return show_new_tag; };
 
 private:
     void paintEvent(wxPaintEvent& evt);

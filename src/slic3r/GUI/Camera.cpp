@@ -3,12 +3,27 @@
 
 #include "Camera.hpp"
 #include "GUI_App.hpp"
+#include "libslic3r/Technologies.hpp"
+#include <string>
+#include "libslic3r/Point.hpp"
+#include <algorithm>
+#include "libslic3r/Geometry.hpp"
+#include <cmath>
+#include "libslic3r/BoundingBox.hpp"
+#include <cassert>
+#include "slic3r/GUI/3DScene.hpp"
+#include <cstdlib>
+#include <utility>
+#include <vector>
+#include <cfloat>
+#include "libslic3r/TriangleMesh.hpp"
+#include <math.h>
 #if ENABLE_CAMERA_STATISTICS
 #include "Mouse3DController.hpp"
 #include "Plater.hpp"
 #endif // ENABLE_CAMERA_STATISTICS
 
-#include <GL/glew.h>
+#include <glad/gl.h>
 
 namespace Slic3r {
 namespace GUI {
@@ -55,7 +70,10 @@ void Camera::select_next_type()
 
 void Camera::auto_type(EType preferred_type)
 {
-    if (!wxGetApp().app_config->get_bool("auto_perspective")) return;
+    if (wxApp::GetInstance() == nullptr || wxGetApp().app_config == nullptr)
+        return;
+    if (!wxGetApp().app_config->get_bool("auto_perspective"))
+        return;
     if (preferred_type == EType::Perspective) {
         if (!m_prevent_auto_type) {
             set_type(preferred_type);
@@ -135,6 +153,45 @@ void Camera::select_view(const std::string& direction)
     else if (direction == "plate") {
         look_at(m_target - 0.707 * m_distance * Vec3d::UnitY() + 0.707 * m_distance * Vec3d::UnitZ(), m_target, Vec3d::UnitY() + Vec3d::UnitZ());
         auto_type(EType::Perspective);
+    }
+}
+void Camera::select_view(ViewAngleType type)
+{
+    switch (type) {
+    case Slic3r::GUI::Camera::ViewAngleType::Iso: {
+        select_view("iso");
+        break;
+    }
+    case Slic3r::GUI::Camera::ViewAngleType::Top_Front: {
+        select_view("topfront");
+        break;
+    }
+    case Slic3r::GUI::Camera::ViewAngleType::Left: {
+        select_view("left");
+        break;
+    }
+    case Slic3r::GUI::Camera::ViewAngleType::Right: {
+        select_view("right");
+        break;
+    }
+    case Slic3r::GUI::Camera::ViewAngleType::Top_Plate:
+    case Slic3r::GUI::Camera::ViewAngleType::Top: {
+        select_view("top");
+        break;
+    }
+    case Slic3r::GUI::Camera::ViewAngleType::Bottom: {
+        select_view("bottom");
+        break;
+    }
+    case Slic3r::GUI::Camera::ViewAngleType::Front: {
+        select_view("front");
+        break;
+    }
+    case Slic3r::GUI::Camera::ViewAngleType::Rear: {
+        select_view("rear");
+        break;
+    }
+    default: break;
     }
 }
 
@@ -679,63 +736,6 @@ void Camera::look_at(const Vec3d& position, const Vec3d& target, const Vec3d& up
     update_zenit();
 }
 
-void Camera::UpdateFrustum() 
-{
-    // fast extraction of frustum planes from the view-projection matrix
-    // 1. plane equation: ax + by + cz + d = 0, vec3(a,b,c) is normal of plane, d is scalar of plane, distance to origin of world frame
-    // 2. -w' < x' < w'   -w' < y' < w' -w' < z' < w'
-    const Matrix4d& vp = m_projection_matrix.matrix() * m_view_matrix.matrix();
-    const Eigen::Matrix4d& vp_matrix = vp.eval();
-    const double* vp_data = vp_matrix.data();
-    // left
-    float a = vp_data[0 * 4 + 3] + vp_data[0 * 4 + 0];
-    float b = vp_data[1 * 4 + 3] + vp_data[1 * 4 + 0];
-    float c = vp_data[2 * 4 + 3] + vp_data[2 * 4 + 0];
-    float d = vp_data[3 * 4 + 3] + vp_data[3 * 4 + 0];
-    m_frustum.planes[0].SetEquation(a, b, c, d);
-    m_frustum.planes[0].Normalize();
-
-    // right
-    a = vp_data[0 * 4 + 3] - vp_data[0 * 4 + 0];
-    b = vp_data[1 * 4 + 3] - vp_data[1 * 4 + 0];
-    c = vp_data[2 * 4 + 3] - vp_data[2 * 4 + 0];
-    d = vp_data[3 * 4 + 3] - vp_data[3 * 4 + 0];
-    m_frustum.planes[1].SetEquation(a, b, c, d);
-    m_frustum.planes[1].Normalize();
-
-    // bottom
-    a = vp_data[0 * 4 + 3] + vp_data[0 * 4 + 1];
-    b = vp_data[1 * 4 + 3] + vp_data[1 * 4 + 1];
-    c = vp_data[2 * 4 + 3] + vp_data[2 * 4 + 1];
-    d = vp_data[3 * 4 + 3] + vp_data[3 * 4 + 1];
-    m_frustum.planes[2].SetEquation(a, b, c, d);
-    m_frustum.planes[2].Normalize();
-
-    // top
-    a = vp_data[0 * 4 + 3] - vp_data[0 * 4 + 1];
-    b = vp_data[1 * 4 + 3] - vp_data[1 * 4 + 1];
-    c = vp_data[2 * 4 + 3] - vp_data[2 * 4 + 1];
-    d = vp_data[3 * 4 + 3] - vp_data[3 * 4 + 1];
-    m_frustum.planes[3].SetEquation(a, b, c, d);
-    m_frustum.planes[3].Normalize();
-
-    // near
-    a = vp_data[0 * 4 + 3] + vp_data[0 * 4 + 2];
-    b = vp_data[1 * 4 + 3] + vp_data[1 * 4 + 2];
-    c = vp_data[2 * 4 + 3] + vp_data[2 * 4 + 2];
-    d = vp_data[3 * 4 + 3] + vp_data[3 * 4 + 2];
-    m_frustum.planes[4].SetEquation(a, b, c, d);
-    m_frustum.planes[4].Normalize();
-
-    // far
-    a = vp_data[0 * 4 + 3] - vp_data[0 * 4 + 2];
-    b = vp_data[1 * 4 + 3] - vp_data[1 * 4 + 2];
-    c = vp_data[2 * 4 + 3] - vp_data[2 * 4 + 2];
-    d = vp_data[3 * 4 + 3] - vp_data[3 * 4 + 2];
-    m_frustum.planes[5].SetEquation(a, b, c, d);
-    m_frustum.planes[5].Normalize();
-}
-
 void Camera::set_default_orientation()
 {
     m_zenit = 45.0f;
@@ -776,4 +776,3 @@ void Camera::update_target() {
 }
 } // GUI
 } // Slic3r
-

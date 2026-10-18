@@ -16,6 +16,14 @@
 #include "ParamsDialog.hpp"
 #include "GUI_App.hpp"
 #include "wx/hyperlink.h"
+#include <wx/anybutton.h>
+#include <wx/checklst.h>
+#include <wx/string.h>
+#include <string>
+#include <vector>
+#include <wx/event.h>
+#include "libslic3r/PrintConfig.hpp"
+#include <wx/panel.h>
 
 #define EXTRUSION_CALIBRATION_DEF_COLOUR    wxColour(255, 255, 255)
 #define EXTRUSION_CALIBRATION_GREY900       wxColour(38, 46, 48)
@@ -91,9 +99,6 @@ protected:
     int get_bed_temp(DynamicPrintConfig* config);
 
 protected:
-    StateColor          m_btn_bg_green;
-    StateColor          m_btn_bg_gray;
-
     wxPanel*            m_step_1_panel;
     wxPanel*            m_step_2_panel;
 

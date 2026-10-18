@@ -1,10 +1,15 @@
-#include <catch_main.hpp>
+#include <catch2/catch_all.hpp>
+#include <vector>
+#include "libslic3r/libslic3r.h"
+#include <string>
+#include <cstdio>
 
+#include <catch2/catch_test_macros.hpp>
 #include "libslic3r/Utils.hpp"
-// The nanoSVG C implementation used to be defined inline here. It is now
-// provided solely by the shared tests/nanosvg_impl.cpp OBJECT library that
-// every test executable links, so headless builds (SLIC3R_GUI=OFF) resolve
-// libslic3r's nanoSVG references without duplicate definitions.
+#define NANOSVG_IMPLEMENTATION
+#include "nanosvg/nanosvg.h"
+#define NANOSVGRAST_IMPLEMENTATION
+#include "nanosvg/nanosvgrast.h"
 namespace {
 
 TEST_CASE("sort_remove_duplicates", "[utils]") {

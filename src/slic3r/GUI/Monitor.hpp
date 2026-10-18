@@ -2,11 +2,17 @@
 #define slic3r_Monitor_hpp_
 
 #include "Tabbook.hpp"
+#include "slic3r/GUI/Widgets/Button.hpp"
+#include <wx/event.h>
+#include <wx/bookctrl.h>
+#include "slic3r/GUI/StagedBuild.hpp"
+#include <string>
 #include <wx/notebook.h>
 #include <wx/scrolwin.h>
 #include <wx/sizer.h>
 #include <wx/bmpcbox.h>
 #include <wx/bmpbuttn.h>
+#include <wx/timer.h>
 #include <wx/treectrl.h>
 #include <wx/imaglist.h>
 #include <wx/artprov.h>
@@ -17,7 +23,6 @@
 #include <wx/font.h>
 #include <wx/colour.h>
 #include <wx/settings.h>
-#include <wx/sizer.h>
 #include <wx/grid.h>
 #include <wx/dataview.h>
 #include <wx/panel.h>
@@ -25,14 +30,12 @@
 #include <wx/bitmap.h>
 #include <wx/image.h>
 #include <wx/icon.h>
-#include <wx/bmpbuttn.h>
 #include <wx/button.h>
 #include <wx/gbsizer.h>
 #include <wx/statbox.h>
 #include <wx/tglbtn.h>
 #include <wx/popupwin.h>
 #include <wx/spinctrl.h>
-#include <wx/artprov.h>
 #include <wx/webrequest.h>
 #include <map>
 #include <vector>
@@ -49,6 +52,7 @@
 #include "slic3r/GUI/AmsWidgets.hpp"
 #include "Widgets/SideTools.hpp"
 #include "SelectMachinePop.hpp"
+#include "Lazy.hpp"
 
 namespace Slic3r {
 namespace GUI {
@@ -72,25 +76,19 @@ public:
 	void msw_rescale();
 };
 
-class MonitorPanel : public wxPanel
+class MonitorPanel : public wxPanel, public StagedBuild, public LazyInstance<MonitorPanel>
 {
 private:
     Tabbook*		m_tabpanel{ nullptr };
     wxSizer*        m_main_sizer{ nullptr };
-    
-    AddMachinePanel*    m_status_add_machine_panel;
-    StatusPanel*        m_status_info_panel;
-    MediaFilePanel*     m_media_file_panel;
-    UpgradePanel*       m_upgrade_panel;
-    HMSPanel*           m_hms_panel;
+
+    StatusPanel*        m_status_info_panel{ nullptr };
+    MediaFilePanel*     m_media_file_panel{ nullptr };
+    UpgradePanel*       m_upgrade_panel{ nullptr };
+    HMSPanel*           m_hms_panel{ nullptr };
 
 	/* side tools */
     SideTools*      m_side_tools{nullptr};
-    wxStaticBitmap* m_bitmap_printer_type;
-    wxStaticBitmap* m_bitmap_arrow;
-    wxStaticText*   m_staticText_printer_name;
-    wxStaticBitmap* m_bitmap_wifi_signal;
-    wxBoxSizer *    m_side_tools_sizer;
     SelectMachinePopup m_select_machine;
 
 	/* images */
@@ -101,9 +99,7 @@ private:
     wxBitmap m_printer_img;
     wxBitmap m_arrow_img;
 
-    int last_wifi_signal = -1;
     int last_status;
-    bool m_initialized { false };
     bool update_flag{false};
     wxTimer* m_refresh_timer = nullptr;
 
@@ -119,7 +115,7 @@ public:
         PT_DEBUG   = 4,
         PT_MAX_NUM = 5
     };
-    
+
 	void init_bitmap();
     void init_timer();
     void init_tabpanel();
@@ -132,7 +128,8 @@ public:
 
     StatusPanel* get_status_panel() {return m_status_info_panel;};
 	void select_machine(std::string machine_sn);
-    void on_update_all(wxMouseEvent &event);
+    // Resets the selected printer's calibration results and syncs the sidebar, without the Device tab.
+    static void on_machine_selected(MachineObject* obj);
     void on_timer(wxTimerEvent& event);
     void on_select_printer(wxCommandEvent& event);
     void on_printer_clicked(wxMouseEvent &event);
@@ -145,7 +142,6 @@ public:
     void update_hms_tag();
     bool Show(bool show);
 
-	void update_side_panel();
     void show_status(int status);
 
     std::string get_string_from_tab(PrinterTab tab);
@@ -156,7 +152,12 @@ public:
     void stop_update() {update_flag = false;};
     void start_update() {update_flag = true;};
 
-    void jump_to_HMS(wxCommandEvent& e);
+
+    void jump_to_HMS();
+    void jump_to_Upgrade();
+    void jump_to_LiveView();
+    void jump_to_Rack();
+    void update_network_version_footer();
 };
 
 

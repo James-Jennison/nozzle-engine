@@ -1,0 +1,446 @@
+{
+ "objects": [
+  "gcode",
+  "webhooks",
+  "configfile",
+  "mcu",
+  "mcu bed",
+  "mcu hotend",
+  "gcode_macro _COSMOS_SETTINGS",
+  "gcode_macro _CHECK_CALIBRATION_VARS",
+  "gcode_macro CHECK_CALIBRATION",
+  "gcode_macro _CALIBRATE_ALL_STEP_1",
+  "gcode_macro _CALIBRATE_ALL_STEP_2",
+  "gcode_macro SAVE_CONFIG",
+  "gcode_macro _SAVE_CONFIG_PROMPT",
+  "gcode_button extruder_board_detect",
+  "gcode_move",
+  "print_stats",
+  "virtual_sdcard",
+  "pause_resume",
+  "display_status",
+  "gcode_macro CANCEL_PRINT",
+  "gcode_macro PAUSE",
+  "gcode_macro RESUME",
+  "gcode_macro SET_PAUSE_NEXT_LAYER",
+  "gcode_macro SET_PAUSE_AT_LAYER",
+  "gcode_macro SET_PRINT_STATS_INFO",
+  "gcode_macro _TOOLHEAD_PARK_PAUSE_CANCEL",
+  "gcode_macro _CLIENT_EXTRUDE",
+  "gcode_macro _CLIENT_RETRACT",
+  "gcode_macro _CLIENT_LINEAR_MOVE",
+  "gcode_macro _KAMP_Settings",
+  "gcode_macro LINE_PURGE",
+  "gcode_macro ELEGOO_PURGE",
+  "gcode_macro SMART_PARK",
+  "exclude_object",
+  "idle_timeout",
+  "stepper_enable",
+  "tmc2209 stepper_x",
+  "tmc2209 stepper_y",
+  "tmc2209 stepper_z",
+  "tmc2209 extruder",
+  "heaters",
+  "heater_fan extruder",
+  "fan",
+  "heater_bed",
+  "bed_mesh",
+  "probe",
+  "load_cell_probe",
+  "filament_switch_sensor filament_sensor",
+  "led case",
+  "led hotend",
+  "temperature_sensor chamber",
+  "fan_generic aux_fan",
+  "fan_generic case_fan",
+  "temperature_sensor mcu_toolhead",
+  "temperature_sensor mcu_bed",
+  "temperature_host mainboard",
+  "temperature_fan mainboard",
+  "screws_tilt_adjust",
+  "gcode_macro _global_var",
+  "gcode_macro PRINT_START",
+  "gcode_macro M191",
+  "gcode_macro PRINT_END",
+  "gcode_macro PURGE",
+  "gcode_macro CLEAN_NOZZLE",
+  "gcode_macro MOVE_TO_TRAY",
+  "gcode_macro KICK",
+  "gcode_macro _LOAD_FILAMENT_STEP_PUSH",
+  "gcode_macro _LOAD_FILAMENT_STEP_DONE",
+  "gcode_macro LOAD_FILAMENT",
+  "gcode_macro _LOAD_FILAMENT_CANCEL",
+  "gcode_macro UNLOAD_FILAMENT",
+  "gcode_macro CUT_FILAMENT",
+  "gcode_macro _LOAD_DEFAULT_BED_MESH",
+  "gcode_macro _CG28",
+  "gcode_macro LOADCELL_Z_HOME",
+  "gcode_macro _SAVE_Z_OFFSET",
+  "gcode_macro Z_OFFSET_APPLY_ENDSTOP",
+  "gcode_macro CALIBRATE_Z_OFFSET",
+  "gcode_macro BED_MESH_CALIBRATE",
+  "gcode_macro MANUAL_LEVELING",
+  "gcode_macro SCREWS_TILT_CALCULATE",
+  "gcode_macro _SCREWS_TILT_PROMPT",
+  "gcode_macro _SCREWS_TILT_MESH",
+  "gcode_macro _SCREWS_TILT_CLOSE",
+  "gcode_macro _IDLE_TIMEOUT",
+  "gcode_macro TURN_OFF_FANS",
+  "gcode_macro _SAVE_FAN_STATE",
+  "gcode_macro _RESTORE_FAN_STATE",
+  "gcode_macro M600",
+  "gcode_macro M106",
+  "gcode_macro M107",
+  "gcode_macro _SHOW_PROMPT",
+  "gcode_macro _CLOSE_PROMPT",
+  "gcode_macro SET_DISPLAY_TEXT",
+  "gcode_macro M729",
+  "gcode_macro M8213",
+  "gcode_macro LOAD_SKEW_IF_EXISTS",
+  "gcode_macro CLEAR_SKEW_IF_EXISTS",
+  "gcode_macro _GUPPYSCREEN_EXTRUDE",
+  "gcode_macro _GUPPYSCREEN_RETRACT",
+  "gcode_macro DOOM",
+  "gcode_macro SYNC_CAMERA_LED",
+  "gcode_macro REBOOT_MACHINE",
+  "gcode_macro _UPDATE_COSMOS",
+  "firmware_retraction",
+  "telemetry",
+  "motion_report",
+  "query_endstops",
+  "system_stats",
+  "manual_probe",
+  "toolhead",
+  "extruder"
+ ],
+ "status": {
+  "display_status": {
+   "message": "",
+   "progress": 0.0
+  },
+  "exclude_object": {
+   "current_object": "SQUATCHEE_SPIN_MOUNT.STL_ID_0_COPY_0",
+   "excluded_objects": [],
+   "objects": [
+    {
+     "center": [
+      0,
+      0
+     ],
+     "name": "SQUATCHEE_SPIN_MOUNT.STL_ID_0_COPY_0",
+     "polygon": [
+      [
+       -11.2,
+       0
+      ],
+      [
+       -11.0411,
+       -1.88005
+      ],
+      [
+       -10.5246,
+       -3.83062
+      ],
+      [
+       -9.55686,
+       -5.84007
+      ],
+      [
+       -8.21018,
+       -7.61793
+      ],
+      [
+       -6.53793,
+       -9.09371
+      ],
+      [
+       -4.60642,
+       -10.2089
+      ],
+      [
+       -2.49223,
+       -10.9192
+      ],
+      [
+       -0.279223,
+       -11.1965
+      ],
+      [
+       1.94486,
+       -11.0298
+      ],
+      [
+       4.09182,
+       -10.4258
+      ],
+      [
+       6.07652,
+       -9.40829
+      ],
+      [
+       7.82025,
+       -8.01771
+      ],
+      [
+       9.25387,
+       -6.30918
+      ],
+      [
+       10.3205,
+       -4.35047
+      ],
+      [
+       10.9779,
+       -2.21924
+      ],
+      [
+       11.2,
+       0
+      ],
+      [
+       11.0411,
+       1.88005
+      ],
+      [
+       10.5246,
+       3.83062
+      ],
+      [
+       9.55686,
+       5.84007
+      ],
+      [
+       8.21018,
+       7.61793
+      ],
+      [
+       6.53793,
+       9.09371
+      ],
+      [
+       4.60642,
+       10.2089
+      ],
+      [
+       2.49223,
+       10.9192
+      ],
+      [
+       0.279223,
+       11.1965
+      ],
+      [
+       -1.94486,
+       11.0298
+      ],
+      [
+       -4.09182,
+       10.4258
+      ],
+      [
+       -6.07652,
+       9.40829
+      ],
+      [
+       -7.82025,
+       8.01771
+      ],
+      [
+       -9.25387,
+       6.30918
+      ],
+      [
+       -10.3205,
+       4.35047
+      ],
+      [
+       -10.9779,
+       2.21924
+      ],
+      [
+       -11.2,
+       0
+      ]
+     ]
+    }
+   ]
+  },
+  "extruder": {
+   "can_extrude": false,
+   "motion_queue": null,
+   "pid_profile": "default",
+   "power": 0.0,
+   "pressure_advance": 0.04,
+   "smooth_time": 0.04,
+   "target": 0.0,
+   "temperature": 28.26
+  },
+  "fan": {
+   "power": 0.0,
+   "rpm": 0.0,
+   "speed": 0.0,
+   "value": 0.0
+  },
+  "fan_generic aux_fan": {
+   "power": 0.0,
+   "rpm": null,
+   "speed": 0.0,
+   "value": 0.0
+  },
+  "fan_generic case_fan": {
+   "power": 0.0,
+   "rpm": null,
+   "speed": 0.0,
+   "value": 0.0
+  },
+  "filament_switch_sensor filament_sensor": {
+   "always_fire_events": false,
+   "check_on_print_start": false,
+   "enabled": true,
+   "filament_detected": true,
+   "runout_distance": 770.0,
+   "runout_elapsed": 0.0,
+   "smart": true
+  },
+  "gcode_move": {
+   "absolute_coordinates": true,
+   "absolute_extrude": false,
+   "extrude_factor": 1.0,
+   "gcode_position": [
+    202.0,
+    264.0,
+    170.0,
+    -6.0821899998991285
+   ],
+   "homing_origin": [
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   "position": [
+    202.0,
+    264.0,
+    170.0,
+    194013.66643353016
+   ],
+   "speed": 1200.0,
+   "speed_factor": 1.0
+  },
+  "heater_bed": {
+   "pid_profile": "default",
+   "power": 0.0,
+   "target": 0.0,
+   "temperature": 27.98
+  },
+  "heater_fan extruder": {
+   "power": 0.0,
+   "rpm": 0.0,
+   "speed": 0.0,
+   "value": 0.0
+  },
+  "idle_timeout": {
+   "printing_time": 0.0,
+   "state": "Idle"
+  },
+  "led case": {
+   "color_data": [
+    [
+     1.0,
+     1.0,
+     1.0,
+     1.0
+    ]
+   ]
+  },
+  "led hotend": {
+   "color_data": [
+    [
+     0.0,
+     0.0,
+     0.0,
+     0.0
+    ]
+   ]
+  },
+  "pause_resume": {
+   "is_paused": false
+  },
+  "print_stats": {
+   "filament_used": 36.394670000096085,
+   "filename": "squatchee_spin_mount-878ace1d-f56f-4e93-bc4f-32781014210d.gcode",
+   "info": {
+    "current_layer": 1,
+    "total_layer": 181
+   },
+   "message": "",
+   "print_duration": 14.343560632085428,
+   "state": "cancelled",
+   "total_duration": 342.78496295493096
+  },
+  "temperature_fan mainboard": {
+   "control": "pid",
+   "power": 0.0,
+   "rpm": 0.0,
+   "speed": 0.0,
+   "target": 60.0,
+   "temperature": 44.81,
+   "value": 0.0
+  },
+  "temperature_sensor chamber": {
+   "measured_max_temp": 40.84,
+   "measured_min_temp": 23.79,
+   "temperature": 27.15
+  },
+  "temperature_sensor mcu_bed": {
+   "measured_max_temp": 53.92,
+   "measured_min_temp": 23.84,
+   "temperature": 27.24
+  },
+  "temperature_sensor mcu_toolhead": {
+   "measured_max_temp": 60.56,
+   "measured_min_temp": 24.52,
+   "temperature": 28.25
+  },
+  "toolhead": {
+   "axis_maximum": [
+    256.0,
+    265.0,
+    258.0,
+    0.0
+   ],
+   "axis_minimum": [
+    -2.0,
+    -2.0,
+    -4.0,
+    0.0
+   ],
+   "estimated_print_time": 1406045.064895975,
+   "extruder": "extruder",
+   "homed_axes": "",
+   "max_accel": 20000.0,
+   "max_velocity": 500.0,
+   "minimum_cruise_ratio": 0.5,
+   "position": [
+    202.0,
+    264.0,
+    169.86789746042263,
+    194013.66643353016
+   ],
+   "print_time": 1017840.4099772366,
+   "square_corner_velocity": 9.0,
+   "stalls": 0
+  },
+  "virtual_sdcard": {
+   "file_path": null,
+   "file_position": 0,
+   "file_size": 0,
+   "is_active": false,
+   "progress": 0.0
+  },
+  "webhooks": {
+   "state": "ready",
+   "state_message": "Printer is ready"
+  }
+ }
+}

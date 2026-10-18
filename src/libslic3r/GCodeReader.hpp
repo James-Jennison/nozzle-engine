@@ -3,10 +3,15 @@
 
 #include "libslic3r.h"
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <functional>
+#include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 #include "PrintConfig.hpp"
 
 namespace Slic3r {
@@ -26,11 +31,15 @@ public:
         const std::string_view  comment() const
             { size_t pos = m_raw.find(';'); return (pos == std::string::npos) ? std::string_view() : std::string_view(m_raw).substr(pos + 1); }
 
+        // Return position in this->raw() string starting with the "axis" character.
+        std::string_view axis_pos(char axis) const;
         void  clear() { m_raw.clear(); }
         bool  has(Axis axis) const { return (m_mask & (1 << int(axis))) != 0; }
         float value(Axis axis) const { return m_axis[axis]; }
         bool  has(char axis) const;
         bool  has_value(char axis, float &value) const;
+        // Parse value of an axis from raw string starting at axis_pos.
+        static bool has_value(std::string_view axis_pos, float &value);
         float new_X(const GCodeReader &reader) const { return this->has(X) ? this->x() : reader.x(); }
         float new_Y(const GCodeReader &reader) const { return this->has(Y) ? this->y() : reader.y(); }
         float new_Z(const GCodeReader &reader) const { return this->has(Z) ? this->z() : reader.z(); }
@@ -103,7 +112,7 @@ public:
     void reset() { memset(m_position, 0, sizeof(m_position)); }
     void apply_config(const GCodeConfig &config);
     void apply_config(const DynamicPrintConfig &config);
-    const GCodeConfig& config() { return m_config; };
+    const GCodeConfig& config() { return m_config ? *m_config : default_config(); };
 
     template<typename Callback>
     void parse_buffer(const std::string &buffer, Callback callback)
@@ -162,6 +171,11 @@ public:
     float& j()       { return m_position[J]; }
     float  j() const { return m_position[J]; }
 
+    GCodeConfig get_config() const
+    { 
+        return m_config ? *m_config : default_config();
+    }
+
 private:
     template<typename ParseLineCallback, typename LineEndCallback>
     bool        parse_file_raw_internal(const std::string &filename, ParseLineCallback parse_line_callback, LineEndCallback line_end_callback);
@@ -185,8 +199,12 @@ private:
             ; // silence -Wempty-body
         return c;
     }
+    static const char*  axis_pos(const char *raw_str, char axis);
+    static const GCodeConfig& default_config();
 
-    GCodeConfig m_config;
+    // Set by apply_config() and shared by copies, so a reader without a config builds none.
+    std::shared_ptr<const GCodeConfig> m_config;
+    bool        m_use_relative_e_distances{ default_config().use_relative_e_distances.value };
     float       m_position[NUM_AXES];
     bool        m_verbose;
     // To be set by the callback to stop parsing.

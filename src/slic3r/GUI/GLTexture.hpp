@@ -3,21 +3,25 @@
 
 #include <atomic>
 #include <string>
+#include <utility>
 #include <vector>
+#include <array>
 #include <thread>
 
 #include <wx/colour.h>
 #include <wx/font.h>
+#include <wx/gdicmn.h>
 
-class wxImage;
+class wxFont;
+
 
 namespace Slic3r {
 namespace GUI {
 
-class GLModel;
-
     class GLTexture
     {
+    public:
+
         class Compressor
         {
             struct Level
@@ -41,6 +45,8 @@ class GLModel;
             // This atomic also works as a memory barrier for synchronizing results of the worker thread with the calling thread.
             std::atomic<unsigned int> m_num_levels_compressed;
 
+            static std::atomic<bool> m_dirty; 
+
         public:
             explicit Compressor(GLTexture& texture) : m_texture(texture), m_abort_compressing(false), m_num_levels_compressed(0) {}
             ~Compressor() { reset(); }
@@ -55,11 +61,12 @@ class GLModel;
             void send_compressed_data_to_gpu();
             bool all_compressed_data_sent_to_gpu() const { return m_levels.empty(); }
 
+            static bool has_compressed_texture_to_refresh() { return m_dirty.exchange(false); }
+
         private:
             void compress();
         };
 
-    public:
         enum ECompressionType : unsigned char
         {
             None,
@@ -97,7 +104,10 @@ class GLModel;
         bool load_from_file(const std::string& filename, bool use_mipmaps, ECompressionType compression_type, bool apply_anisotropy);
         bool load_from_svg_file(const std::string& filename, bool use_mipmaps, bool compress, bool apply_anisotropy, unsigned int max_size_px);
         //BBS load GLTexture from raw pixel data
-        bool load_from_raw_data(std::vector<unsigned char> data, unsigned int w, unsigned int h, bool apply_anisotropy = false);
+        // `data` is RGBA, w * h * 4 bytes. With use_mipmaps, a real box-filtered mipmap chain is
+        // built, so the texture may safely be drawn smaller than its pixel size.
+        bool load_from_raw_data(std::vector<unsigned char> data, unsigned int w, unsigned int h, bool apply_anisotropy = false,
+                                bool use_mipmaps = true);
         // meanings of states: (std::pair<int, bool>)
         // first field (int):
         // 0 -> no changes
@@ -129,12 +139,13 @@ class GLModel;
 
         static void render_texture(unsigned int tex_id, float left, float right, float bottom, float top);
         static void render_sub_texture(unsigned int tex_id, float left, float right, float bottom, float top, const Quad_UVs& uvs);
+        // Copies the bound read framebuffer into an RGBA texture, creating it on first use and
+        // reallocating it when the size changes.
+        static void copy_from_framebuffer(unsigned int& tex_id, std::array<unsigned int, 2>& tex_size, unsigned int width, unsigned int height, int filter);
 
     private:
         bool load_from_png(const std::string& filename, bool use_mipmaps, ECompressionType compression_type, bool apply_anisotropy);
         bool load_from_svg(const std::string& filename, bool use_mipmaps, bool compress, bool apply_anisotropy, unsigned int max_size_px);
-        static GLModel& GetModelForRenderImage();
-        static GLModel& InitModelForRenderImage();
 
         friend class Compressor;
     };

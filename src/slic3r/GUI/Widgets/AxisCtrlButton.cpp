@@ -2,15 +2,28 @@
 #include "Label.hpp"
 #include "libslic3r/libslic3r.h"
 
+#include "slic3r/GUI/Widgets/StateColor.hpp"
+#include <utility>
+#include <wx/colour.h>
+#include <cmath>
+#include "slic3r/GUI/wxExtensions.hpp"
+#include <algorithm>
+#include <wx/dc.h>
+#include <wx/chartype.h>
 #include <wx/dcclient.h>
 #include <wx/dcgraph.h>
+#include <wx/stattext.h>
+#include <wx/gdicmn.h>
+#include <wx/event.h>
+#include <wx/graphics.h>
+#include "slic3r/GUI/Widgets/StateHandler.hpp"
 
 StateColor blank_bg(StateColor(std::make_pair(wxColour("#FFFFFF"), (int)StateColor::Normal)));
 static const wxColour BUTTON_BG_COL = wxColour("#EEEEEE");
 static const wxColour BUTTON_IN_BG_COL = wxColour("#CECECE");
 
 static const wxColour bd = wxColour(0, 150, 136);
-static const wxColour text_num_color = wxColour(0x898989);
+static const wxColour text_num_color   = wxColour("#898989");
 static const wxColour BUTTON_PRESS_COL = wxColour(172, 172, 172);
 static const double sqrt2 = std::sqrt(2);
 
@@ -18,7 +31,7 @@ BEGIN_EVENT_TABLE(AxisCtrlButton, wxWindow)
 EVT_LEFT_DOWN(AxisCtrlButton::mouseDown)
 EVT_LEFT_UP(AxisCtrlButton::mouseReleased)
 EVT_MOTION(AxisCtrlButton::mouseMoving)
-EVT_PAINT(AxisCtrlButton::paintEvent)   
+EVT_PAINT(AxisCtrlButton::paintEvent)
 END_EVENT_TABLE()
 
 #define OUTER_SIZE      FromDIP(105)
@@ -124,7 +137,9 @@ void AxisCtrlButton::SetInnerBackgroundColor(StateColor const& color)
 
 void AxisCtrlButton::SetBitmap(ScalableBitmap &bmp)
 {
-    m_icon = bmp;
+    if (bmp.bmp().IsOk()) {
+        m_icon = bmp;
+    }
 }
 
 void AxisCtrlButton::Rescale() {
@@ -153,7 +168,7 @@ void AxisCtrlButton::render(wxDC& dc)
 
     gc->PushState();
     gc->Translate(center.x, center.y);
-	
+
 	//draw the outer ring
     wxGraphicsPath outer_path = gc->CreatePath();
     outer_path.AddCircle(0, 0, r_outer);

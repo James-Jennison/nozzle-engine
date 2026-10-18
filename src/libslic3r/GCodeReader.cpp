@@ -1,29 +1,53 @@
 #include "GCodeReader.hpp"
+#include <Shiny/ShinyMacros.h>
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/split.hpp>
 #include <boost/log/trivial.hpp>
 #include <boost/nowide/fstream.hpp>
 #include <boost/nowide/cstdio.hpp>
+#include <cassert>
+#include <cstddef>
+#include <cstdio>
+#include <cctype>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <iomanip>
+#include "PrintConfig.hpp"
 #include "Utils.hpp"
 
 #include "LocalesUtils.hpp"
+#include "libslic3r.h"
 
 #include <Shiny/Shiny.h>
 #include <fast_float/fast_float.h>
+#include <memory>
+#include <utility>
+#include <vector>
+#include <string_view>
+#include <sstream>
+#include "Config.hpp"
 
 namespace Slic3r {
 
+const GCodeConfig& GCodeReader::default_config()
+{
+    static const GCodeConfig config;
+    return config;
+}
+
 void GCodeReader::apply_config(const GCodeConfig &config)
 {
-    m_config = config;
+    m_config                   = std::make_shared<const GCodeConfig>(config);
+    m_use_relative_e_distances = config.use_relative_e_distances.value;
 }
 
 void GCodeReader::apply_config(const DynamicPrintConfig &config)
 {
-    m_config.apply(config, true);
+    auto applied = std::make_shared<GCodeConfig>(m_config ? *m_config : default_config());
+    applied->apply(config, true);
+    m_use_relative_e_distances = applied->use_relative_e_distances.value;
+    m_config                   = std::move(applied);
 }
 
 const char* GCodeReader::parse_line_internal(const char *ptr, const char *end, GCodeLine &gline, std::pair<const char*, const char*> &command)
@@ -83,7 +107,7 @@ const char* GCodeReader::parse_line_internal(const char *ptr, const char *end, G
         }
     }
     
-    if (gline.has(E) && m_config.use_relative_e_distances)
+    if (gline.has(E) && m_use_relative_e_distances)
         m_position[E] = 0;
 
     // Skip the rest of the line.
@@ -126,15 +150,6 @@ template<typename ParseLineCallback, typename LineEndCallback>
 bool GCodeReader::parse_file_raw_internal(const std::string &filename, ParseLineCallback parse_line_callback, LineEndCallback line_end_callback)
 {
     FilePtr in{ boost::nowide::fopen(filename.c_str(), "rb") };
-    if (in.f == nullptr) {
-        // fopen failed: file missing, inaccessible, or path invalid.
-        // Returning false here prevents ::fread(buffer.data(), 1, ..., NULL)
-        // below, which would otherwise trigger a CRT invalid-parameter crash
-        // on Windows (and similarly undefined behavior elsewhere).
-        BOOST_LOG_TRIVIAL(error) << "GCodeReader::parse_file_raw_internal: "
-                                 << "failed to open file '" << filename << "'";
-        return false;
-    }
 
     // Read the input stream 64kB at a time, extract lines and process them.
     std::vector<char> buffer(65536 * 10, 0);
@@ -231,6 +246,28 @@ bool GCodeReader::parse_file_raw(const std::string &filename, raw_line_callback_
         [](size_t){});
 }
 
+const char* GCodeReader::axis_pos(const char *raw_str, char axis)
+{
+    const char *c = raw_str;
+    // Skip the whitespaces.
+    c = skip_whitespaces(c);
+    // Skip the command.
+    c = skip_word(c);
+    // Up to the end of line or comment.
+    while (! is_end_of_gcode_line(*c)) {
+        // Skip whitespaces.
+        c = skip_whitespaces(c);
+        if (is_end_of_gcode_line(*c))
+            break;
+        // Check the name of the axis.
+        if (*c == axis)
+            return c;
+        // Skip the rest of the word.
+        c = skip_word(c);
+    }
+    return nullptr;
+}
+
 bool GCodeReader::GCodeLine::has(char axis) const
 {
     const char *c = m_raw.c_str();
@@ -249,6 +286,29 @@ bool GCodeReader::GCodeLine::has(char axis) const
             return true;
         // Skip the rest of the word.
         c = skip_word(c);
+    }
+    return false;
+}
+
+std::string_view GCodeReader::GCodeLine::axis_pos(char axis) const
+{
+    const std::string &s = this->raw();
+    const char *c = GCodeReader::axis_pos(this->raw().c_str(), axis);
+    return c ? std::string_view{ c, s.size() - (c - s.data()) } : std::string_view();
+}
+
+bool GCodeReader::GCodeLine::has_value(std::string_view axis_pos, float &value)
+{
+    if (const char *c = axis_pos.data(); c) {
+        // Try to parse the numeric value.
+        double v = 0.;
+        const char *end = axis_pos.data() + axis_pos.size();
+        auto [pend, ec] = fast_float::from_chars(++ c, end, v);
+        if (pend != c && is_end_of_word(*pend)) {
+            // The axis value has been parsed correctly.
+            value = float(v);
+            return true;
+        }
     }
     return false;
 }

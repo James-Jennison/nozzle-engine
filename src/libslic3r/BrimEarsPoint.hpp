@@ -1,7 +1,10 @@
 #ifndef BRIMEARSPOINT_HPP
 #define BRIMEARSPOINT_HPP
 
+#include <cstdlib>
+#include "libslic3r.h"
 #include <libslic3r/Point.hpp>
+#include <vector>
 
 
 namespace Slic3r {
@@ -40,6 +43,11 @@ struct BrimPoint
     {
         Vec3d result = trsf * pos.cast<double>();
         return result.cast<float>();
+    }
+
+    void set_transform(const Transform3d& trsf)
+    {
+        pos = transform(trsf);
     }
 
     bool operator==(const BrimPoint &sp) const

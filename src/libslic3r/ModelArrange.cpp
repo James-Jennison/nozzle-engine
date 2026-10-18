@@ -1,9 +1,21 @@
 #include "ModelArrange.hpp"
 
+#include <cstddef>
+#include <algorithm>
+#include <iterator>
 #include <libslic3r/Model.hpp>
 #include <libslic3r/Geometry/ConvexHull.hpp>
 #include <libslic3r/Print.hpp>
-#include "MTUtils.hpp"
+#include "Arrange.hpp"
+#include <utility>
+#include "Config.hpp"
+#include <set>
+#include <string>
+#include "Point.hpp"
+#include "PrintConfig.hpp"
+#include "BoundingBox.hpp"
+#include "ExPolygon.hpp"
+#include "Polygon.hpp"
 
 namespace Slic3r {
 
@@ -19,6 +31,10 @@ arrangement::ArrangePolygons get_arrange_polys(const Model &model, ModelInstance
     for (ModelObject *mo : model.objects)
         for (ModelInstance *minst : mo->instances) {
             minst->get_arrange_polygon(&ap);
+            // ModelInstance::get_arrange_polygon leaves bed_idx at its UNARRANGED
+            // default; seed it to bed 0 (as get_instance_arrange_poly does) so the
+            // nester treats the item as placeable instead of returning it unplaced.
+            ap.bed_idx = 0;
             input.emplace_back(ap);
             instances.emplace_back(minst);
         }
@@ -135,10 +151,10 @@ ArrangePolygon get_instance_arrange_poly(ModelInstance* instance, const Slic3r::
             ap.first_bed_temp = bed_opt_1st_layer->get_at(ap.extrude_ids.front()-1);
     }
 
-    if (const auto *temperature = config.option<ConfigOptionInts>("nozzle_temperature"))
-        ap.print_temp = get_value_at(config, *temperature, ConfigFlowDomain::Filament, ap.extrude_ids.front() - 1);
-    if (const auto *initial_temperature = config.option<ConfigOptionInts>("nozzle_temperature_initial_layer"))
-        ap.first_print_temp = get_value_at(config, *initial_temperature, ConfigFlowDomain::Filament, ap.extrude_ids.front() - 1);
+    if (config.has("nozzle_temperature")) //get the print temperature
+        ap.print_temp = config.opt_int("nozzle_temperature", ap.extrude_ids.front() - 1);
+    if (config.has("nozzle_temperature_initial_layer")) //get the nozzle_temperature_initial_layer
+        ap.first_print_temp = config.opt_int("nozzle_temperature_initial_layer", ap.extrude_ids.front() - 1);
 
     if (config.has("temperature_vitrification")) {
         ap.vitrify_temp = config.opt_int("temperature_vitrification", ap.extrude_ids.front() - 1);

@@ -3,9 +3,16 @@
 
 #include "I18N.hpp"
 
+#include <cstddef>
+#include "slic3r/GUI/Widgets/Label.hpp"
+#include <memory>
+#include <wx/event.h>
+#include "slic3r/GUI/Widgets/StaticBox.hpp"
 #include <wx/font.h>
 #include <wx/colour.h>
+#include <wx/panel.h>
 #include <wx/settings.h>
+#include <wx/simplebook.h>
 #include <wx/string.h>
 #include <wx/sizer.h>
 #include <wx/stattext.h>
@@ -17,13 +24,13 @@
 #include <wx/dialog.h>
 #include <curl/curl.h>
 #include <wx/webrequest.h>
-#include <wx/hyperlink.h>
 #include "wxExtensions.hpp"
 #include "Widgets/StepCtrl.hpp"
 #include "Widgets/ProgressDialog.hpp"
 #include "Widgets/Button.hpp"
 #include "Widgets/ProgressBar.hpp"
 #include "Widgets/RoundedRectangle.hpp"
+#include "Widgets/HyperLink.hpp"
 #include "Jobs/BindJob.hpp"
 #include "BBLStatusBar.hpp"
 #include "BBLStatusBarBind.hpp"
@@ -56,7 +63,7 @@ private:
 
     Label* m_status_text;
     wxStaticText* m_text_input_title;
-    wxStaticText* m_link_show_ping_code_wiki;
+    HyperLink* m_link_show_ping_code_wiki; // ORCA
     TextInput* m_text_input_single_code[PING_CODE_LENGTH];
     Button* m_button_bind;
     Button* m_button_cancel;
@@ -65,18 +72,10 @@ private:
     wxPanel* request_bind_panel;
     wxPanel* binding_panel;
 
-    wxScrolledWindow* m_sw_bind_failed_info;
-    Label* m_bind_failed_info;
-    Label* m_st_txt_error_code{ nullptr };
-    Label* m_st_txt_error_desc{ nullptr };
-    Label* m_st_txt_extra_info{ nullptr };
-    wxHyperlinkCtrl* m_link_network_state{ nullptr };
     wxString        m_result_info;
     wxString        m_result_extra;
     wxString        m_ping_code_wiki;
-    bool            m_show_error_info_state = true;
 
-    int             m_result_code;
     std::shared_ptr<BBLStatusBarBind> m_status_bar;
 
 public:
@@ -110,11 +109,10 @@ private:
     wxBitmap      m_bitmap_show_error_close;
     wxBitmap      m_bitmap_show_error_open;
     wxScrolledWindow* m_sw_bind_failed_info;
-    Label*          m_bind_failed_info;
     Label*          m_st_txt_error_code{ nullptr };
     Label*          m_st_txt_error_desc{ nullptr };
     Label*          m_st_txt_extra_info{ nullptr };
-    wxHyperlinkCtrl* m_link_network_state{ nullptr };
+    HyperLink*      m_link_network_state{ nullptr };
     wxString        m_result_info;
     wxString        m_result_extra;
     bool            m_show_error_info_state = true;

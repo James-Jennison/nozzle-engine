@@ -17,9 +17,6 @@
     "filament_flow_ratio": [
         "1"
     ],
-    "filament_flow_support": [
-        "standard"
-    ],
     "pellet_flow_coefficient": [
         "0.4157"
     ],
@@ -95,9 +92,6 @@
     "filament_diameter": [
         "1.75"
     ],
-    "filament_is_high_temperature": [
-        "0"
-    ],
     "filament_is_support": [
         "0"
     ],
@@ -134,9 +128,6 @@
     "filament_retract_restart_extra": [
         "nil"
     ],
-    "filament_retract_restart_extra_toolchange": [
-        "nil"
-    ],
     "filament_retract_when_changing_layer": [
         "nil"
     ],
@@ -163,9 +154,6 @@
     ],
     "filament_toolchange_delay": [
         "0"
-    ],
-    "filament_tower_ironing_area": [
-        "4"
     ],
     "filament_type": [
         "TPU"
@@ -196,12 +184,6 @@
     ],
     "idle_temperature": [
         "0"
-    ],
-    "internal_bridge_fan_speed": [
-        "-1"
-    ],
-    "ironing_fan_speed": [
-        "-1"
     ],
     "nozzle_temperature_range_high": [
         "250"
@@ -242,7 +224,6 @@
     "textured_plate_temp_initial_layer": [
         "35"
     ],
-    "version": "0.0.0.0",
     "additional_cooling_fan_speed": [
         "70"
     ],
@@ -411,12 +392,6 @@
     ],
     "filament_z_hop_types": [
         "nil"
-    ],
-    "graphic_effect_plate_temp": [
-        "0"
-    ],
-    "graphic_effect_plate_temp_initial_layer": [
-        "0"
     ],
     "hole_coef_1": [
         "0"

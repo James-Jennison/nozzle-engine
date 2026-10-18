@@ -1,7 +1,8 @@
 {
-    "type": "filament",
-    "from": "system",
-    "instantiation": "false",
-    "name": "Generic PC @U1 base",
-    "inherits": "fdm_filament_pc_category"
+	"type": "filament",
+	"from": "system",
+	"instantiation": "false",
+	"name": "Generic PC @U1 base",
+	"inherits": "fdm_filament_pc_category",
+	"filament_id": "Pe6e496c"
 }

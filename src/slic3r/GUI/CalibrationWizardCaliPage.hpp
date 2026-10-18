@@ -3,6 +3,12 @@
 
 #include "CalibrationWizardPage.hpp"
 #include "StatusPanel.hpp"
+#include "libslic3r/calib.hpp"
+#include <wx/event.h>
+#include <wx/gdicmn.h>
+#include "slic3r/GUI/DeviceManager.hpp"
+#include <wx/sizer.h>
+#include "slic3r/GUI/ReleaseNote.hpp"
 
 namespace Slic3r { namespace GUI {
 
@@ -45,6 +51,7 @@ protected:
     PrintingTaskPanel*  m_printing_panel { nullptr };
     CaliPagePicture*    m_picture_panel;
     SecondaryCheckDialog* abort_dlg { nullptr };
+    int                 m_cur_extruder_id{0};
 };
 
 }} // namespace Slic3r::GUI

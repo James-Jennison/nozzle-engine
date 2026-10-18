@@ -1,18 +1,39 @@
 #include "EmbossStyleManager.hpp"
+#include <imgui.h>
+#include <functional>
+#include "libslic3r/TextConfiguration.hpp"
+#include <cstddef>
+#include <boost/assign/list_of.hpp>
+#include <cassert>
+#include <limits>
+#include <memory>
+#include "libslic3r/Emboss.hpp"
+#include "libslic3r/Point.hpp"
+#include <cstdint>
+#include <cstdlib>
+#include <map>
+#include <cmath>
+#include "libslic3r/EmbossShape.hpp"
 #include <optional>
-#include <GL/glew.h> // Imgui texture
+#include <glad/gl.h> // Imgui texture
 #include <imgui/imgui_internal.h> // ImTextCharFromUtf8
 #include <libslic3r/AppConfig.hpp>
 #include <libslic3r/Utils.hpp> // ScopeGuard
 
 #include "WxFontUtils.hpp"
-#include "stb_dxt/stb_dxt.h"
 #include "slic3r/GUI/3DScene.hpp" // ::glsafe
 #include "slic3r/GUI/Jobs/CreateFontStyleImagesJob.hpp"
 #include "slic3r/GUI/ImGuiWrapper.hpp" // check of font ranges
 
 #include <boost/assign.hpp>
 #include <boost/bimap.hpp>
+#include <string>
+#include <string_view>
+#include <utility>
+#include "slic3r/GUI/GUI_Utils.hpp"
+#include "slic3r/GUI/Jobs/Worker.hpp"
+#include <vector>
+#include "slic3r/GUI/OpenGLManager.hpp"
 
 using namespace Slic3r;
 using namespace Slic3r::Emboss;
@@ -344,7 +365,6 @@ void StyleManager::init_trunc_names(float max_width) {
 #include "slic3r/GUI/Plater.hpp" 
 
 // for get DPI
-#include "slic3r/GUI/GUI_App.hpp"
 #include "slic3r/GUI/MainFrame.hpp"
 #include "slic3r/GUI/Gizmos/GizmoObjectManipulation.hpp"
 
@@ -402,7 +422,7 @@ void StyleManager::init_style_images(const Vec2i32 &max_size,
     auto mf = wxGetApp().mainframe;
     // dot per inch for monitor
     int dpi = get_dpi_for_window(mf);
-    // pixel per milimeter
+    // pixel per millimeter
     double ppm = dpi / GizmoObjectManipulation::in_to_mm;
 
     auto &worker = wxGetApp().plater()->get_ui_job_worker();
@@ -496,18 +516,9 @@ ImFont *StyleManager::create_imgui_font(const std::string &text, double scale)
     glsafe(::glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR));
     glsafe(::glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR));
     glsafe(::glPixelStorei(GL_UNPACK_ROW_LENGTH, 0));
-    if (OpenGLManager::are_compressed_textures_supported()) {
-        constexpr size_t kDxt5BlockPixels = 4u;
-        constexpr size_t kDxt5BlockBytes  = 16u;
-        size_t dxt5_blocks = ((static_cast<size_t>(width)  + kDxt5BlockPixels - 1u) / kDxt5BlockPixels)
-                           * ((static_cast<size_t>(height) + kDxt5BlockPixels - 1u) / kDxt5BlockPixels);
-        std::vector<unsigned char> compressed(dxt5_blocks * kDxt5BlockBytes, 0);
-        int compressed_size = 0;
-        rygCompress(compressed.data(), pixels, width, height, 1, compressed_size);
-        compressed.resize(compressed_size);
-        glsafe(::glCompressedTexImage2D(GL_TEXTURE_2D, 0, GL_COMPRESSED_RGBA_S3TC_DXT5_EXT,
-            width, height, 0, compressed_size, compressed.data()));
-    } else
+    if (OpenGLManager::are_compressed_textures_supported())
+        glsafe(::glTexImage2D(GL_TEXTURE_2D, 0, GL_COMPRESSED_RGBA_S3TC_DXT5_EXT, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels));
+    else
         glsafe(::glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels));
 
     // Store our identifier
@@ -542,14 +553,11 @@ bool StyleManager::set_wx_font(const wxFont &wx_font, std::unique_ptr<FontFile> 
     return true;
 }
 
-#include <libslic3r/AppConfig.hpp>
-#include "WxFontUtils.hpp"
 #include "fast_float/fast_float.h"
 
 // StylesSerializable
 namespace {
 
-using namespace Slic3r;
 using namespace Slic3r::GUI;
 using Section = std::map<std::string,std::string>;
 

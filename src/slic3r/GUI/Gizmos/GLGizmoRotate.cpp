@@ -3,13 +3,44 @@
 #include "slic3r/GUI/ImGuiWrapper.hpp"
 
 #include "slic3r/GUI/GUI_App.hpp"
-#include "slic3r/GUI/GUI.hpp"
+#include "slic3r/GUI/Shortcuts.hpp"
 #include "slic3r/GUI/Plater.hpp"
 #include "slic3r/GUI/Jobs/RotoptimizeJob.hpp"
 
 #include "libslic3r/PresetBundle.hpp"
 
-#include <GL/glew.h>
+#include <cstdlib>
+#include <cmath>
+#include <algorithm>
+#include <array>
+#include <cassert>
+#include <cstddef>
+#include <glad/gl.h>
+#include "libslic3r/libslic3r.h"
+#include "slic3r/GUI/Gizmos/GLGizmoBase.hpp"
+#include "libslic3r/Geometry.hpp"
+#include "libslic3r/Point.hpp"
+#include "slic3r/GUI/OpenGLManager.hpp"
+#include "slic3r/GUI/GLShader.hpp"
+#include "slic3r/GUI/GUI_Geometry.hpp"
+#include <utility>
+#include <string>
+#include "libslic3r/Line.hpp"
+#include "slic3r/GUI/3DScene.hpp"
+#include <math.h>
+#include <imgui.h>
+#include "slic3r/GUI/Jobs/Worker.hpp"
+#include <memory>
+#include "libslic3r/AppConfig.hpp"
+#include "libslic3r/Color.hpp"
+#include "libslic3r/Config.hpp"
+#include "libslic3r/Preset.hpp"
+#include "libslic3r/PrintConfig.hpp"
+#include "slic3r/GUI/Camera.hpp"
+#include "slic3r/GUI/GLModel.hpp"
+#include "slic3r/GUI/Gizmos/GizmoObjectManipulation.hpp"
+#include "slic3r/GUI/I18N.hpp"
+#include "slic3r/GUI/Selection.hpp"
 
 namespace Slic3r {
 namespace GUI {
@@ -149,8 +180,16 @@ void GLGizmoRotate::on_render()
 
     m_grabbers.front().matrix = local_transform(selection);
 
-    glsafe(::glLineWidth((m_hover_id != -1) ? 2.0f : 1.5f));
-    GLShaderProgram* shader = wxGetApp().get_shader("flat");
+#if !SLIC3R_OPENGL_ES
+    if (!OpenGLManager::get_gl_info().is_core_profile())
+        glsafe(::glLineWidth((m_hover_id != -1) ? 2.0f : 1.5f));
+#endif // !SLIC3R_OPENGL_ES
+
+#if SLIC3R_OPENGL_ES
+    GLShaderProgram* shader = wxGetApp().get_shader("dashed_lines");
+#else
+    GLShaderProgram* shader = OpenGLManager::get_gl_info().is_core_profile() ? wxGetApp().get_shader("dashed_thick_lines") : wxGetApp().get_shader("flat");
+#endif // SLIC3R_OPENGL_ES
     if (shader != nullptr) {
         shader->start_using();
 
@@ -158,6 +197,16 @@ void GLGizmoRotate::on_render()
         const Transform3d view_model_matrix = camera.get_view_matrix() * m_grabbers.front().matrix;
         shader->set_uniform("view_model_matrix", view_model_matrix);
         shader->set_uniform("projection_matrix", camera.get_projection_matrix());
+#if !SLIC3R_OPENGL_ES
+        if (OpenGLManager::get_gl_info().is_core_profile()) {
+#endif // !SLIC3R_OPENGL_ES
+            const std::array<int, 4>& viewport = camera.get_viewport();
+            shader->set_uniform("viewport_size", Vec2d(double(viewport[2]), double(viewport[3])));
+            shader->set_uniform("width", 0.25f);
+            shader->set_uniform("gap_size", 0.0f);
+#if !SLIC3R_OPENGL_ES
+        }
+#endif // !SLIC3R_OPENGL_ES
 
         const bool radius_changed = std::abs(m_old_radius - m_radius) > EPSILON;
         m_old_radius = m_radius;
@@ -537,7 +586,7 @@ bool GLGizmoRotate3D::on_init()
     for (unsigned int i = 0; i < 3; ++i)
         m_gizmos[i].set_highlight_color(AXES_COLOR[i]);
 
-    m_shortcut_key = WXK_CONTROL_R;
+    m_shortcut = Shortcut::GizmoRotate;
 
     return true;
 }
@@ -691,7 +740,7 @@ GLGizmoRotate3D::RotoptimzeWindow::RotoptimzeWindow(ImGuiWrapper *   imgui,
                 wxGetApp().app_config->set("sla_auto_rotate",
                                            "method_id",
                                            std::to_string(state.method_id));
-#endif SUPPORT_SLA_AUTO_ROTATE
+#endif // SUPPORT_SLA_AUTO_ROTATE
             }
 
             if (ImGui::IsItemHovered())

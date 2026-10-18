@@ -2,16 +2,25 @@
 #define slic3r_PresetComboBoxes_hpp_
 
 //#include <wx/bmpcbox.h>
-#include <wx/colourdata.h>
+#include <cstddef>
+#include "libslic3r/Config.hpp"
+#include <functional>
+#include <string>
+#include <wx/colour.h>
+#include <vector>
+#include "libslic3r/PrintConfig.hpp"
+#include <map>
+#include <utility>
+#include <wx/event.h>
 #include <wx/gdicmn.h>
 #include <wx/clrpicker.h>
 
-#include "libslic3r/FilamentColorLibrary.hpp"
 #include "libslic3r/Preset.hpp"
 #include "wxExtensions.hpp"
 #include "BitmapComboBox.hpp"
 #include "Widgets/ComboBox.hpp"
 #include "GUI_Utils.hpp"
+#include "EncodedFilament.hpp"
 
 class wxString;
 class wxTextCtrl;
@@ -39,7 +48,7 @@ public:
     PresetComboBox(wxWindow* parent, Preset::Type preset_type, const wxSize& size = wxDefaultSize, PresetBundle* preset_bundle = nullptr);
     ~PresetComboBox();
 
-	enum LabelItemType {
+	enum LabelItemType : std::size_t {
 		LABEL_ITEM_PHYSICAL_PRINTER = 0xffffff01,
         LABEL_ITEM_PRINTER_MODELS,
 		LABEL_ITEM_DISABLED,
@@ -53,6 +62,11 @@ public:
         LABEL_ITEM_MAX,
 	};
 
+    enum FilamentAMSType :unsigned int {
+        ORIGINAL ,
+        FROM_AMS,
+    };
+
     void set_label_marker(int item, LabelItemType label_item_type = LABEL_ITEM_MARKER);
     bool set_printer_technology(PrinterTechnology pt);
 
@@ -62,7 +76,7 @@ public:
 
     bool is_selected_printer_model();
 
-    // Return true, if physical printer was selected 
+    // Return true, if physical printer was selected
     // and next internal selection was accomplished
     bool selection_is_changed_according_to_physical_printers();
 
@@ -70,19 +84,28 @@ public:
     // select preset which is selected in PreseBundle
     void update_from_bundle();
 
+    // BBS: printer
+    void add_connected_printers(std::string selected, bool alias_name = false);
+    int  selected_connected_printer() const;
+
     // BBS: ams
-    void add_ams_filaments(std::string selected, bool alias_name = false);
+    bool add_ams_filaments(std::string selected, bool alias_name = false);
     int  selected_ams_filament() const;
-    
+
     void set_filament_idx(const int extr_idx) { m_filament_idx = extr_idx; }
     int  get_filament_idx() const { return m_filament_idx; }
+
+    std::string get_selected_dev_id() const { return m_selected_dev_id; }
+    void clear_selected_dev_id() { m_selected_dev_id.clear(); }
 
     // BBS
     wxString get_tooltip(const Preset& preset);
 
+    wxString get_preset_item_name(unsigned int index);
+
     static wxColor different_color(wxColor const & color);
 
-    virtual wxString get_preset_name(const Preset& preset); 
+    virtual wxString get_preset_name(const Preset& preset);
     Preset::Type     get_type() { return m_type; }
     void             show_all(bool show_all);
     virtual void update();
@@ -110,7 +133,6 @@ protected:
 
     int m_last_selected;
     int m_em_unit;
-    bool m_suppress_change { true };
 
     // BBS: ams
     int  m_filament_idx       = -1;
@@ -126,6 +148,12 @@ protected:
     int thin_space_icon_width;
     int wide_space_icon_width;
 
+    // BBS: printer
+    int m_first_printer_idx = 0;
+    int m_last_printer_idx  = 0;
+
+    std::string              m_selected_dev_id;
+
     PrinterTechnology printer_technology {ptAny};
 
     void invalidate_selection();
@@ -136,15 +164,15 @@ protected:
     int  update_ams_color();
 
 #ifdef __linux__
-    static const char* separator_head() { return "------- "; }
-    static const char* separator_tail() { return " -------"; }
-#else // __linux__ 
-    static const char* separator_head() { return "------ "; }
-    static const char* separator_tail() { return " ------"; }
+    static const char* separator_head() { return "-- "; }
+    static const char* separator_tail() { return " --"; }
+#else // __linux__
+    static const char* separator_head() { return "--"; }
+    static const char* separator_tail() { return " --"; }
 #endif // __linux__
     static wxString    separator(const std::string& label);
 
-    wxBitmap* get_bmp(  std::string bitmap_key, bool wide_icons, const std::string& main_icon_name, 
+    wxBitmap* get_bmp(  std::string bitmap_key, bool wide_icons, const std::string& main_icon_name,
                         bool is_compatible = true, bool is_system = false, bool is_single_bar = false,
                         const std::string& filament_rgb = "", const std::string& extruder_rgb = "", const std::string& material_rgb = "");
 
@@ -172,12 +200,11 @@ public:
 
     // BBS
     wxButton* clr_picker { nullptr };
-    wxColourData m_clrData;
 
     wxColor get_color() { return m_color; }
 
     bool switch_to_tab();
-    void ChangeExtruderColor();
+    void change_extruder_color();
     void show_add_menu();
     void show_edit_menu();
 
@@ -185,77 +212,18 @@ public:
     void update() override;
     void msw_rescale() override;
     void OnSelect(wxCommandEvent& evt) override;
+    void update_badge_according_flag();
+    void set_sync_badge(bool show);
 
-    // 设置按钮显示状态（用于打印机类型的combobox）
-    void set_show_connection_button(bool show);
-    void set_show_machine_connecting_button(bool show);
-    void set_show_edit_button(bool show);
-    
-    bool get_show_connection_button() const { return m_show_connection_button; }
-    bool get_show_machine_connecting_button() const { return m_show_machine_connecting_button; }
-    bool get_show_edit_button() const { return m_show_edit_button; }
-    
-    // 绑定按钮点击事件
-    void bind_connection_button_handler(std::function<void()> handler);
-    void bind_machine_connecting_button_handler(std::function<void()> handler);
-    void bind_edit_button_handler(std::function<void()> handler);
-    
-    // 设置按钮tooltip
-    void set_connection_tooltip(const wxString& tooltip);
-    void set_machine_connecting_tooltip(const wxString& tooltip);
-
-protected:
-    void paintEvent(wxPaintEvent& evt);
-    void render(wxDC& dc);
-    void onMouseLeftDown(wxMouseEvent& evt);
-    void onMouseLeftUp(wxMouseEvent& evt);
-    void onMouseEnter(wxMouseEvent& evt);
-    void onMouseLeave(wxMouseEvent& evt);
-    void onMouseMove(wxMouseEvent& evt);
+    FilamentColor get_cur_color_info();
+    void show_default_color_picker();
+    void sync_colour_config(const std::vector<std::string> &clrs, bool is_gradient);
+    void sys_color_changed() override;
 
 private:
     // BBS
     wxColor m_color;
-    
-    // 按钮显示标志（仅用于打印机类型）
-    bool m_show_connection_button { false };
-    bool m_show_machine_connecting_button { false };
-    bool m_show_edit_button { false };
-    
-    // 按钮图标
-    ScalableBitmap m_connection_icon;
-    ScalableBitmap m_machine_connecting_icon;
-    ScalableBitmap m_edit_icon;
-    
-    // 鼠标悬停状态
-    enum class HoverState {
-        NONE,
-        CONNECTION_BTN,
-        MACHINE_CONNECTING_BTN,
-        EDIT_BTN,
-        DROPDOWN
-    };
-    HoverState m_hover_state { HoverState::NONE };
-    
-    // 事件处理函数
-    std::function<void()> m_connection_btn_handler;
-    std::function<void()> m_machine_connecting_btn_handler;
-    std::function<void()> m_edit_btn_handler;
-    
-    // Tooltip相关
-    wxString m_connection_tooltip;
-    wxString m_machine_connecting_tooltip;
-    
-    // 计算各个区域的矩形
-    wxRect get_connection_btn_rect() const;
-    wxRect get_machine_connecting_btn_rect() const;
-    wxRect get_edit_btn_rect() const;
-    wxRect get_dropdown_rect() const;
-
-    void SelectLegacyFilamentColor();
-    void ApplyFilamentColor(const FilamentColor& colorData);
-    std::string CurrentFilamentPresetName() const;
-    std::string CurrentFilamentId() const;
+    bool    m_sync_badge{false};
 };
 
 

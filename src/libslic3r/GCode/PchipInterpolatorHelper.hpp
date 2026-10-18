@@ -1,5 +1,5 @@
 // PchipInterpolatorHelper.hpp
-// Snapmaker_Orca
+// OrcaSlicer
 //
 // Header file for the PchipInterpolatorHelper class, responsible for performing Piecewise Cubic Hermite Interpolating Polynomial (PCHIP) interpolation on given data points.
 

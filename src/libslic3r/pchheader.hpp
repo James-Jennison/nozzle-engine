@@ -110,8 +110,6 @@
 #include <cereal/access.hpp>
 #include <cereal/types/base_class.hpp>
 
-#include <clipper/clipper_z.hpp>
-#include "clipper.hpp"
 #include "BoundingBox.hpp"
 #include "ClipperUtils.hpp"
 #include "Config.hpp"
@@ -125,7 +123,7 @@
 #include "SVG.hpp"
 
 #include "libslic3r.h"
-#include "common_func/common_func.hpp"
+#include "libslic3r_version.h"
 
 #include <Shiny/Shiny.h>
 

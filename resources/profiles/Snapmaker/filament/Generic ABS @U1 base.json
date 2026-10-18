@@ -1,7 +1,8 @@
 {
-    "type": "filament",
-    "from": "system",
-    "instantiation": "false",
-    "name": "Generic ABS @U1 base",
-    "inherits": "fdm_filament_abs_category"
+	"type": "filament",
+	"from": "system",
+	"instantiation": "false",
+	"name": "Generic ABS @U1 base",
+	"inherits": "fdm_filament_abs_category",
+	"filament_id": "Pd2d057d"
 }

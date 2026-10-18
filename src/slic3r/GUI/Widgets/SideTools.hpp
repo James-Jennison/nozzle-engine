@@ -1,12 +1,18 @@
 #ifndef slic3r_GUI_SIDETOOLS_hpp_
 #define slic3r_GUI_SIDETOOLS_hpp_
 
+#include <string>
+#include <wx/dc.h>
 #include <wx/dcgraph.h>
+#include <wx/event.h>
 #include <wx/gdicmn.h>
 #include <wx/dcclient.h>
-#include <wx/hyperlink.h>
+#include <wx/panel.h>
+#include <wx/string.h>
+#include <wx/timer.h>
 #include "Button.hpp"
 #include "Label.hpp"
+#include "HyperLink.hpp" // ORCA
 #include "../GUI/Tabbook.hpp"
 #include "../DeviceManager.hpp"
 #include "../wxExtensions.hpp"
@@ -99,13 +105,13 @@ public:
 private:
     SideToolsPanel* m_side_tools{ nullptr };
     Tabbook*        m_tabpanel{ nullptr };
-    wxHyperlinkCtrl* m_link_network_state{ nullptr };
+    HyperLink* m_link_network_state{ nullptr }; // ORCA
     Label* m_st_txt_error_code{ nullptr };
     Label* m_st_txt_error_desc{ nullptr };
     Label* m_st_txt_extra_info{ nullptr };
     wxWindow* m_side_error_panel{ nullptr };
     Button* m_connection_info{ nullptr };
-    wxHyperlinkCtrl* m_hyperlink{ nullptr };
+    HyperLink* m_hyperlink{ nullptr }; // ORCA
     ScalableButton* m_more_button{ nullptr };
     ScalableBitmap      m_more_err_open;
     ScalableBitmap      m_more_err_close;

@@ -1,7 +1,8 @@
 {
-    "type": "filament",
-    "from": "system",
-    "instantiation": "false",
-    "name": "Generic PLA-CF @U1 base",
-    "inherits": "fdm_filament_pla_cf_category"
+	"type": "filament",
+	"from": "system",
+	"instantiation": "false",
+	"name": "Generic PLA-CF @U1 base",
+	"inherits": "fdm_filament_pla_cf_category",
+	"filament_id": "Pfd73837"
 }

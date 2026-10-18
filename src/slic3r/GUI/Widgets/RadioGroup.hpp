@@ -3,6 +3,11 @@
 
 #include "../wxExtensions.hpp"
 
+#include <wx/anybutton.h>
+#include <wx/panel.h>
+#include <wx/string.h>
+#include <wx/checklst.h>
+#include "slic3r/GUI/Widgets/StateColor.hpp"
 #include <wx/wx.h>
 #include <wx/dcclient.h>
 #include <wx/dcgraph.h>
@@ -48,12 +53,8 @@ public:
 
     void SetRadioTooltip(int i, wxString tooltip);
 
-    /** Enable or disable a single item. By default all items are enabled. */
-    void SetItemEnabled(int index, bool enable);
-
 private:
     std::vector<wxString>        m_labels;
-    std::vector<bool>            m_item_enabled;
     std::vector<wxStaticBitmap*> m_radioButtons;
     std::vector<Button*>         m_labelButtons;
 

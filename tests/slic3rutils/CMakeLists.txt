@@ -1,42 +1,125 @@
-# slic3rutils tests require libslic3r_gui (contains Http.cpp).
-# Skip entirely when GUI is disabled.
-if (NOT SLIC3R_GUI)
-    return()
-endif()
-
 get_filename_component(_TEST_NAME ${CMAKE_CURRENT_LIST_DIR} NAME)
 add_executable(${_TEST_NAME}_tests
     ${_TEST_NAME}_tests_main.cpp
-    SnapLogClient_test.cpp
+    test_bambu_filament_ids.cpp
+    test_config_value_formatter.cpp
+    test_creality_cfs_match.cpp
+    test_dev_mapping.cpp
+    test_device_access.cpp
+    test_moonraker_discovery.cpp
+    test_network_discovery.cpp
+    test_filament_bitmap_utils.cpp
+    test_colour_picker_field.cpp
+    test_filament_color_picker.cpp
+    test_device_progress.cpp
+    test_device_manager_integration.cpp
+    test_web_media_controller.cpp
+    test_scene_raycaster.cpp
+    test_scene_benchmark.cpp
+    test_lazy.cpp
+    test_prebuild_queue.cpp
+    test_staged_build.cpp
+    test_network_versions.cpp
+    test_orca_cloud_agent.cpp
+    test_action_source.cpp
+    test_plugin_host_api.cpp
+    # Exercise seam enums and predicates through the embedded Python host API.
+    test_precise_seam_plugin.cpp
+    test_plugin_capability_config.cpp
+    test_plugin_config.cpp
+    test_plugin_capabilities_in_use.cpp
+    test_plugin_status.cpp
+    test_printer_agent.cpp
+    test_plugin_install.cpp
+    test_plugin_lifecycle.cpp
+    test_plugin_resource_texture.cpp
+    test_plugin_printer_agent.cpp
+    test_printhost.cpp
+    test_slicing_pipeline_bindings.cpp
+    test_slicing_pipeline_config.cpp
+    test_plugin_sort.cpp
+    test_plugin_cloud_metadata.cpp
+    test_plugin_audit.cpp
+    test_plugin_json_depth.cpp
+    test_shortcuts.cpp
+    test_texture_color_palette.cpp
+    test_texture_island_view.cpp
+    test_file_url.cpp
+    test_imgui_wrapper.cpp
+    test_user_manager.cpp
+    test_sequential_clearance.cpp
+    ../fff_print/test_helpers.cpp
     )
 
-find_package(JPEG REQUIRED)
-find_package(PNG REQUIRED)
-find_package(ZLIB REQUIRED)
-find_package(libnoise REQUIRED)
-find_package(Qhull 7.2 QUIET)
-if(UNIX AND NOT APPLE)
-    target_link_options(${_TEST_NAME}_tests PRIVATE "-Wl,--no-as-needed")
-endif()
-if(TARGET libslic3r_gui)
-    target_link_libraries(${_TEST_NAME}_tests PRIVATE libslic3r_gui ${TEST_LINK_LIBS})
-else()
-    target_link_libraries(${_TEST_NAME}_tests PRIVATE ${TEST_LINK_LIBS})
-endif()
-if (MSVC)
-    target_link_libraries(${_TEST_NAME}_tests PRIVATE Setupapi.lib)
+if (SLIC3R_CAD)
+    target_sources(${_TEST_NAME}_tests PRIVATE test_design_sketch_tool.cpp)
 endif ()
+
+if (MSVC)
+    target_link_libraries(${_TEST_NAME}_tests Setupapi.lib)
+endif ()
+
+target_link_libraries(${_TEST_NAME}_tests test_common libslic3r_gui libslic3r pybind11::embed Catch2::Catch2WithMain)
 set_property(TARGET ${_TEST_NAME}_tests PROPERTY FOLDER "tests")
 
+orcaslicer_copy_test_dlls(${_TEST_NAME}_tests)
+
 if (WIN32)
-    if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
-        Snapmaker_Orca_copy_dlls(COPY_DLLS "Debug" "d" output_dlls_Debug)
-    elseif("${CMAKE_BUILD_TYPE}" STREQUAL "RelWithDebInfo")
-        Snapmaker_Orca_copy_dlls(COPY_DLLS "RelWithDebInfo" "" output_dlls_Release)
-    else()
-        Snapmaker_Orca_copy_dlls(COPY_DLLS "Release" "" output_dlls_Release)
-    endif()
+    add_custom_command(TARGET ${_TEST_NAME}_tests POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${_TEST_NAME}_tests>/python"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_PREFIX_PATH}/libpython" "$<TARGET_FILE_DIR:${_TEST_NAME}_tests>/python"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_PREFIX_PATH}/libpython/python${_bundled_python_abi}.dll"
+            "${CMAKE_PREFIX_PATH}/libpython/vcruntime140.dll"
+            "${CMAKE_PREFIX_PATH}/libpython/vcruntime140_1.dll"
+            "$<TARGET_FILE_DIR:${_TEST_NAME}_tests>"
+        COMMENT "Copying Python runtime for slic3rutils plugin host API tests"
+        VERBATIM
+    )
+elseif (NOT FLATPAK)
+    # The CI unit-test runner only receives the build/tests tree, so both the
+    # interpreter and the libpython the test binary links have to travel next to
+    # the executable; find_bundled_python_home() picks the copy up from there.
+    if (APPLE)
+        target_link_options(${_TEST_NAME}_tests PRIVATE
+            "LINKER:-rpath,@executable_path/python/lib")
+    else ()
+        set_property(TARGET ${_TEST_NAME}_tests APPEND PROPERTY BUILD_RPATH "$ORIGIN/python/lib")
+    endif ()
+
+    add_custom_command(TARGET ${_TEST_NAME}_tests POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E rm -rf
+            "$<TARGET_FILE_DIR:${_TEST_NAME}_tests>/python"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_PREFIX_PATH}/libpython"
+            "$<TARGET_FILE_DIR:${_TEST_NAME}_tests>/python"
+        COMMENT "Copying Python runtime for the plugin host API tests"
+        VERBATIM
+    )
+elseif (FLATPAK)
+    # Same <testdir>/python home as WIN32/APPLE; symlink since /app/libpython
+    # already ships in the flatpak (the test exe links libpython3.12.so from it).
+    add_custom_command(TARGET ${_TEST_NAME}_tests POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E rm -rf
+            "$<TARGET_FILE_DIR:${_TEST_NAME}_tests>/python"
+        COMMAND ${CMAKE_COMMAND} -E create_symlink
+            "${CMAKE_PREFIX_PATH}/libpython"
+            "$<TARGET_FILE_DIR:${_TEST_NAME}_tests>/python"
+        COMMENT "Linking Python runtime for flatpak plugin host API tests"
+        VERBATIM
+    )
 endif()
 
-catch_discover_tests(${_TEST_NAME}_tests TEST_PREFIX "${_TEST_NAME}: " EXTRA_ARGS ${CATCH_EXTRA_ARGS})
-# add_test(${_TEST_NAME}_tests ${_TEST_NAME}_tests "${CATCH_EXTRA_ARGS} exclude:[NotWorking]")
+# scripts/run_unit_tests.sh installs the tests' numpy into that runtime with this uv,
+# staged where the app build tree keeps it (<exe dir>/tools/uv, see src/CMakeLists.txt).
+if (ORCA_BUNDLED_UV_EXECUTABLE)
+    add_custom_command(TARGET ${_TEST_NAME}_tests POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${_TEST_NAME}_tests>/tools/uv"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${ORCA_BUNDLED_UV_EXECUTABLE}"
+            "$<TARGET_FILE_DIR:${_TEST_NAME}_tests>/tools/uv/${ORCA_BUNDLED_UV_FILENAME}"
+        COMMENT "Copying uv for the plugin host API tests"
+        VERBATIM
+    )
+endif()
+
+orcaslicer_discover_tests(${_TEST_NAME}_tests)

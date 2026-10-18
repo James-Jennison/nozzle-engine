@@ -9,6 +9,21 @@
 #include "CalibrationWizardPresetPage.hpp"
 #include "CalibrationWizardCaliPage.hpp"
 #include "CalibrationWizardSavePage.hpp"
+#include "StagedBuild.hpp"
+#include <wx/panel.h>
+#include "libslic3r/calib.hpp"
+#include <wx/string.h>
+#include <wx/gdicmn.h>
+#include <wx/event.h>
+#include <string>
+#include <map>
+#include "libslic3r/Config.hpp"
+#include "libslic3r/PrintConfig.hpp"
+#include <functional>
+#include <wx/scrolwin.h>
+#include <wx/sizer.h>
+#include <vector>
+#include "slic3r/GUI/ReleaseNote.hpp"
 
 namespace Slic3r { namespace GUI {
 
@@ -30,7 +45,13 @@ public:
     }
 };
 
-class CalibrationWizard : public wxPanel {
+struct ConfigIndexValue
+{
+    float value{0};
+    int   index{0};
+};
+
+class CalibrationWizard : public wxPanel, public StagedBuild {
 public:
     CalibrationWizard(wxWindow* parent, CalibMode mode,
         wxWindowID id = wxID_ANY,
@@ -61,8 +82,9 @@ public:
     CalibMode get_calibration_mode() { return m_mode; }
 
     bool save_preset(const std::string &old_preset_name, const std::string &new_preset_name, const std::map<std::string, ConfigOption *> &key_values, wxString& message);
+    bool save_preset_with_index(const std::string &old_preset_name, const std::string &new_preset_name, const std::map<std::string, ConfigIndexValue> &key_values, wxString &message);
 
-    virtual void cache_preset_info(MachineObject* obj, float nozzle_dia);
+    virtual void cache_preset_info(MachineObject *obj, float nozzle_dia, BedType bed_type);
     virtual void recover_preset_info(MachineObject *obj);
     virtual void back_preset_info(MachineObject *obj, bool cali_finish, bool back_cali_flag = true);
 
@@ -71,7 +93,9 @@ public:
 
 protected:
     void on_cali_go_home();
-    void get_tray_ams_and_slot_id(int in_tray_id, int &ams_id, int &slot_id, int &tray_id);
+
+    // Queues a page as a build step, created hidden and added to the pages sizer.
+    void add_page_step(CalibrationWizardPageStep*& step, std::function<CalibrationWizardPage*()> make);
 
 protected:
     /* wx widgets*/
@@ -122,6 +146,8 @@ protected:
 
     void on_device_connected(MachineObject* obj) override;
 
+    bool can_save_cali_result(const std::vector<PACalibResult> &new_pa_cali_results);
+
     bool                       m_show_result_dialog = false;
     std::vector<PACalibResult> m_calib_results_history;
     int                        cali_version = -1;
@@ -150,6 +176,8 @@ protected:
     void update(MachineObject* obj) override;
 
     void on_device_connected(MachineObject* obj) override;
+
+    std::map<std::string, ConfigIndexValue> generate_index_key_value(MachineObject *obj, const std::string &key, float value);
 };
 
 class MaxVolumetricSpeedWizard : public CalibrationWizard {

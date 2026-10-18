@@ -1,45 +1,74 @@
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers.hpp>
+#include <algorithm>
+#include <catch2/catch_all.hpp>
 
+#include "libslic3r/Polygon.hpp"
+#include "libslic3r/Polyline.hpp"
+#include <cstddef>
+#include "libslic3r/libslic3r.h"
 #include <numeric>
 #include <iostream>
 #include <boost/filesystem.hpp>
+#include <utility>
+#include <vector>
 
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 #include "libslic3r/ClipperUtils.hpp"
 #include "libslic3r/ExPolygon.hpp"
-#include "libslic3r/SVG.hpp"
+#include "libslic3r/Point.hpp"
 
 using namespace Slic3r;
 
+// Clipper may start an output polygon at any of its vertices.
+static Polygon start_at_min(Polygon polygon)
+{
+    std::rotate(polygon.points.begin(), std::min_element(polygon.points.begin(), polygon.points.end()), polygon.points.end());
+    return polygon;
+}
+static Polygons start_at_min(Polygons polygons)
+{
+    for (Polygon &polygon : polygons)
+        polygon = start_at_min(std::move(polygon));
+    return polygons;
+}
+static ExPolygons start_at_min(ExPolygons expolygons)
+{
+    for (ExPolygon &expolygon : expolygons) {
+        expolygon.contour = start_at_min(std::move(expolygon.contour));
+        expolygon.holes   = start_at_min(std::move(expolygon.holes));
+    }
+    return expolygons;
+}
+
 SCENARIO("Various Clipper operations - xs/t/11_clipper.t", "[ClipperUtils]") {
-	// CCW oriented contour
-	Slic3r::Polygon   square{ { 200, 100 }, {200, 200}, {100, 200}, {100, 100} };
-	// CW oriented contour
-	Slic3r::Polygon   hole_in_square{ { 160, 140 }, { 140, 140 }, { 140, 160 }, { 160, 160 } };
-	Slic3r::ExPolygon square_with_hole(square, hole_in_square);
-	GIVEN("square_with_hole") {
+    // CCW oriented contour
+    Slic3r::Polygon   square{ { 200, 100 }, {200, 200}, {100, 200}, {100, 100} };
+    // CW oriented contour
+    Slic3r::Polygon   hole_in_square{ { 160, 140 }, { 140, 140 }, { 140, 160 }, { 160, 160 } };
+    Slic3r::ExPolygon square_with_hole(square, hole_in_square);
+    GIVEN("square_with_hole") {
         WHEN("offset") {
             Polygons result = Slic3r::offset(square_with_hole, 5.f);
             THEN("offset matches") {
-                REQUIRE(result == Polygons { 
+                REQUIRE(start_at_min(result) == start_at_min(Polygons {
                     { { 205, 205 }, { 95, 205 }, { 95, 95 }, { 205, 95 }, },
-                    { { 155, 145 }, { 145, 145 }, { 145, 155 }, { 155, 155 } } });
+                    { { 155, 145 }, { 145, 145 }, { 145, 155 }, { 155, 155 } } }));
             }
         }
         WHEN("offset_ex") {
             ExPolygons result = Slic3r::offset_ex(square_with_hole, 5.f);
             THEN("offset matches") {
-                REQUIRE(result == ExPolygons { { 
+                REQUIRE(start_at_min(result) == start_at_min(ExPolygons { {
                     { { 205, 205 }, { 95, 205 }, { 95, 95 }, { 205, 95 }, },
-                    { { 145, 145 }, { 145, 155 }, { 155, 155 }, { 155, 145 } } } } );
+                    { { 145, 145 }, { 145, 155 }, { 155, 155 }, { 155, 145 } } } }));
             }
         }
         WHEN("offset2_ex") {
             ExPolygons result = Slic3r::offset2_ex({ square_with_hole }, 5.f, -2.f);
             THEN("offset matches") {
-                REQUIRE(result == ExPolygons { {
+                REQUIRE(start_at_min(result) == start_at_min(ExPolygons { {
                     { { 203, 203 }, { 97, 203 }, { 97, 97 }, { 203, 97 } },
-                    { { 143, 143 }, { 143, 157 }, { 157, 157 }, { 157, 143 } } } } );
+                    { { 143, 143 }, { 143, 157 }, { 157, 157 }, { 157, 143 } } } }));
             }
         }
     }
@@ -67,7 +96,7 @@ SCENARIO("Various Clipper operations - xs/t/11_clipper.t", "[ClipperUtils]") {
     GIVEN("polyline") {
         Polyline polyline { { 50, 150 }, { 300, 150 } };
         WHEN("intersection_pl") {
-            Polylines result = Slic3r::intersection_pl(Polylines { polyline }, Polygons { square, hole_in_square });
+            Polylines result = Slic3r::intersection_pl({ polyline }, Polygons{ square, hole_in_square });
             THEN("correct number of result lines") {
                 REQUIRE(result.size() == 2);
             }
@@ -94,82 +123,82 @@ SCENARIO("Various Clipper operations - xs/t/11_clipper.t", "[ClipperUtils]") {
             }
         }
     }
-	GIVEN("Clipper bug #96 / Slic3r issue #2028") {
-		Slic3r::Polyline subject{
-			{ 44735000, 31936670 }, { 55270000, 31936670 }, { 55270000, 25270000 }, { 74730000, 25270000 }, { 74730000, 44730000 }, { 68063296, 44730000 }, { 68063296, 55270000 }, { 74730000, 55270000 },
-			{ 74730000, 74730000 }, { 55270000, 74730000 }, { 55270000, 68063296 }, { 44730000, 68063296 }, { 44730000, 74730000 }, { 25270000, 74730000 }, { 25270000, 55270000 }, { 31936670, 55270000 },
-			{ 31936670, 44730000 }, { 25270000, 44730000 }, { 25270000, 25270000 }, { 44730000, 25270000 }, { 44730000, 31936670 } };
-		Slic3r::Polygon clip { {75200000, 45200000}, {54800000, 45200000}, {54800000, 24800000}, {75200000, 24800000} };
-        Slic3r::Polylines result = Slic3r::intersection_pl(subject, Polygons { clip });
-		THEN("intersection_pl - result is not empty") {
-			REQUIRE(result.size() == 1);
-		}
-	}
-	GIVEN("Clipper bug #122") {
-		Slic3r::Polyline subject { { 1975, 1975 }, { 25, 1975 }, { 25, 25 }, { 1975, 25 }, { 1975, 1975 } };
-		Slic3r::Polygons clip { { { 2025, 2025 }, { -25, 2025 } , { -25, -25 }, { 2025, -25 } },
-								{ { 525, 525 }, { 525, 1475 }, { 1475, 1475 }, { 1475, 525 } } };
-		Slic3r::Polylines result = Slic3r::intersection_pl({ subject }, clip);
-		THEN("intersection_pl - result is not empty") {
-			REQUIRE(result.size() == 1);
-			REQUIRE(result.front().points.size() == 5);
-		}
-	}
-	GIVEN("Clipper bug #126") {
-		Slic3r::Polyline subject { { 200000, 19799999 }, { 200000, 200000 }, { 24304692, 200000 }, { 15102879, 17506106 }, { 13883200, 19799999 }, { 200000, 19799999 } };
-		Slic3r::Polygon clip { { 15257205, 18493894 }, { 14350057, 20200000 }, { -200000, 20200000 }, { -200000, -200000 }, { 25196917, -200000 } };
-        Slic3r::Polylines result = Slic3r::intersection_pl(subject, Polygons { clip });
-		THEN("intersection_pl - result is not empty") {
-			REQUIRE(result.size() == 1);
-		}
-		THEN("intersection_pl - result has same length as subject polyline") {
-			REQUIRE_THAT(result.front().length(), WithinRel(subject.length(), 0.001));
-		}
-	}
+    GIVEN("Clipper bug #96 / Slic3r issue #2028") {
+        Slic3r::Polyline subject{
+            { 44735000, 31936670 }, { 55270000, 31936670 }, { 55270000, 25270000 }, { 74730000, 25270000 }, { 74730000, 44730000 }, { 68063296, 44730000 }, { 68063296, 55270000 }, { 74730000, 55270000 },
+            { 74730000, 74730000 }, { 55270000, 74730000 }, { 55270000, 68063296 }, { 44730000, 68063296 }, { 44730000, 74730000 }, { 25270000, 74730000 }, { 25270000, 55270000 }, { 31936670, 55270000 },
+            { 31936670, 44730000 }, { 25270000, 44730000 }, { 25270000, 25270000 }, { 44730000, 25270000 }, { 44730000, 31936670 } };
+        Slic3r::Polygon clip { {75200000, 45200000}, {54800000, 45200000}, {54800000, 24800000}, {75200000, 24800000} };
+        Slic3r::Polylines result = Slic3r::intersection_pl(subject, Polygons{ clip });
+        THEN("intersection_pl - result is not empty") {
+            REQUIRE(result.size() == 1);
+        }
+    }
+    GIVEN("Clipper bug #122") {
+        Slic3r::Polyline subject { { 1975, 1975 }, { 25, 1975 }, { 25, 25 }, { 1975, 25 }, { 1975, 1975 } };
+        Slic3r::Polygons clip { { { 2025, 2025 }, { -25, 2025 } , { -25, -25 }, { 2025, -25 } },
+                                { { 525, 525 }, { 525, 1475 }, { 1475, 1475 }, { 1475, 525 } } };
+        Slic3r::Polylines result = Slic3r::intersection_pl({ subject }, clip);
+        THEN("intersection_pl - result is not empty") {
+            REQUIRE(result.size() == 1);
+            REQUIRE(result.front().points.size() == 5);
+        }
+    }
+    GIVEN("Clipper bug #126") {
+        Slic3r::Polyline subject { { 200000, 19799999 }, { 200000, 200000 }, { 24304692, 200000 }, { 15102879, 17506106 }, { 13883200, 19799999 }, { 200000, 19799999 } };
+        Slic3r::Polygon clip { { 15257205, 18493894 }, { 14350057, 20200000 }, { -200000, 20200000 }, { -200000, -200000 }, { 25196917, -200000 } };
+        Slic3r::Polylines result = Slic3r::intersection_pl(subject, Polygons{ clip });
+        THEN("intersection_pl - result is not empty") {
+            REQUIRE(result.size() == 1);
+        }
+        THEN("intersection_pl - result has same length as subject polyline") {
+            REQUIRE(result.front().length() == Catch::Approx(subject.length()));
+        }
+    }
 
 #if 0
-	{
-		# Clipper does not preserve polyline orientation
-		my $polyline = Slic3r::Polyline->new([50, 150], [300, 150]);
-		my $result = Slic3r::Geometry::Clipper::intersection_pl([$polyline], [$square]);
-		is scalar(@$result), 1, 'intersection_pl - correct number of result lines';
-		is_deeply $result->[0]->pp, [[100, 150], [200, 150]], 'clipped line orientation is preserved';
-	}
-	{
-		# Clipper does not preserve polyline orientation
-		my $polyline = Slic3r::Polyline->new([300, 150], [50, 150]);
-		my $result = Slic3r::Geometry::Clipper::intersection_pl([$polyline], [$square]);
-		is scalar(@$result), 1, 'intersection_pl - correct number of result lines';
-		is_deeply $result->[0]->pp, [[200, 150], [100, 150]], 'clipped line orientation is preserved';
-	}
-	{
-		# Disabled until Clipper bug #127 is fixed
-		my $subject = [
-			Slic3r::Polyline->new([-90000000, -100000000], [-90000000, 100000000]), # vertical
-				Slic3r::Polyline->new([-100000000, -10000000], [100000000, -10000000]), # horizontal
-				Slic3r::Polyline->new([-100000000, 0], [100000000, 0]), # horizontal
-				Slic3r::Polyline->new([-100000000, 10000000], [100000000, 10000000]), # horizontal
-		];
-		my $clip = Slic3r::Polygon->new(# a circular, convex, polygon
-			[99452190, 10452846], [97814760, 20791169], [95105652, 30901699], [91354546, 40673664], [86602540, 50000000],
-			[80901699, 58778525], [74314483, 66913061], [66913061, 74314483], [58778525, 80901699], [50000000, 86602540],
-			[40673664, 91354546], [30901699, 95105652], [20791169, 97814760], [10452846, 99452190], [0, 100000000],
-			[-10452846, 99452190], [-20791169, 97814760], [-30901699, 95105652], [-40673664, 91354546],
-			[-50000000, 86602540], [-58778525, 80901699], [-66913061, 74314483], [-74314483, 66913061],
-			[-80901699, 58778525], [-86602540, 50000000], [-91354546, 40673664], [-95105652, 30901699],
-			[-97814760, 20791169], [-99452190, 10452846], [-100000000, 0], [-99452190, -10452846],
-			[-97814760, -20791169], [-95105652, -30901699], [-91354546, -40673664], [-86602540, -50000000],
-			[-80901699, -58778525], [-74314483, -66913061], [-66913061, -74314483], [-58778525, -80901699],
-			[-50000000, -86602540], [-40673664, -91354546], [-30901699, -95105652], [-20791169, -97814760],
-			[-10452846, -99452190], [0, -100000000], [10452846, -99452190], [20791169, -97814760],
-			[30901699, -95105652], [40673664, -91354546], [50000000, -86602540], [58778525, -80901699],
-			[66913061, -74314483], [74314483, -66913061], [80901699, -58778525], [86602540, -50000000],
-			[91354546, -40673664], [95105652, -30901699], [97814760, -20791169], [99452190, -10452846], [100000000, 0]
-			);
-		my $result = Slic3r::Geometry::Clipper::intersection_pl($subject, [$clip]);
-		is scalar(@$result), scalar(@$subject), 'intersection_pl - expected number of polylines';
-		is sum(map scalar(@$_), @$result), scalar(@$subject) * 2, 'intersection_pl - expected number of points in polylines';
-	}
+    {
+        # Clipper does not preserve polyline orientation
+        my $polyline = Slic3r::Polyline->new([50, 150], [300, 150]);
+        my $result = Slic3r::Geometry::Clipper::intersection_pl([$polyline], [$square]);
+        is scalar(@$result), 1, 'intersection_pl - correct number of result lines';
+        is_deeply $result->[0]->pp, [[100, 150], [200, 150]], 'clipped line orientation is preserved';
+    }
+    {
+        # Clipper does not preserve polyline orientation
+        my $polyline = Slic3r::Polyline->new([300, 150], [50, 150]);
+        my $result = Slic3r::Geometry::Clipper::intersection_pl([$polyline], [$square]);
+        is scalar(@$result), 1, 'intersection_pl - correct number of result lines';
+        is_deeply $result->[0]->pp, [[200, 150], [100, 150]], 'clipped line orientation is preserved';
+    }
+    {
+        # Disabled until Clipper bug #127 is fixed
+        my $subject = [
+            Slic3r::Polyline->new([-90000000, -100000000], [-90000000, 100000000]), # vertical
+                Slic3r::Polyline->new([-100000000, -10000000], [100000000, -10000000]), # horizontal
+                Slic3r::Polyline->new([-100000000, 0], [100000000, 0]), # horizontal
+                Slic3r::Polyline->new([-100000000, 10000000], [100000000, 10000000]), # horizontal
+        ];
+        my $clip = Slic3r::Polygon->new(# a circular, convex, polygon
+            [99452190, 10452846], [97814760, 20791169], [95105652, 30901699], [91354546, 40673664], [86602540, 50000000],
+            [80901699, 58778525], [74314483, 66913061], [66913061, 74314483], [58778525, 80901699], [50000000, 86602540],
+            [40673664, 91354546], [30901699, 95105652], [20791169, 97814760], [10452846, 99452190], [0, 100000000],
+            [-10452846, 99452190], [-20791169, 97814760], [-30901699, 95105652], [-40673664, 91354546],
+            [-50000000, 86602540], [-58778525, 80901699], [-66913061, 74314483], [-74314483, 66913061],
+            [-80901699, 58778525], [-86602540, 50000000], [-91354546, 40673664], [-95105652, 30901699],
+            [-97814760, 20791169], [-99452190, 10452846], [-100000000, 0], [-99452190, -10452846],
+            [-97814760, -20791169], [-95105652, -30901699], [-91354546, -40673664], [-86602540, -50000000],
+            [-80901699, -58778525], [-74314483, -66913061], [-66913061, -74314483], [-58778525, -80901699],
+            [-50000000, -86602540], [-40673664, -91354546], [-30901699, -95105652], [-20791169, -97814760],
+            [-10452846, -99452190], [0, -100000000], [10452846, -99452190], [20791169, -97814760],
+            [30901699, -95105652], [40673664, -91354546], [50000000, -86602540], [58778525, -80901699],
+            [66913061, -74314483], [74314483, -66913061], [80901699, -58778525], [86602540, -50000000],
+            [91354546, -40673664], [95105652, -30901699], [97814760, -20791169], [99452190, -10452846], [100000000, 0]
+            );
+        my $result = Slic3r::Geometry::Clipper::intersection_pl($subject, [$clip]);
+        is scalar(@$result), scalar(@$subject), 'intersection_pl - expected number of polylines';
+        is sum(map scalar(@$_), @$result), scalar(@$subject) * 2, 'intersection_pl - expected number of points in polylines';
+    }
 #endif
 }
 
@@ -186,7 +215,7 @@ SCENARIO("Various Clipper operations - t/clipper.t", "[ClipperUtils]") {
                 ExPolygon match({ { 20, 18 }, { 10, 18 }, { 10, 12 }, { 20, 12 } },
                                 { { 14, 16 }, { 16, 16 }, { 16, 14 }, { 14, 14 } });
                 REQUIRE(intersection.size() == 1);
-                REQUIRE_THAT(intersection.front().area(), WithinRel(match.area(), 0.001));
+                REQUIRE(intersection.front().area() == Catch::Approx(match.area()));
             }
         }
     }
@@ -204,10 +233,10 @@ SCENARIO("Various Clipper operations - t/clipper.t", "[ClipperUtils]") {
             }
         }
         WHEN("diff_ex with another square") {
-			ExPolygons diff = Slic3r::diff_ex(Polygons{ square, square2 }, Polygons{ hole });
+            ExPolygons diff = Slic3r::diff_ex(Polygons{ square, square2 }, Polygons{ hole });
             THEN("difference of a cw from two ccw is a contour with one hole") {
                 REQUIRE(diff.size() == 1);
-                REQUIRE_THAT(diff.front().area(), WithinRel(ExPolygon({ {40, 40}, {0, 40}, {0, 0}, {40, 0} }, { {15, 25}, {25, 25}, {25, 15}, {15, 15} }).area(), 0.001));
+                REQUIRE(diff.front().area() == Catch::Approx(ExPolygon({ {40, 40}, {0, 40}, {0, 0}, {40, 0} }, { {15, 25}, {25, 25}, {25, 15}, {15, 15} }).area()));
             }
         }
     }
@@ -226,77 +255,48 @@ SCENARIO("Various Clipper operations - t/clipper.t", "[ClipperUtils]") {
     }
 }
 
-template<e_ordering o = e_ordering::OFF, class P, class Tree, class Alloc> 
-double polytree_area(const Tree &tree, std::vector<P, Alloc> *out)
-{
-    traverse_pt<o>(tree, out);
-    
-    return std::accumulate(out->begin(), out->end(), 0.0,
-                           [](double a, const P &p) { return a + p.area(); });
-}
-
-size_t count_polys(const ExPolygons& expolys)
-{
-    size_t c = 0;
-    for (auto &ep : expolys) c += ep.holes.size() + 1;
-    
-    return c;
-}
-
-TEST_CASE("Traversing Clipper PolyTree", "[ClipperUtils]") {
+TEST_CASE("Top level expolygons of an even-odd union", "[ClipperUtils]") {
     // Create a polygon representing unit box
     Polygon unitbox;
     const auto UNIT = coord_t(1. / SCALING_FACTOR);
     unitbox.points = { Vec2crd{0, 0}, Vec2crd{UNIT, 0}, Vec2crd{UNIT, UNIT}, Vec2crd{0, UNIT}};
-    
+
     Polygon box_frame = unitbox;
     box_frame.scale(20, 10);
-    
+
     Polygon hole_left = unitbox;
     hole_left.scale(8);
     hole_left.translate(UNIT, UNIT);
     hole_left.reverse();
-    
+
     Polygon hole_right = hole_left;
     hole_right.translate(UNIT * 10, 0);
-    
+
     Polygon inner_left = unitbox;
     inner_left.scale(4);
     inner_left.translate(UNIT * 3, UNIT * 3);
-    
+
     Polygon inner_right = inner_left;
     inner_right.translate(UNIT * 10, 0);
-    
-    Polygons reference = union_({box_frame, hole_left, hole_right, inner_left, inner_right});
-    
-    ClipperLib::PolyTree tree = union_pt(reference);
+
+    ExPolygons reference;
+    for (const Polygon &polygon : union_({box_frame, hole_left, hole_right, inner_left, inner_right}))
+        reference.emplace_back(polygon);
+
     double area_sum = box_frame.area() + hole_left.area() +
                       hole_right.area() + inner_left.area() +
                       inner_right.area();
-    
+
     REQUIRE(area_sum > 0);
 
-    SECTION("Traverse into Polygons WITHOUT spatial ordering") {
-        Polygons output;
-        REQUIRE_THAT(area_sum, WithinRel(polytree_area(tree.GetFirst(), &output), 0.001));
-        REQUIRE(output.size() == reference.size());
-    }
-    
-    SECTION("Traverse into ExPolygons WITHOUT spatial ordering") {
-        ExPolygons output;
-        REQUIRE_THAT(area_sum, WithinRel(polytree_area(tree.GetFirst(), &output), 0.001));
-        REQUIRE(count_polys(output) == reference.size());
-    }
-    
-    SECTION("Traverse into Polygons WITH spatial ordering") {
-        Polygons output;
-        REQUIRE_THAT(area_sum, WithinRel(polytree_area<e_ordering::ON>(tree.GetFirst(), &output), 0.001));
-        REQUIRE(output.size() == reference.size());
-    }
-    
-    SECTION("Traverse into ExPolygons WITH spatial ordering") {
-        ExPolygons output;
-        REQUIRE_THAT(area_sum, WithinRel(polytree_area<e_ordering::ON>(tree.GetFirst(), &output), 0.001));
-        REQUIRE(count_polys(output) == reference.size());
-    }
+    ExPolygons nested;
+    ExPolygons top_level = top_level_expolygons(reference, &nested);
+    auto area = [](const ExPolygons &expolys) {
+        return std::accumulate(expolys.begin(), expolys.end(), 0.0, [](double a, const ExPolygon &e) { return a + e.area(); });
+    };
+    REQUIRE(top_level.size() == 1);
+    REQUIRE(top_level.front().holes.size() == 2);
+    REQUIRE(nested.size() == 2);
+    REQUIRE(area_sum == Catch::Approx(area(top_level) + area(nested)));
+    REQUIRE(top_level_expolygons(reference).size() == 1);
 }

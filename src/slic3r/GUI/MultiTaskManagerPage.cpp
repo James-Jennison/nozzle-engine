@@ -4,8 +4,47 @@
 #include "GUI_App.hpp"
 #include "MainFrame.hpp"
 #include "Widgets/RadioBox.hpp"
+#include "slic3r/GUI/MultiMachine.hpp"
+#include <wx/event.h>
+#include <utility>
+#include <wx/colour.h>
+#include "slic3r/GUI/Widgets/Button.hpp"
+#include "slic3r/GUI/Widgets/Label.hpp"
+#include <boost/log/trivial.hpp>
+#include <wx/gdicmn.h>
+#include <wx/dcclient.h>
+#include <wx/dc.h>
+#include "slic3r/GUI/MultiMachineManagerPage.hpp"
+#include <boost/algorithm/string/predicate.hpp>
+#include "libslic3r/Utils.hpp"
+#include "slic3r/GUI/Widgets/CheckBox.hpp"
+#include "slic3r/GUI/GUI_Utils.hpp"
+#include <vector>
+#include <map>
+#include "slic3r/GUI/MultiMachinePage.hpp"
+#include <string>
+#include "slic3r/GUI/TaskManager.hpp"
+#include <algorithm>
+#include "slic3r/GUI/Widgets/TextInput.hpp"
+#include <ctime>
+#include <sstream>
+#include <iomanip>
+#include <chrono>
+#include <wx/datetime.h>
+#include <cmath>
 #include <wx/listimpl.cpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
+#include <wx/sizer.h>
+#include <wx/string.h>
+#include <wx/panel.h>
+#include <wx/tglbtn.h>
+#include <wx/scrolwin.h>
+#include <wx/valtext.h>
+#include <wx/textctrl.h>
+#include <wx/timer.h>
+
+#include "DeviceCore/DevManager.h"
+#include <wx/dcgraph.h>
 
 namespace Slic3r {
 namespace GUI {
@@ -34,7 +73,7 @@ MultiTaskItem::MultiTaskItem(wxWindow* parent, MachineObject* obj, int type)
 
 
     auto m_btn_bg_enable = StateColor(
-        std::pair<wxColour, int>(wxColour(0, 137, 123), StateColor::Pressed), 
+        std::pair<wxColour, int>(wxColour(0, 137, 123), StateColor::Pressed),
         std::pair<wxColour, int>(wxColour(38, 166, 154), StateColor::Hovered),
         std::pair<wxColour, int>(wxColour(0, 150, 136), StateColor::Normal)
     );
@@ -46,8 +85,8 @@ MultiTaskItem::MultiTaskItem(wxWindow* parent, MachineObject* obj, int type)
     m_button_resume->SetTextColor(StateColor::darkModeColorFor("#FFFFFE"));
     m_button_resume->SetMinSize(wxSize(FromDIP(70), FromDIP(35)));
     m_button_resume->SetCornerRadius(6);
-    
-    
+
+
     StateColor clean_bg(std::pair<wxColour, int>(wxColour(255, 255, 255), StateColor::Disabled), std::pair<wxColour, int>(wxColour(206, 206, 206), StateColor::Pressed),
         std::pair<wxColour, int>(wxColour(238, 238, 238), StateColor::Hovered), std::pair<wxColour, int>(wxColour(255, 255, 255), StateColor::Enabled),
         std::pair<wxColour, int>(wxColour(255, 255, 255), StateColor::Normal));
@@ -62,7 +101,7 @@ MultiTaskItem::MultiTaskItem(wxWindow* parent, MachineObject* obj, int type)
     m_button_cancel->SetCornerRadius(6);
     m_button_cancel->SetMinSize(wxSize(FromDIP(70), FromDIP(35)));
 
-    m_button_pause = new Button(this, _L("Pause"));
+    m_button_pause = new Button(this, _L_CONTEXT("Pause", "Verb"));
     m_button_pause->SetBackgroundColor(clean_bg);
     m_button_pause->SetBorderColor(clean_bd);
     m_button_pause->SetTextColor(clean_text);
@@ -107,7 +146,7 @@ MultiTaskItem::MultiTaskItem(wxWindow* parent, MachineObject* obj, int type)
     });
 
     m_button_stop->Bind(wxEVT_BUTTON, [this](auto& e) {
-        onStop(); 
+        onStop();
     });
 
     wxGetApp().UpdateDarkUIWin(this);
@@ -115,7 +154,7 @@ MultiTaskItem::MultiTaskItem(wxWindow* parent, MachineObject* obj, int type)
 
 void MultiTaskItem::update_info()
 {
-    //local 
+    //local
     if (m_task_type == 0) {
         m_button_stop->Hide();
         m_button_pause->Hide();
@@ -176,7 +215,7 @@ void MultiTaskItem::update_info()
 void MultiTaskItem::onPause()
 {
     if (get_obj() && !get_obj()->can_resume()) {
-        BOOST_LOG_TRIVIAL(info) << "MultiTask: pause current print task dev_id =" << get_obj()->dev_id;
+        BOOST_LOG_TRIVIAL(info) << "MultiTask: pause current print task dev_id =" << get_obj()->get_dev_id();
         get_obj()->command_task_pause();
         m_button_pause->Hide();
         m_button_resume->Show();
@@ -187,7 +226,7 @@ void MultiTaskItem::onPause()
 void MultiTaskItem::onResume()
 {
     if (get_obj() && get_obj()->can_resume()) {
-        BOOST_LOG_TRIVIAL(info) << "MultiTask: resume current print task dev_id =" << get_obj()->dev_id;
+        BOOST_LOG_TRIVIAL(info) << "MultiTask: resume current print task dev_id =" << get_obj()->get_dev_id();
         get_obj()->command_task_resume();
         m_button_pause->Show();
         m_button_resume->Hide();
@@ -198,7 +237,7 @@ void MultiTaskItem::onResume()
 void MultiTaskItem::onStop()
 {
     if (get_obj()) {
-        BOOST_LOG_TRIVIAL(info) << "MultiTask: abort current print task dev_id =" << get_obj()->dev_id;
+        BOOST_LOG_TRIVIAL(info) << "MultiTask: abort current print task dev_id =" << get_obj()->get_dev_id();
         get_obj()->command_task_abort();
         m_button_pause->Hide();
         m_button_resume->Hide();
@@ -363,7 +402,7 @@ void MultiTaskItem::doRender(wxDC& dc)
     else {
         DrawTextWithEllipsis(dc, get_cloud_state_task(), FromDIP(TASK_LEFT_PRO_STATE), left);
     }
-    
+
     left += FromDIP(TASK_LEFT_PRO_STATE);
 
     //cloud task info
@@ -387,7 +426,7 @@ void MultiTaskItem::doRender(wxDC& dc)
                 else if (state_device > 2 && state_device < 7) {
                     dc.SetFont(Label::Body_12);
                     dc.SetTextForeground(wxColour(0, 150, 136));
-                    if (obj_->get_curr_stage().IsEmpty()) {
+                    if (obj_->get_curr_stage() == _L("Printing") && obj_->subtask_) {
                         //wxString layer_info = wxString::Format(_L("Layer: %d/%d"), obj_->curr_layer, obj_->total_layers);
                         wxString progress_info = wxString::Format("%d", obj_->subtask_->task_progress);
                         wxString left_time = wxString::Format("%s", get_left_time(obj_->mc_left_time));
@@ -574,7 +613,7 @@ LocalTaskManagerPage::LocalTaskManagerPage(wxWindow* parent)
         });
 
 
-    m_task_name = new Button(m_table_head_panel, _L("Task Name"), "", wxNO_BORDER, ICON_SIZE);
+    m_task_name = new Button(m_table_head_panel, _L("Task Name"), "", wxNO_BORDER, ICON_SINGLE_SIZE);
     m_task_name->SetBackgroundColor(TABLE_HEAR_NORMAL_COLOUR);
     m_task_name->SetFont(TABLE_HEAD_FONT);
     m_task_name->SetCornerRadius(0);
@@ -583,7 +622,7 @@ LocalTaskManagerPage::LocalTaskManagerPage(wxWindow* parent)
     m_task_name->SetCenter(false);
     m_table_head_sizer->Add(m_task_name, 0, wxALIGN_CENTER_VERTICAL, 0);
 
-    m_printer_name = new Button(m_table_head_panel, _L("Device Name"), "toolbar_double_directional_arrow", wxNO_BORDER, ICON_SIZE);
+    m_printer_name = new Button(m_table_head_panel, _L("Device Name"), "toolbar_double_directional_arrow", wxNO_BORDER, ICON_SINGLE_SIZE);
     m_printer_name->SetBackgroundColor(head_bg);
     m_printer_name->SetFont(TABLE_HEAD_FONT);
     m_printer_name->SetCornerRadius(0);
@@ -603,7 +642,7 @@ LocalTaskManagerPage::LocalTaskManagerPage(wxWindow* parent)
     });
     m_table_head_sizer->Add(m_printer_name, 0, wxALIGN_CENTER_VERTICAL, 0);
 
-    m_status = new Button(m_table_head_panel, _L("Task Status"), "toolbar_double_directional_arrow", wxNO_BORDER, ICON_SIZE);
+    m_status = new Button(m_table_head_panel, _L("Task Status"), "toolbar_double_directional_arrow", wxNO_BORDER, ICON_SINGLE_SIZE);
     m_status->SetBackgroundColor(head_bg);
     m_status->SetFont(TABLE_HEAD_FONT);
     m_status->SetCornerRadius(0);
@@ -623,7 +662,7 @@ LocalTaskManagerPage::LocalTaskManagerPage(wxWindow* parent)
     });
     m_table_head_sizer->Add(m_status, 0, wxALIGN_CENTER_VERTICAL, 0);
 
-    m_info = new Button(m_table_head_panel, _L("Info"), "", wxNO_BORDER, ICON_SIZE);
+    m_info = new Button(m_table_head_panel, _L("Info"), "", wxNO_BORDER, ICON_SINGLE_SIZE);
     m_info->SetBackgroundColor(TABLE_HEAR_NORMAL_COLOUR);
     m_info->SetFont(TABLE_HEAD_FONT);
     m_info->SetCornerRadius(0);
@@ -632,7 +671,7 @@ LocalTaskManagerPage::LocalTaskManagerPage(wxWindow* parent)
     m_info->SetCenter(false);
     m_table_head_sizer->Add(m_info, 0, wxALIGN_CENTER_VERTICAL, 0);
 
-    m_send_time = new Button(m_table_head_panel, _L("Sent Time"), "toolbar_double_directional_arrow", wxNO_BORDER, ICON_SIZE, false);
+    m_send_time = new Button(m_table_head_panel, _L("Sent Time"), "toolbar_double_directional_arrow", wxNO_BORDER, ICON_SINGLE_SIZE, false);
     m_send_time->SetBackgroundColor(head_bg);
     m_send_time->SetFont(TABLE_HEAD_FONT);
     m_send_time->SetCornerRadius(0);
@@ -652,7 +691,7 @@ LocalTaskManagerPage::LocalTaskManagerPage(wxWindow* parent)
     });
     m_table_head_sizer->Add(m_send_time, 0, wxALIGN_CENTER_VERTICAL, 0);
 
-    m_action = new Button(m_table_head_panel, _L("Actions"), "", wxNO_BORDER, ICON_SIZE, false);
+    m_action = new Button(m_table_head_panel, _L("Actions"), "", wxNO_BORDER, ICON_SINGLE_SIZE, false);
     m_action->SetBackgroundColor(TABLE_HEAR_NORMAL_COLOUR);
     m_action->SetFont(TABLE_HEAD_FONT);
     m_action->SetCornerRadius(0);
@@ -673,7 +712,7 @@ LocalTaskManagerPage::LocalTaskManagerPage(wxWindow* parent)
 
     m_task_list = new wxScrolledWindow(m_main_panel, wxID_ANY, wxDefaultPosition, wxDefaultSize);
     m_task_list->SetBackgroundColour(*wxWHITE);
-    m_task_list->SetScrollRate(0, 5);
+    m_task_list->SetScrollRate(0, FromDIP(DEVICE_ITEM_MAX_HEIGHT));
     m_task_list->SetMinSize(wxSize(FromDIP(CLOUD_TASK_ITEM_MAX_WIDTH), FromDIP(DEVICE_ITEM_MAX_HEIGHT)));
     m_task_list->SetMaxSize(wxSize(FromDIP(CLOUD_TASK_ITEM_MAX_WIDTH), 10 * FromDIP(DEVICE_ITEM_MAX_HEIGHT)));
 
@@ -716,7 +755,7 @@ LocalTaskManagerPage::LocalTaskManagerPage(wxWindow* parent)
     m_main_panel->Layout();
 
     page_sizer = new wxBoxSizer(wxVERTICAL);
-    page_sizer->Add(m_main_panel, 1, wxALL | wxEXPAND, FromDIP(25));
+    page_sizer->Add(m_main_panel, 1, wxALL | wxEXPAND, FromDIP(10)); // ORCA match margin with other tabs
 
     wxGetApp().UpdateDarkUIWin(this);
 
@@ -781,7 +820,7 @@ void LocalTaskManagerPage::refresh_user_device(bool clear)
             mtitem->m_send_time = task_state_info->get_sent_time();
             mtitem->state_local_task = task_state_info->state();
 
-            task_state_info->set_state_changed_fn([this, mtitem](TaskState state, int percent) {
+            task_state_info->set_state_changed_fn([mtitem](TaskState state, int percent) {
                 mtitem->state_local_task = state;
                 if (state == TaskState::TS_SEND_COMPLETED) {
 
@@ -946,7 +985,7 @@ CloudTaskManagerPage::CloudTaskManagerPage(wxWindow* parent)
 
 
 
-    m_task_name = new Button(m_table_head_panel, _L("Task Name"), "", wxNO_BORDER, ICON_SIZE);
+    m_task_name = new Button(m_table_head_panel, _L("Task Name"), "", wxNO_BORDER, ICON_SINGLE_SIZE);
     m_task_name->SetBackgroundColor(TABLE_HEAR_NORMAL_COLOUR);
     m_task_name->SetFont(TABLE_HEAD_FONT);
     m_task_name->SetCornerRadius(0);
@@ -955,7 +994,7 @@ CloudTaskManagerPage::CloudTaskManagerPage(wxWindow* parent)
     m_task_name->SetCenter(false);
     m_table_head_sizer->Add(m_task_name, 0, wxALIGN_CENTER_VERTICAL, 0);
 
-    m_printer_name = new Button(m_table_head_panel, _L("Device Name"), "toolbar_double_directional_arrow", wxNO_BORDER, ICON_SIZE);
+    m_printer_name = new Button(m_table_head_panel, _L("Device Name"), "toolbar_double_directional_arrow", wxNO_BORDER, ICON_SINGLE_SIZE);
     m_printer_name->SetBackgroundColor(head_bg);
     m_printer_name->SetFont(TABLE_HEAD_FONT);
     m_printer_name->SetCornerRadius(0);
@@ -975,7 +1014,7 @@ CloudTaskManagerPage::CloudTaskManagerPage(wxWindow* parent)
     });
     m_table_head_sizer->Add(m_printer_name, 0, wxALIGN_CENTER_VERTICAL, 0);
 
-    m_status = new Button(m_table_head_panel, _L("Task Status"), "toolbar_double_directional_arrow", wxNO_BORDER, ICON_SIZE);
+    m_status = new Button(m_table_head_panel, _L("Task Status"), "toolbar_double_directional_arrow", wxNO_BORDER, ICON_SINGLE_SIZE);
     m_status->SetBackgroundColor(head_bg);
     m_status->SetFont(TABLE_HEAD_FONT);
     m_status->SetCornerRadius(0);
@@ -995,7 +1034,7 @@ CloudTaskManagerPage::CloudTaskManagerPage(wxWindow* parent)
     });
     m_table_head_sizer->Add(m_status, 0, wxALIGN_CENTER_VERTICAL, 0);
 
-    m_info = new Button(m_table_head_panel, _L("Info"), "", wxNO_BORDER, ICON_SIZE);
+    m_info = new Button(m_table_head_panel, _L("Info"), "", wxNO_BORDER, ICON_SINGLE_SIZE);
     m_info->SetBackgroundColor(TABLE_HEAR_NORMAL_COLOUR);
     m_info->SetFont(TABLE_HEAD_FONT);
     m_info->SetCornerRadius(0);
@@ -1004,7 +1043,7 @@ CloudTaskManagerPage::CloudTaskManagerPage(wxWindow* parent)
     m_info->SetCenter(false);
     m_table_head_sizer->Add(m_info, 0, wxALIGN_CENTER_VERTICAL, 0);
 
-    m_send_time = new Button(m_table_head_panel, _L("Sent Time"), "toolbar_double_directional_arrow", wxNO_BORDER, ICON_SIZE, false);
+    m_send_time = new Button(m_table_head_panel, _L("Sent Time"), "toolbar_double_directional_arrow", wxNO_BORDER, ICON_SINGLE_SIZE, false);
     m_send_time->SetBackgroundColor(head_bg);
     m_send_time->SetFont(TABLE_HEAD_FONT);
     m_send_time->SetCornerRadius(0);
@@ -1024,7 +1063,7 @@ CloudTaskManagerPage::CloudTaskManagerPage(wxWindow* parent)
     });
     m_table_head_sizer->Add(m_send_time, 0, wxALIGN_CENTER_VERTICAL, 0);
 
-    m_action = new Button(m_table_head_panel, _L("Actions"), "", wxNO_BORDER, ICON_SIZE, false);
+    m_action = new Button(m_table_head_panel, _L("Actions"), "", wxNO_BORDER, ICON_SINGLE_SIZE, false);
     m_action->SetBackgroundColor(TABLE_HEAR_NORMAL_COLOUR);
     m_action->SetFont(TABLE_HEAD_FONT);
     m_action->SetCornerRadius(0);
@@ -1054,7 +1093,7 @@ CloudTaskManagerPage::CloudTaskManagerPage(wxWindow* parent)
 
     m_task_list = new wxScrolledWindow(m_main_panel, wxID_ANY, wxDefaultPosition, wxDefaultSize);
     m_task_list->SetBackgroundColour(*wxWHITE);
-    m_task_list->SetScrollRate(0, 5);
+    m_task_list->SetScrollRate(0, FromDIP(DEVICE_ITEM_MAX_HEIGHT));
     m_task_list->SetMinSize(wxSize(FromDIP(CLOUD_TASK_ITEM_MAX_WIDTH), FromDIP(DEVICE_ITEM_MAX_HEIGHT)));
     m_task_list->SetMaxSize(wxSize(FromDIP(CLOUD_TASK_ITEM_MAX_WIDTH), 10 * FromDIP(DEVICE_ITEM_MAX_HEIGHT)));
 
@@ -1128,7 +1167,7 @@ CloudTaskManagerPage::CloudTaskManagerPage(wxWindow* parent)
         page_num_enter_evt();
     });
 
-    m_page_num_enter = new Button(m_flipping_panel, _("Go"));
+    m_page_num_enter = new Button(m_flipping_panel, _L("Go"));
     m_page_num_enter->SetMinSize(wxSize(FromDIP(25), FromDIP(25)));
     m_page_num_enter->SetMaxSize(wxSize(FromDIP(25), FromDIP(25)));
     m_page_num_enter->SetBackgroundColor(ctrl_bg);
@@ -1154,7 +1193,7 @@ CloudTaskManagerPage::CloudTaskManagerPage(wxWindow* parent)
     m_ctrl_btn_panel->SetMinSize(wxSize(FromDIP(CLOUD_TASK_ITEM_MAX_WIDTH), -1));
     m_ctrl_btn_panel->SetMaxSize(wxSize(FromDIP(CLOUD_TASK_ITEM_MAX_WIDTH), -1));
     m_btn_sizer = new wxBoxSizer(wxHORIZONTAL);
-    btn_pause_all = new Button(m_ctrl_btn_panel, _L("Pause"));
+    btn_pause_all = new Button(m_ctrl_btn_panel, _L_CONTEXT("Pause", "Verb"));
     btn_pause_all->SetBackgroundColor(ctrl_bg);
     btn_pause_all->SetCornerRadius(FromDIP(5));
     btn_continue_all = new Button(m_ctrl_btn_panel, _L("Resume"));
@@ -1182,7 +1221,7 @@ CloudTaskManagerPage::CloudTaskManagerPage(wxWindow* parent)
     m_main_panel->Layout();
 
     page_sizer = new wxBoxSizer(wxVERTICAL);
-    page_sizer->Add(m_main_panel, 1, wxALL | wxEXPAND, FromDIP(25));
+    page_sizer->Add(m_main_panel, 1, wxALL | wxEXPAND, FromDIP(10)); // ORCA match margin with other tabs
     Bind(wxEVT_TIMER, &CloudTaskManagerPage::on_timer, this);
 
     wxGetApp().UpdateDarkUIWin(this);
@@ -1368,7 +1407,7 @@ bool CloudTaskManagerPage::Show(bool show)
             dev->subscribe_device_list(std::vector<std::string>());
         }
     }
-        
+
     return wxPanel::Show(show);
 }
 
@@ -1400,7 +1439,7 @@ void CloudTaskManagerPage::start_timer()
 
     m_flipping_timer->SetOwner(this);
     m_flipping_timer->Start(1000);
-    wxPostEvent(this, wxTimerEvent());
+    wxPostEvent(this, wxTimerEvent(*m_flipping_timer));
 }
 
 void CloudTaskManagerPage::on_timer(wxTimerEvent& event)

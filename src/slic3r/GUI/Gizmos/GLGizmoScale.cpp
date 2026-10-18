@@ -1,11 +1,39 @@
 #include "GLGizmoScale.hpp"
 #include "slic3r/GUI/GLCanvas3D.hpp"
 #include "slic3r/GUI/GUI_App.hpp"
+#include "slic3r/GUI/Shortcuts.hpp"
 #include "slic3r/GUI/Plater.hpp"
 
-#include <GL/glew.h>
+#include <cstddef>
+#include <array>
+#include <cstdlib>
+#include <cmath>
+#include <glad/gl.h>
 
+#include "libslic3r/Point.hpp"
+#include <string>
+#include "slic3r/GUI/Gizmos/GLGizmoBase.hpp"
+#include "slic3r/GUI/Selection.hpp"
+#include "slic3r/GUI/GUI_Geometry.hpp"
+#include "libslic3r/libslic3r.h"
+#include <vector>
+#include <wx/intl.h>
+#include "slic3r/GUI/3DScene.hpp"
+#include "slic3r/GUI/OpenGLManager.hpp"
+#include "slic3r/GUI/GLShader.hpp"
+#include <utility>
+#include "libslic3r/Geometry.hpp"
+#include <wx/string.h>
 #include <wx/utils.h>
+#include "libslic3r/BoundingBox.hpp"
+#include "libslic3r/Color.hpp"
+#include "libslic3r/Line.hpp"
+#include "slic3r/GUI/Camera.hpp"
+#include "slic3r/GUI/GLModel.hpp"
+#include "slic3r/GUI/Gizmos/GizmoObjectManipulation.hpp"
+#include "slic3r/GUI/I18N.hpp"
+
+namespace Slic3r { class ModelVolume; }
 
 namespace Slic3r {
 namespace GUI {
@@ -135,7 +163,7 @@ bool GLGizmoScale3D::on_init()
 
     // BBS
     m_grabbers[4].enabled = false;
-    m_shortcut_key = WXK_CONTROL_S;
+    m_shortcut = Shortcut::GizmoScale;
 
     return true;
 }
@@ -143,9 +171,9 @@ bool GLGizmoScale3D::on_init()
 std::string GLGizmoScale3D::on_get_name() const
 {
     if (!on_is_activable() && m_state == EState::Off) {
-        return _u8L("Scale") + ":\n" + _u8L("Please select at least one object.");
+        return _u8L_CONTEXT("Scale", "Verb") + ":\n" + _u8L("Please select at least one object.");
     } else {
-        return _u8L("Scale");
+        return _u8L_CONTEXT("Scale", "Verb");
     }
 }
 
@@ -293,12 +321,19 @@ void GLGizmoScale3D::on_render()
 
     update_grabbers_data();
 
-    glsafe(::glLineWidth((m_hover_id != -1) ? 2.0f : 1.5f));
+#if !SLIC3R_OPENGL_ES
+    if (!OpenGLManager::get_gl_info().is_core_profile())
+        glsafe(::glLineWidth((m_hover_id != -1) ? 2.0f : 1.5f));
+#endif // !SLIC3R_OPENGL_ES
 
     const float grabber_mean_size = (float)((m_bounding_box.size().x() + m_bounding_box.size().y() + m_bounding_box.size().z()) / 3.0);
 
     //draw connections
-    GLShaderProgram* shader = wxGetApp().get_shader("flat");
+#if SLIC3R_OPENGL_ES
+    GLShaderProgram* shader = wxGetApp().get_shader("dashed_lines");
+#else
+    GLShaderProgram* shader = OpenGLManager::get_gl_info().is_core_profile() ? wxGetApp().get_shader("dashed_thick_lines") : wxGetApp().get_shader("flat");
+#endif // SLIC3R_OPENGL_ES
     if (shader != nullptr) {
         shader->start_using();
         // BBS: when select multiple objects, uniform scale can be deselected, display the connection(4,5)
@@ -306,6 +341,16 @@ void GLGizmoScale3D::on_render()
         const Camera& camera = wxGetApp().plater()->get_camera();
         shader->set_uniform("view_model_matrix", camera.get_view_matrix() * m_grabbers_tran.get_matrix());
         shader->set_uniform("projection_matrix", camera.get_projection_matrix());
+#if !SLIC3R_OPENGL_ES
+        if (OpenGLManager::get_gl_info().is_core_profile()) {
+#endif // !SLIC3R_OPENGL_ES
+            const std::array<int, 4>& viewport = camera.get_viewport();
+            shader->set_uniform("viewport_size", Vec2d(double(viewport[2]), double(viewport[3])));
+            shader->set_uniform("width", 0.25f);
+            shader->set_uniform("gap_size", 0.0f);
+#if !SLIC3R_OPENGL_ES
+        }
+#endif // !SLIC3R_OPENGL_ES
         if (m_grabbers[4].enabled && m_grabbers[5].enabled)
             render_grabbers_connection(4, 5, m_grabbers[4].color);
         render_grabbers_connection(6, 7, m_grabbers[2].color);
@@ -373,10 +418,18 @@ void GLGizmoScale3D::render_grabbers_connection(unsigned int id_1, unsigned int 
     }
 
     m_grabber_connections[id].model.set_color(color);
-    glLineStipple(1, 0x0FFF);
-    glEnable(GL_LINE_STIPPLE);
+    // ORCA: OpenGL Core Profile
+#if !SLIC3R_OPENGL_ES
+    if (!OpenGLManager::get_gl_info().is_core_profile()) {
+        glLineStipple(1, 0x0FFF);
+        glEnable(GL_LINE_STIPPLE);
+    }
+#endif // !SLIC3R_OPENGL_ES
     m_grabber_connections[id].model.render();
-    glDisable(GL_LINE_STIPPLE);
+#if !SLIC3R_OPENGL_ES
+    if (!OpenGLManager::get_gl_info().is_core_profile())
+        glDisable(GL_LINE_STIPPLE);
+#endif // !SLIC3R_OPENGL_ES
 }
 
 //BBS: add input window for move
@@ -423,7 +476,29 @@ void GLGizmoScale3D::do_scale_uniform(const UpdateData& data)
     if (ratio > 0.0)
     {
         m_scale = m_starting.scale * ratio;
-        m_offset = Vec3d::Zero();
+        if (m_starting.ctrl_down && abs(ratio-1.0f)>0.001) {
+            m_scale.z() = m_starting.scale.z();
+            double local_offset_x = 0.5 * (m_scale.x() - m_starting.scale.x()) * m_starting.box.size().x();
+            double local_offset_y = 0.5 * (m_scale.y() - m_starting.scale.y()) * m_starting.box.size().y();
+            
+            Vec3d local_offset_vec = Vec3d::Zero();
+            switch (m_hover_id)
+            {
+                case 6: { local_offset_vec = Vec3d(-local_offset_x, -local_offset_y, 0.0); break; }
+                case 7: { local_offset_vec = Vec3d( local_offset_x, -local_offset_y, 0.0); break; }
+                case 8: { local_offset_vec = Vec3d( local_offset_x,  local_offset_y, 0.0); break; }
+                case 9: { local_offset_vec = Vec3d(-local_offset_x,  local_offset_y, 0.0); break; }
+                default: break;
+            }
+            
+            if (m_object_manipulation->is_world_coordinates()) {
+                m_offset = local_offset_vec;
+            } else {
+                m_offset = m_grabbers_tran.get_matrix_no_offset() * local_offset_vec;
+            }
+        } else {
+            m_offset = Vec3d::Zero();
+        }
     }
 }
 

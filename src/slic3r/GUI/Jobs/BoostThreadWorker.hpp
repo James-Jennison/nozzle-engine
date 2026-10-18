@@ -1,12 +1,22 @@
 #ifndef BOOSTTHREADWORKER_HPP
 #define BOOSTTHREADWORKER_HPP
 
+#include <atomic>
 #include <boost/variant.hpp>
 
 #include "Worker.hpp"
 
+#include <exception>
+#include <functional>
+#include <future>
+#include <boost/variant/variant.hpp>
 #include <libslic3r/Thread.hpp>
 #include <boost/log/trivial.hpp>
+#include "slic3r/GUI/Jobs/Job.hpp"
+#include <memory>
+#include <string>
+#include <utility>
+#include "slic3r/GUI/Jobs/ProgressIndicator.hpp"
 
 #include "ThreadSafeQueue.hpp"
 #include "slic3r/GUI/GUI.hpp"
@@ -25,7 +35,7 @@ class BoostThreadWorker : public Worker, private Job::Ctl
 {
     struct JobEntry // Goes into worker and also out of worker as a finalize msg
     {
-        std::unique_ptr<Job> job;
+        std::shared_ptr<Job> job;
         bool                 canceled = false;
         std::exception_ptr   eptr     = nullptr;
     };
@@ -110,7 +120,7 @@ public:
     BoostThreadWorker &operator=(const BoostThreadWorker &) = delete;
     BoostThreadWorker &operator=(BoostThreadWorker &&) = delete;
 
-    bool push(std::unique_ptr<Job> job) override;
+    bool push(std::shared_ptr<Job> job) override;
 
     bool is_idle() const override
     {

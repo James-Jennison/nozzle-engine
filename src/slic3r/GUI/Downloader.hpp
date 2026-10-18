@@ -1,9 +1,15 @@
 #ifndef slic3r_Downloader_hpp_
 #define slic3r_Downloader_hpp_
 
-#include "DownloaderFileGet.hpp"
 #include <boost/filesystem/path.hpp>
+#include <string>
+#include <wx/event.h>
+#include <memory>
+#include <vector>
+#include <cstddef>
 #include <wx/wx.h>
+
+namespace Slic3r::GUI { class FileGet; }
 
 namespace Slic3r {
 namespace GUI {
@@ -31,8 +37,7 @@ enum DownloaderUserAction
 
 class Download { 
 public:
-    Download(int ID, std::string url, wxEvtHandler* evt_handler, const boost::filesystem::path& dest_folder,
-             const std::string& preferred_filename = std::string());
+    Download(int ID, std::string url, wxEvtHandler* evt_handler, const boost::filesystem::path& dest_folder);
     void start();
     void cancel();
     void pause();

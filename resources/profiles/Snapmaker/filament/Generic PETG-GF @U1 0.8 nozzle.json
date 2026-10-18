@@ -86,9 +86,6 @@
     "filament_diameter": [
         "1.75"
     ],
-    "filament_is_high_temperature": [
-        "0"
-    ],
     "filament_is_support": [
         "0"
     ],
@@ -123,9 +120,6 @@
         "nil"
     ],
     "filament_retract_restart_extra": [
-        "nil"
-    ],
-    "filament_retract_restart_extra_toolchange": [
         "nil"
     ],
     "filament_retract_when_changing_layer": [
@@ -164,9 +158,6 @@
     "filament_toolchange_delay": [
         "0"
     ],
-    "filament_tower_ironing_area": [
-        "4"
-    ],
     "filament_type": [
         "PETG-GF"
     ],
@@ -191,20 +182,8 @@
     "full_fan_speed_layer": [
         "0"
     ],
-    "graphic_effect_plate_temp": [
-        "0"
-    ],
-    "graphic_effect_plate_temp_initial_layer": [
-        "0"
-    ],
     "idle_temperature": [
         "0"
-    ],
-    "internal_bridge_fan_speed": [
-        "-1"
-    ],
-    "ironing_fan_speed": [
-        "-1"
     ],
     "nozzle_temperature_range_high": [
         "270"
@@ -242,7 +221,6 @@
     "textured_cool_plate_temp_initial_layer": [
         "40"
     ],
-    "version": "0.0.0.0",
     "circle_compensation_speed": [
         "200"
     ],
@@ -323,9 +301,6 @@
     ],
     "filament_flow_ratio": [
         "0.95"
-    ],
-    "filament_flow_support": [
-        "standard"
     ],
     "filament_flush_temp": [
         "0"

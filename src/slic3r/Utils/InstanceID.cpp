@@ -1,7 +1,10 @@
 #include "InstanceID.hpp"
 
 #include <algorithm>
+#include <boost/algorithm/string/trim.hpp>
+#include <boost/algorithm/string/case_conv.hpp>
 #include <cctype>
+#include <ios>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -99,7 +102,7 @@ boost::filesystem::path storage_path()
     const std::string& base_dir = Slic3r::data_dir();
     if (base_dir.empty())
         return {};
-    return boost::filesystem::path(base_dir) / ".snapmaker_orca_machine_id";
+    return boost::filesystem::path(base_dir) / ".orcaslicer_machine_id";
 }
 
 std::optional<std::string> read_storage_file()

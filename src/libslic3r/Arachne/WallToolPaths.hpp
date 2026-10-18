@@ -4,10 +4,15 @@
 #ifndef CURAENGINE_WALLTOOLPATHS_H
 #define CURAENGINE_WALLTOOLPATHS_H
 
+#include <cstddef>
+#include <boost/container_hash/hash.hpp>
 #include <memory>
 #include <ankerl/unordered_dense.h>
+#include <vector>
+#include <utility>
 
-#include "BeadingStrategy/BeadingStrategyFactory.hpp"
+#include "libslic3r/libslic3r.h"
+#include "libslic3r/Point.hpp"
 #include "utils/ExtrusionLine.hpp"
 #include "../Polygon.hpp"
 #include "../PrintConfig.hpp"
@@ -15,7 +20,7 @@
 namespace Slic3r::Arachne
 {
 
-constexpr bool    fill_outline_gaps                        = true;
+constexpr bool    fill_outline_gaps = true;
 inline coord_t    meshfix_maximum_resolution() { return scaled<coord_t>(0.5); }
 inline coord_t    meshfix_maximum_deviation() { return scaled<coord_t>(0.025); }
 inline coord_t    meshfix_maximum_extrusion_area_deviation() { return scaled<coord_t>(2.); }
@@ -23,17 +28,17 @@ inline coord_t    meshfix_maximum_extrusion_area_deviation() { return scaled<coo
 class WallToolPathsParams
 {
 public:
-    // Nozzle: zero-initialised. make_paths_params() copies a setting only `if (option)`, and a 0% option tests false,
-    // so a profile with any of these at 0 left the parameter as uninitialised memory (G-code differed between runs).
-    // 0 is what those settings mean (0% of the nozzle diameter).
-    float   min_bead_width { 0.f };
-    float   min_feature_size { 0.f };
-    float   min_length_factor { 0.5f };
-    float   wall_transition_length { 0.f };
-    float   wall_transition_angle { 0.f };
-    float   wall_transition_filter_deviation { 0.f };
-    int     wall_distribution_count { 1 };
-    bool    is_top_or_bottom_layer { false };
+    float   min_bead_width                   = 0.f;
+    float   min_feature_size                 = 0.f;
+    float   min_length_factor                = 0.5f;
+    float   wall_transition_length           = 0.f;
+    float   wall_transition_angle            = 10.f;
+    float   wall_transition_filter_deviation = 0.f;
+    int     wall_distribution_count          = 1;
+    bool    is_top_or_bottom_layer           = false;
+
+    coord_t wall_maximum_resolution = meshfix_maximum_resolution();
+    coord_t wall_maximum_deviation  = meshfix_maximum_deviation();
 };
 
 WallToolPathsParams make_paths_params(const int layer_id, const PrintObjectConfig &print_object_config, const PrintConfig &print_config);
@@ -119,10 +124,11 @@ protected:
     /*!
      * Simplifies the variable-width toolpaths by calling the simplify on every line in the toolpath using the provided
      * settings.
-     * \param settings The settings as provided by the user
+     * \param toolpaths The toolpaths vector to simplify
+     * \param params The settings as provided by the user
      * \return
      */
-    static void simplifyToolPaths(std::vector<VariableWidthLines>  &toolpaths);
+    static void simplifyToolPaths(std::vector<VariableWidthLines>& toolpaths, const WallToolPathsParams& params);
 
 private:
     const Polygons& outline; //<! A reference to the outline polygon that is the designated area

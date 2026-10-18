@@ -1,6 +1,7 @@
 #ifndef slic3r_ProjectTask_hpp_
 #define slic3r_ProjectTask_hpp_
 
+#include <functional>
 #include <map>
 #include <vector>
 #include <string>
@@ -9,8 +10,6 @@
 #include <boost/filesystem/fstream.hpp>
 #include <boost/filesystem/path.hpp>
 #include <boost/filesystem.hpp>
-
-namespace fs = boost::filesystem;
 
 namespace Slic3r {
 
@@ -27,8 +26,6 @@ enum MachineBedType {
     BED_TYPE_PEI,
     BED_TYPE_PTE,
     BED_TYPE_COUNT,
-    BED_TYPE_COUNT_EX,
-    BED_TYPE_COUNT_ALL,
 };
 
 enum MappingResult {
@@ -39,22 +36,66 @@ enum MappingResult {
 
 struct FilamentInfo
 {
-    int         id;         // filament id = extruder id, start with 0.
+    int         id{0};         // filament id = extruder id, start with 0.
     std::string type;
     std::string color;
     std::string filament_id;
     std::string brand;
-    float       used_m;
-    float       used_g;
-    int         tray_id;    // start with 0
-    float       distance;
+    float       used_m{0.f};
+    float       used_g{0.f};
+    int         tray_id{0}; // start with 0
+    float       distance{0.f};
     int         ctype = 0;
     std::vector<std::string> colors = std::vector<std::string>();
     int         mapping_result = 0;
+    bool        used_for_support{false};
+    bool        used_for_object{false};
+    std::vector<int> group_id;
+    double      nozzle_diameter{0.0};
+    std::string nozzle_volume_type;
 
     /*for new ams mapping*/
     std::string ams_id;
     std::string slot_id;
+
+public:
+    int get_ams_id() const
+    {
+        if (ams_id.empty()) { return -1; };
+
+        try
+        {
+            return stoi(ams_id);
+        }
+        catch (...) {};
+
+        return -1;
+    };
+
+    int get_slot_id() const
+    {
+        if (slot_id.empty()) { return -1; };
+
+        try {
+            return stoi(slot_id);
+        } catch (...) {};
+
+        return -1;
+    };
+
+    /*copied from AmsTray::get_display_filament_type()*/
+    std::string get_display_filament_type() const
+    {
+        if (type == "PLA-S")
+            return "Sup.PLA";
+        else if (type == "PA-S")
+            return "Sup.PA";
+        else if (type == "ABS-S")
+            return "Sup.ABS";
+        else
+            return type;
+        return type;
+    }
 };
 
 class BBLSliceInfo {
@@ -165,7 +206,7 @@ public:
     std::string     task_profile_id;    /* profile id*/
     std::string     task_name;          /* task name, generally filename as task name */
     std::string     task_file;          /* local full file path of 3mf or gcode */
-    fs::path        task_path;          /* local path of 3mf or gcode */
+    boost::filesystem::path task_path;          /* local path of 3mf or gcode */
     std::string     task_gcode_in_3mf;  /* gcode in 3mf */
     std::string     task_create_time;   /* time created by cloud */
     std::string     task_thumbnail_url; /* url of task thumbnail */
@@ -283,7 +324,7 @@ public:
     std::string     project_url_md5;        /* md5 of project url file */
     std::string     project_name;
     std::string     project_3mf_file;
-    fs::path        project_path;
+    boost::filesystem::path project_path;
     std::string     project_content;
     std::string     project_country_code;
 

@@ -1,14 +1,28 @@
 #include "SideTools.hpp"
 #include "bambu_networking.hpp"
+#include <wx/colour.h>
+#include <wx/dcclient.h>
+#include <wx/dc.h>
+#include "slic3r/GUI/Widgets/Button.hpp"
+#include "slic3r/GUI/Widgets/HyperLink.hpp"
+#include <wx/chartype.h>
+#include <boost/algorithm/string/predicate.hpp>
+#include <string>
 #include <wx/dcmemory.h>
 #include <wx/dcgraph.h>
+#include <wx/gdicmn.h>
+#include <wx/panel.h>
+#include <wx/event.h>
+#include <wx/timer.h>
+#include <wx/string.h>
+#include <wx/sizer.h>
+#include <wx/stattext.h>
 #include "Label.hpp"
 #include "StateColor.hpp"
 #include "../GUI_App.hpp"
 #include "../wxExtensions.hpp"
 #include "../I18N.hpp"
 #include "../GUI.hpp"
-#include "../Utils/SnapLogClient.hpp"
 
 namespace Slic3r { namespace GUI {
 	SideToolsPanel::SideToolsPanel(wxWindow *parent, wxWindowID id, const wxPoint &pos, const wxSize &size)
@@ -46,8 +60,8 @@ namespace Slic3r { namespace GUI {
 
 SideToolsPanel::~SideToolsPanel() { delete m_intetval_timer; }
 
-void SideToolsPanel::set_none_printer_mode() 
-{ 
+void SideToolsPanel::set_none_printer_mode()
+{
     m_none_printer = true;
     Refresh();
 }
@@ -56,26 +70,28 @@ void SideToolsPanel::on_timer(wxTimerEvent &event)
 {
 }
 
-void SideToolsPanel::set_current_printer_name(std::string dev_name) 
+void SideToolsPanel::set_current_printer_name(std::string dev_name)
 {
+     if (m_dev_name == from_u8(dev_name) && !m_none_printer) return;
+
      m_none_printer = false;
      m_dev_name     = from_u8(dev_name);
      Refresh();
 }
 
-void SideToolsPanel::set_current_printer_signal(WifiSignal sign) 
+void SideToolsPanel::set_current_printer_signal(WifiSignal sign)
 {
-     if (last_printer_signal == sign) return;
-    
+     if (last_printer_signal == sign && !m_none_printer) return;
+
      last_printer_signal = sign;
      m_none_printer = false;
      m_wifi_type    = sign;
      Refresh();
 }
 
-void SideToolsPanel::start_interval() 
-{ 
-    m_intetval_timer->Start(SIDE_TOOL_CLICK_INTERVAL); 
+void SideToolsPanel::start_interval()
+{
+    m_intetval_timer->Start(SIDE_TOOL_CLICK_INTERVAL);
     m_is_in_interval = true;
 }
 
@@ -86,13 +102,13 @@ void SideToolsPanel::stop_interval(wxTimerEvent& event)
 }
 
 
-bool SideToolsPanel::is_in_interval() 
+bool SideToolsPanel::is_in_interval()
 {
     return m_is_in_interval;
 }
 
-void SideToolsPanel::msw_rescale() 
-{ 
+void SideToolsPanel::msw_rescale()
+{
     m_printing_img.msw_rescale();
     m_arrow_img.msw_rescale();
 
@@ -139,7 +155,7 @@ void SideToolsPanel::doRender(wxDC &dc)
 {
     auto   left = FromDIP(15);
     wxSize size = GetSize();
-    
+
     //if (m_none_printer) {
     //    dc.SetPen(SIDE_TOOLS_LIGHT_GREEN);
     //    dc.SetBrush(SIDE_TOOLS_LIGHT_GREEN);
@@ -197,14 +213,14 @@ void SideToolsPanel::doRender(wxDC &dc)
 
         auto sizet = dc.GetTextExtent(m_dev_name);
         auto text_end = size.x - m_wifi_none_img.GetBmpSize().x - 20;
-        
-        std::string finally_name = m_dev_name.ToStdString();
+
+        wxString finally_name = m_dev_name;
         if (sizet.x > (text_end - left)) {
             auto limit_width = text_end - left - dc.GetTextExtent("...").x - 20;
             for (auto i = 0; i < m_dev_name.length(); i++) {
                 auto curr_width = dc.GetTextExtent(m_dev_name.substr(0, i));
                 if (curr_width.x >= limit_width) {
-                    finally_name = (m_dev_name.substr(0, i) + wxString("...")).ToStdString();
+                    finally_name = m_dev_name.substr(0, i) + "...";
                     break;
                 }
             }
@@ -234,7 +250,7 @@ void SideToolsPanel::on_mouse_left_down(wxMouseEvent &evt)
     Refresh();
 }
 
-void SideToolsPanel::on_mouse_left_up(wxMouseEvent &evt) 
+void SideToolsPanel::on_mouse_left_up(wxMouseEvent &evt)
 {
      m_click = false;
      Refresh();
@@ -273,8 +289,8 @@ SideTools::SideTools(wxWindow *parent, wxWindowID id, const wxPoint &pos, const 
     wxBoxSizer* connection_sizer_V = new wxBoxSizer(wxVERTICAL);
     wxBoxSizer* connection_sizer_H = new wxBoxSizer(wxHORIZONTAL);
 
-    m_hyperlink = new wxHyperlinkCtrl(m_connection_info, wxID_ANY, _L("Failed to connect to the server"), wxT("https://wiki.bambulab.com/en/software/bambu-studio/failed-to-connect-printer"), wxDefaultPosition, wxDefaultSize, wxHL_DEFAULT_STYLE);
-    m_hyperlink->SetBackgroundColour(wxColour(255, 111, 0));
+    // ORCA standardized HyperLink; Orca: neutral wiki link (vendor URL removed)
+    m_hyperlink = new HyperLink(m_connection_info, _L("Failed to connect to the server"), wxT("https://www.orcaslicer.com/wiki/"));
 
     m_more_err_open = ScalableBitmap(this, "monitir_err_open", 16);
     m_more_err_close = ScalableBitmap(this, "monitir_err_close", 16);
@@ -327,13 +343,10 @@ SideTools::SideTools(wxWindow *parent, wxWindowID id, const wxPoint &pos, const 
     wxBoxSizer* sizer_error_desc = new wxBoxSizer(wxHORIZONTAL);
     wxBoxSizer* sizer_extra_info = new wxBoxSizer(wxHORIZONTAL);
 
-    m_link_network_state = new wxHyperlinkCtrl(m_side_error_panel, wxID_ANY,_L("Check the status of current system services"),"",wxDefaultPosition,wxDefaultSize,wxALIGN_CENTER_HORIZONTAL | wxST_ELLIPSIZE_END);
-    m_link_network_state->SetMinSize(wxSize(FromDIP(220), -1));
+    // ORCA standardized HyperLink
+    m_link_network_state = new HyperLink(m_side_error_panel, _L("Check the status of current system services"), wxGetApp().link_to_network_check(), wxST_ELLIPSIZE_END);
     m_link_network_state->SetMaxSize(wxSize(FromDIP(220), -1));
     m_link_network_state->SetFont(::Label::Body_12);
-    m_link_network_state->Bind(wxEVT_LEFT_DOWN, [this](auto& e) {wxGetApp().link_to_network_check(); });
-    m_link_network_state->Bind(wxEVT_ENTER_WINDOW, [this](auto& e) {m_link_network_state->SetCursor(wxCURSOR_HAND); });
-    m_link_network_state->Bind(wxEVT_LEAVE_WINDOW, [this](auto& e) {m_link_network_state->SetCursor(wxCURSOR_ARROW); });
 
     auto st_title_error_code = new wxStaticText(m_side_error_panel, wxID_ANY, _L("code"), wxDefaultPosition, wxDefaultSize, wxST_ELLIPSIZE_END);
     auto st_title_error_code_doc = new wxStaticText(m_side_error_panel, wxID_ANY, ": ");
@@ -353,7 +366,8 @@ SideTools::SideTools(wxWindow *parent, wxWindowID id, const wxPoint &pos, const 
     sizer_error_code->Add(m_st_txt_error_code, 0, wxALL, 0);
 
 
-    auto st_title_error_desc = new wxStaticText(m_side_error_panel, wxID_ANY, wxT("desc"), wxDefaultPosition, wxDefaultSize, wxST_ELLIPSIZE_END);
+    // TRN Short for "description" of a connection error
+    auto st_title_error_desc = new wxStaticText(m_side_error_panel, wxID_ANY, _L("desc"), wxDefaultPosition, wxDefaultSize, wxST_ELLIPSIZE_END);
     auto st_title_error_desc_doc = new wxStaticText(m_side_error_panel, wxID_ANY, ": ");
     m_st_txt_error_desc = new Label(m_side_error_panel, wxEmptyString, LB_AUTO_WRAP);
     st_title_error_desc->SetForegroundColour(0x909090);
@@ -370,7 +384,8 @@ SideTools::SideTools(wxWindow *parent, wxWindowID id, const wxPoint &pos, const 
     sizer_error_desc->Add(st_title_error_desc_doc, 0, wxALL, 0);
     sizer_error_desc->Add(m_st_txt_error_desc, 0, wxALL, 0);
 
-    auto st_title_extra_info = new wxStaticText(m_side_error_panel, wxID_ANY, wxT("info"), wxDefaultPosition, wxDefaultSize, wxST_ELLIPSIZE_END);
+    // TRN Short for "additional information" about a connection error
+    auto st_title_extra_info = new wxStaticText(m_side_error_panel, wxID_ANY, _L("info"), wxDefaultPosition, wxDefaultSize, wxST_ELLIPSIZE_END);
     auto st_title_extra_info_doc = new wxStaticText(m_side_error_panel, wxID_ANY, ": ");
     m_st_txt_extra_info = new Label(m_side_error_panel, wxEmptyString, LB_AUTO_WRAP);
     st_title_extra_info->SetForegroundColour(0x909090);
@@ -405,7 +420,7 @@ SideTools::SideTools(wxWindow *parent, wxWindowID id, const wxPoint &pos, const 
     Fit();
 }
 
-void SideTools::msw_rescale() 
+void SideTools::msw_rescale()
 {
     m_side_tools->msw_rescale();
     m_connection_info->SetCornerRadius(0);
@@ -458,12 +473,15 @@ void SideTools::update_status(MachineObject* obj)
     if (!obj) return;
 
     /* Update Device Info */
-    m_side_tools->set_current_printer_name(obj->dev_name);
+    m_side_tools->set_current_printer_name(obj->get_dev_name());
 
     // update wifi signal image
     int wifi_signal_val = 0;
     if (!obj->is_connected() || obj->is_connecting()) {
         m_side_tools->set_current_printer_signal(WifiSignal::NONE);
+    }
+    else if (!obj->is_lan_mode_printer() && !obj->is_online()) {
+        m_side_tools->set_current_printer_signal(WifiSignal::NONE);/*STUDIO-10185*/
     }
     else {
         if (obj->network_wired) {
@@ -490,7 +508,6 @@ void SideTools::update_status(MachineObject* obj)
             m_side_tools->set_current_printer_signal(WifiSignal::MIDDLE);
         }
     }
-
 }
 
 void SideTools::show_status(int status)

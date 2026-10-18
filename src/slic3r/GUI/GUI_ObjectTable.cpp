@@ -1,22 +1,55 @@
 #include "wx/clipbrd.h"
 #include "wx/display.h"
 
-#include "SelectMachine.hpp"
 #include "I18N.hpp"
 
-#include "libslic3r/Utils.hpp"
 #include "libslic3r/PresetBundle.hpp"
 //#include "libslic3r/Model.hpp"
 //#include "Plater.hpp"
 #include "Widgets/Label.hpp"
 #include "GUI.hpp"
 #include "GUI_App.hpp"
-#include "MainFrame.hpp"
 #include "Tab.hpp"
-#include "format.hpp"
-#include "BitmapCache.hpp"
 #include "GUI_ObjectTable.hpp"
 #include "GUI_ObjectList.hpp"
+#include <wx/gdicmn.h>
+#include <wx/dc.h>
+#include <boost/log/trivial.hpp>
+#include "libslic3r/Config.hpp"
+#include <ostream>
+#include <wx/arrstr.h>
+#include <vector>
+#include <cstddef>
+#include <wx/event.h>
+#include <wx/string.h>
+#include "slic3r/GUI/Widgets/ComboBox.hpp"
+#include "libslic3r/Model.hpp"
+#include <wx/debug.h>
+#include "slic3r/GUI/wxExtensions.hpp"
+#include <wx/dataobj.h>
+#include <wx/chartype.h>
+#include <wx/log.h>
+#include <wx/dynarray.h>
+#include "libslic3r/PrintConfig.hpp"
+#include <wx/wxcrt.h>
+#include <string>
+#include "slic3r/GUI/PartPlate.hpp"
+#include <cstdlib>
+#include <list>
+#include <algorithm>
+#include <wx/object.h>
+#include <wx/panel.h>
+#include <wx/valnum.h>
+#include "libslic3r/Color.hpp"
+#include "slic3r/GUI/Widgets/StateColor.hpp"
+#include "slic3r/GUI/GUI_Utils.hpp"
+#include <wx/toplevel.h>
+#include <wx/textctrl.h>
+#include "libslic3r/Preset.hpp"
+#include "slic3r/GUI/GUI_ObjectTableSettings.hpp"
+#include "slic3r/GUI/Plater.hpp"
+#include "slic3r/GUI/Widgets/TextInput.hpp"
+#include <wx/defs.h>
 
 //use wxGridWindow to compute position
 //#include "wx/generic/private/grid.h"
@@ -348,11 +381,12 @@ void GridCellFilamentsRenderer::Draw(wxGrid &grid, wxGridCellAttr &attr, wxDC &d
         if ((grid_row->model_volume_type != ModelVolumeType::NEGATIVE_VOLUME) && \
             (grid_row->model_volume_type != ModelVolumeType::SUPPORT_BLOCKER) && \
             (grid_row->model_volume_type != ModelVolumeType::SUPPORT_ENFORCER) && \
-            (grid_row->model_volume_type != ModelVolumeType::PARAMETER_MODIFIER)) {
+            (grid_row->model_volume_type != ModelVolumeType::PARAMETER_MODIFIER) && \
+            !is_precise_seam(grid_row->model_volume_type)) { // Precise Seam is non-printing helper geometry
             dc.DrawBitmap(*bitmap, wxPoint(rect.x + offset_x, rect.y + offset_y));
         }
         else if (grid_row->model_volume_type == ModelVolumeType::PARAMETER_MODIFIER){
-            dc.DrawText("Default", wxPoint(rect.x + offset_x, rect.y + offset_y));
+            dc.DrawText(_L("Default"), wxPoint(rect.x + offset_x, rect.y + offset_y));
         }
 
         text_rect.x += bitmap_width + grid_cell_border_width * 2;
@@ -561,14 +595,23 @@ wxString GridCellSupportEditor::ms_stringValues[2] = { wxT(""), wxT("") };
 
 void GridCellSupportEditor::DoActivate(int row, int col, wxGrid* grid)
 {
-    ObjectGrid* local_table = dynamic_cast<ObjectGrid*>(grid);
     wxGridBlocks cell_array = grid->GetSelectedBlocks();
-   
-    auto left_col = cell_array.begin()->GetLeftCol();
-    auto right_col = cell_array.begin()->GetRightCol();
-    auto top_row = cell_array.begin()->GetTopRow();
-    auto bottom_row = cell_array.begin()->GetBottomRow();
-  
+    auto iter = cell_array.begin();
+
+    int left_col, right_col, top_row, bottom_row;
+    if (iter == cell_array.end()) {
+        // wxWidgets 3.3.x returns an empty range when nothing is selected;
+        // fall back to the cell that triggered activation so the single-cell
+        // branch below handles it.
+        left_col = right_col = col;
+        top_row  = bottom_row = row;
+    } else {
+        left_col   = iter->GetLeftCol();
+        right_col  = iter->GetRightCol();
+        top_row    = iter->GetTopRow();
+        bottom_row = iter->GetBottomRow();
+    }
+
 	if ((left_col == right_col) &&
 		(top_row == bottom_row)) {
 		wxGridCellBoolEditor::DoActivate(row, col, grid);
@@ -1070,7 +1113,7 @@ void ObjectGrid::paste_data( wxTextDataObject& text_data )
     if ((src_row_cnt == 1) && (src_col_cnt == 1))
     {
         if ((dst_col_cnt != 1) || (dst_left_col != src_left_col)) {
-            wxLogWarning(_L("one cell can only be copied to one or multiple cells in the same column"));
+            wxLogWarning(_L("One cell can only be copied to one or more cells in the same column."));
         }
         else {
 			split(buf, string_array);
@@ -1384,10 +1427,9 @@ wxString ObjectGridTable::GetValue (int row, int col)
     else if (grid_col->type == coInt) {
         ConfigOptionInt& option_value = dynamic_cast<ConfigOptionInt&>(option);
         return wxString::Format("%d", option_value.value);
-    }
-    else if (grid_col->type == coFloat) {
-        if (auto option_value_ptr = dynamic_cast<ConfigOptionFloats*>(&option)) {
-            return wxString::Format("%.2f", option_value_ptr->values.front());
+    } else if (grid_col->type == coFloat) {
+        if (auto option_values = dynamic_cast<ConfigOptionFloatsNullable*>(&option)) {
+            return wxString::Format("%.2f", option_values->get_at(0));
         }
         ConfigOptionFloat& option_value = dynamic_cast<ConfigOptionFloat&>(option);
         return wxString::Format("%.2f", option_value.value);
@@ -1523,12 +1565,7 @@ void ObjectGridTable::update_value_to_object(Model* model, ObjectGridRow* grid_r
             object->printable = grid_row->printable.value;
             object->instances[0]->printable = object->printable;
 
-            std::vector<ObjectVolumeID> object_volume_ids;
-            ObjectVolumeID object_volume_id;
-            object_volume_id.object = object;
-            object_volume_id.volume = nullptr;
-            object_volume_ids.push_back(object_volume_id);
-            wxGetApp().obj_list()->printable_state_changed(object_volume_ids);
+            wxGetApp().obj_list()->printable_state_changed({object});
             BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << boost::format(", change object %1%'s printable to %2%")%object->module_name %object->printable;
         }
     }
@@ -1591,16 +1628,25 @@ void ObjectGridTable::SetValue( int row, int col, const wxString& value )
         else {
             update_value_to_object(m_panel->m_model, grid_row, col);
         }
-    }
-    else if (grid_col->type == coFloat) {
-        ConfigOptionFloat &option_value = dynamic_cast<ConfigOptionFloat &>((*grid_row)[(GridColType)col]);
-        ConfigOptionFloat &option_ori_value = dynamic_cast<ConfigOptionFloat &>((*grid_row)[(GridColType)(col+1)]);
+    } else if (grid_col->type == coFloat) {
+        if (auto option_values = dynamic_cast<ConfigOptionFloatsNullable*>(&(*grid_row)[(GridColType) col])) {
+            ConfigOptionFloatsNullable& option_ori_values = dynamic_cast<ConfigOptionFloatsNullable&>((*grid_row)[(GridColType) (col + 1)]);
 
-        double  double_value;
-        value.ToDouble(&double_value);
-        option_value.value = (float)double_value;
+            double double_value;
+            value.ToDouble(&double_value);
+            option_values->values.at(0) = (float) double_value;
 
-        update_value_to_config(grid_row->config, grid_col->key, option_value, option_ori_value);
+            update_value_to_config(grid_row->config, grid_col->key, *option_values, option_ori_values);
+        } else {
+            ConfigOptionFloat& option_value     = dynamic_cast<ConfigOptionFloat&>((*grid_row)[(GridColType) col]);
+            ConfigOptionFloat& option_ori_value = dynamic_cast<ConfigOptionFloat&>((*grid_row)[(GridColType) (col + 1)]);
+
+            double double_value;
+            value.ToDouble(&double_value);
+            option_value.value = (float) double_value;
+
+            update_value_to_config(grid_row->config, grid_col->key, option_value, option_ori_value);
+        }
     }
     else if (grid_col->type == coInt) {
         ConfigOptionInt &option_value = dynamic_cast<ConfigOptionInt &>((*grid_row)[(GridColType)col]);
@@ -1675,8 +1721,11 @@ double ObjectGridTable::GetValueAsDouble( int row, int col )
         return 0;
 
     ObjectGridRow* grid_row = m_grid_data[row - 1];
-    ConfigOptionFloat &option_value = dynamic_cast<ConfigOptionFloat &>((*grid_row)[(GridColType)col]);
-    return (double )option_value.getFloat();
+    if (auto option_values = dynamic_cast<ConfigOptionFloatsNullable*>(&(*grid_row)[(GridColType) col])) {
+        return (double) option_values->get_at(0);
+    }
+    ConfigOptionFloat& option_value = dynamic_cast<ConfigOptionFloat&>((*grid_row)[(GridColType) col]);
+    return (double) option_value.getFloat();
 }
 
 void ObjectGridTable::SetValueAsLong( int row, int col, long value )
@@ -1721,6 +1770,17 @@ void ObjectGridTable::SetValueAsDouble(int row, int col, double value)
         if ((value > 100.f) || (value < 0.f))
             return;
     }
+
+    if (auto option_values = dynamic_cast<ConfigOptionFloatsNullable *>(&(*grid_row)[(GridColType) col])) {
+        ConfigOptionFloatsNullable &option_ori_values = dynamic_cast<ConfigOptionFloatsNullable &>((*grid_row)[(GridColType) (col + 1)]);
+
+        option_values->values.at(0) = (float) value;
+
+        update_value_to_config(grid_row->config, grid_col->key, *option_values, option_ori_values);
+
+        return;
+    }
+
     ConfigOptionFloat &option_value = dynamic_cast<ConfigOptionFloat &>((*grid_row)[(GridColType)col]);
     ConfigOptionFloat &option_ori_value = dynamic_cast<ConfigOptionFloat &>((*grid_row)[(GridColType)(col+1)]);
 
@@ -1904,7 +1964,8 @@ void ObjectGridTable::init_cols(ObjectGrid *object_grid)
     //reset icon for Bed Adhesion
     col = new ObjectGridCol(coEnum, "brim_type_reset", L("Support"), true, true, false, false, wxALIGN_LEFT);
     m_col_data.push_back(col);
-
+    
+    // todo mutli_extruders:
     //object/volume speed
     col       = new ObjectGridCol(coFloat, "outer_wall_speed", L("Speed"), false, false, true, true, wxALIGN_LEFT);
     col->size = object_grid->GetTextExtent(L("Outer wall speed")).x;
@@ -1979,8 +2040,8 @@ void ObjectGridTable::construct_object_configs(ObjectGrid *object_grid)
         object_grid->ori_enable_support = *(global_config.option<ConfigOptionBool>(m_col_data[col_enable_support]->key));
         object_grid->brim_type = *(get_object_config_value<ConfigOptionEnum<BrimType>>(global_config, object_grid->config, m_col_data[col_brim_type]->key));
         object_grid->ori_brim_type = *(global_config.option<ConfigOptionEnum<BrimType>>(m_col_data[col_brim_type]->key));
-        object_grid->speed_perimeter = get_object_speed_value(global_config, object_grid->config, m_col_data[col_speed_perimeter]->key);
-        object_grid->ori_speed_perimeter = get_global_speed_value(global_config, m_col_data[col_speed_perimeter]->key);
+        object_grid->speed_perimeter       = *(get_object_config_value<ConfigOptionFloatsNullable>(global_config, object_grid->config, m_col_data[col_speed_perimeter]->key));
+        object_grid->ori_speed_perimeter   = *(global_config.option<ConfigOptionFloatsNullable>(m_col_data[col_speed_perimeter]->key));
         m_grid_data.push_back(object_grid);
 
         int volume_count = object->volumes.size();
@@ -2029,7 +2090,7 @@ void ObjectGridTable::construct_object_configs(ObjectGrid *object_grid)
             volume_grid->ori_enable_support = object_grid->enable_support;
             volume_grid->brim_type = *(get_volume_config_value<ConfigOptionEnum<BrimType>>(global_config, object_grid->config, volume_grid->config, m_col_data[col_brim_type]->key));
             volume_grid->ori_brim_type = object_grid->brim_type;
-            volume_grid->speed_perimeter = get_volume_speed_value(global_config, object_grid->config, volume_grid->config, m_col_data[col_speed_perimeter]->key);
+            volume_grid->speed_perimeter = *(get_volume_config_value<ConfigOptionFloatsNullable>(global_config, object_grid->config, volume_grid->config, m_col_data[col_speed_perimeter]->key));
             volume_grid->ori_speed_perimeter = object_grid->speed_perimeter;
             m_grid_data.push_back(volume_grid);
         }
@@ -2075,8 +2136,8 @@ void ObjectGridTable::reload_object_data(ObjectGridRow* grid_row, const std::str
         grid_row->ori_enable_support = *(global_config.option<ConfigOptionBool>(m_col_data[col_enable_support]->key));
         grid_row->brim_type = *(get_object_config_value<ConfigOptionEnum<BrimType>>(global_config, grid_row->config, m_col_data[col_brim_type]->key));
         grid_row->ori_brim_type = *(global_config.option<ConfigOptionEnum<BrimType>>(m_col_data[col_brim_type]->key));
-        grid_row->speed_perimeter = get_object_speed_value(global_config, grid_row->config, m_col_data[col_speed_perimeter]->key);
-        grid_row->ori_speed_perimeter = get_global_speed_value(global_config, m_col_data[col_speed_perimeter]->key);
+        grid_row->speed_perimeter       = *(get_object_config_value<ConfigOptionFloatsNullable>(global_config, grid_row->config, m_col_data[col_speed_perimeter]->key));
+        grid_row->ori_speed_perimeter   = *(global_config.option<ConfigOptionFloatsNullable>(m_col_data[col_speed_perimeter]->key));
     }
     else if (category == L("Quality")) {
         grid_row->layer_height = *(get_object_config_value<ConfigOptionFloat>(global_config, grid_row->config, m_col_data[col_layer_height]->key));
@@ -2097,8 +2158,8 @@ void ObjectGridTable::reload_object_data(ObjectGridRow* grid_row, const std::str
         grid_row->ori_brim_type = *(global_config.option<ConfigOptionEnum<BrimType>>(m_col_data[col_brim_type]->key));
     }
     else if (category == L("Speed")) {
-        grid_row->speed_perimeter = get_object_speed_value(global_config, grid_row->config, m_col_data[col_speed_perimeter]->key);
-        grid_row->ori_speed_perimeter = get_global_speed_value(global_config, m_col_data[col_speed_perimeter]->key);
+        grid_row->speed_perimeter = *(get_object_config_value<ConfigOptionFloatsNullable>(global_config, grid_row->config, m_col_data[col_speed_perimeter]->key));
+        grid_row->ori_speed_perimeter = *(global_config.option<ConfigOptionFloatsNullable>(m_col_data[col_speed_perimeter]->key));
     }
 }
 
@@ -2115,7 +2176,7 @@ void ObjectGridTable::reload_part_data(ObjectGridRow* volume_row, ObjectGridRow*
         volume_row->ori_enable_support = object_row->enable_support;
         volume_row->brim_type = *(get_volume_config_value<ConfigOptionEnum<BrimType>>(global_config, object_row->config, volume_row->config, m_col_data[col_brim_type]->key));
         volume_row->ori_brim_type = object_row->brim_type;
-        volume_row->speed_perimeter = get_volume_speed_value(global_config, object_row->config, volume_row->config, m_col_data[col_speed_perimeter]->key);
+        volume_row->speed_perimeter = *(get_volume_config_value<ConfigOptionFloatsNullable>(global_config, object_row->config, volume_row->config, m_col_data[col_speed_perimeter]->key));
         volume_row->ori_speed_perimeter = object_row->speed_perimeter;
     }
     else if (category == L("Quality")) {
@@ -2152,7 +2213,7 @@ void ObjectGridTable::reload_part_data(ObjectGridRow* volume_row, ObjectGridRow*
         volume_row->ori_brim_type = object_row->brim_type;
     }
     else if (category == L("Speed")) {
-        volume_row->speed_perimeter = get_volume_speed_value(global_config, object_row->config, volume_row->config, m_col_data[col_speed_perimeter]->key);
+        volume_row->speed_perimeter = *(get_volume_config_value<ConfigOptionFloatsNullable>(global_config, object_row->config, volume_row->config, m_col_data[col_speed_perimeter]->key));
         if (volume_row->speed_perimeter == object_row->speed_perimeter) {
             volume_row->config->erase(m_col_data[col_speed_perimeter]->key);
         }
@@ -2547,9 +2608,11 @@ bool ObjectGridTable::OnCellLeftClick(int row, int col, ConfigOptionType &type)
 void ObjectGridTable::OnSelectCell(int row, int col)
 {
     m_selected_cells.clear();
+    if (!m_panel->m_side_window)
+        return;
     m_panel->m_side_window->Freeze();
     if (row == 0 || col == col_filaments) {
-        m_panel->m_object_settings->UpdateAndShow(row, false, false, false, nullptr, nullptr, std::string());
+        m_panel->m_object_settings->UpdateAndShowRow(row, false, false, false, nullptr, nullptr, std::string());
     }
     else {
         ObjectGridRow* grid_row = m_grid_data[row - 1];
@@ -2559,7 +2622,7 @@ void ObjectGridTable::OnSelectCell(int row, int col)
 
         //m_panel->m_object_settings->get_og()->set_name(GUI::from_u8(grid_row->name.value));
         //m_panel->m_page_text->SetLabel(GUI::from_u8(grid_row->name.value));
-        m_panel->m_object_settings->UpdateAndShow(row, true, is_object, false, object, grid_row->config, grid_col->category);
+        m_panel->m_object_settings->UpdateAndShowRow(row, true, is_object, false, object, grid_row->config, grid_col->category);
 
         std::vector<ObjectVolumeID> object_volume_ids;
         ObjectVolumeID object_volume_id;
@@ -2735,12 +2798,12 @@ ObjectTablePanel::ObjectTablePanel( wxWindow* parent, wxWindowID id, const wxPoi
     //m_object_grid->AssignTable(m_object_grid_table);
 
     m_side_window = new wxScrolledWindow(this, wxID_ANY, wxDefaultPosition, wxSize(FromDIP(440),FromDIP(480)), wxVSCROLL);
-    m_side_window->SetScrollRate( 0, 5 );
+    m_side_window->SetScrollRate(0, FromDIP(20));
     m_page_sizer = new wxBoxSizer(wxVERTICAL);
     //m_page_top_sizer = new wxBoxSizer(wxHORIZONTAL);
     m_side_window->SetBackgroundColour(wxColour(0xff, 0xff, 0xff));
     m_side_window->SetSizer(m_page_sizer);
-    m_side_window->SetScrollbars(1, 20, 1, 2);
+    m_side_window->SetScrollbars(1, FromDIP(20), 1, 2);
     //m_side_window->ShowScrollbars(wxSHOW_SB_NEVER, wxSHOW_SB_NEVER);
 
     //m_side_window->EnableScrolling(false, true);
@@ -2808,48 +2871,50 @@ int ObjectTablePanel::init_bitmap()
 
 int ObjectTablePanel::init_filaments_and_colors()
 {
+    //DynamicPrintConfig&  global_config   = wxGetApp().preset_bundle->prints.get_edited_preset().config;
+    const DynamicPrintConfig* global_config = m_plater->config();
     const std::vector<std::string> filament_presets = wxGetApp().preset_bundle->filament_presets;
-    const std::vector<std::string> filament_colors = wxGetApp().plater()->get_extruder_colors_from_plater_config();
-    m_filaments_count = filament_colors.size();
+    m_filaments_count = filament_presets.size();
     if (m_filaments_count <= 0) {
         BOOST_LOG_TRIVIAL(error) << __FUNCTION__ << boost::format(", can not get filaments, count: %1%, set to default") %m_filaments_count;
         set_default_filaments_and_colors();
         return -1;
     }
 
+    const ConfigOptionStrings* filament_opt = dynamic_cast<const ConfigOptionStrings*>(global_config->option("filament_colour"));
+    if (filament_opt == nullptr) {
+        set_default_filaments_and_colors();
+        return -1;
+    }
     m_filaments_colors.resize(m_filaments_count);
     m_filaments_name.resize(m_filaments_count);
-    const size_t physical_count = filament_presets.size();
+    unsigned int color_count = filament_opt->values.size();
+    if (color_count != m_filaments_count) {
+        BOOST_LOG_TRIVIAL(warning) << __FUNCTION__ << boost::format(", invalid color count:%1%, extruder count: %2%") %color_count %m_filaments_count;
+    }
+
+    unsigned int i = 0;
     ColorRGB rgb;
-
-    for (int i = 0; i < m_filaments_count; ++i) {
-        if (size_t(i) < filament_colors.size() && decode_color(filament_colors[size_t(i)], rgb))
-            m_filaments_colors[i] = wxColour(rgb.r_uchar(), rgb.g_uchar(), rgb.b_uchar());
-        else
-            m_filaments_colors[i] = *wxGREEN;
-
-        if (size_t(i) < physical_count) {
-            m_filaments_name[i] = wxString(std::to_string(i + 1) + ": " + filament_presets[size_t(i)]);
-            continue;
-        }
-
-        size_t mixed_offset = 0;
-        for (const MixedFilament &mf : wxGetApp().preset_bundle->mixed_filaments.mixed_filaments()) {
-            if (!mf.enabled || mf.deleted)
-                continue;
-            if (size_t(i) != physical_count + mixed_offset) {
-                ++mixed_offset;
-                continue;
+    while (i < m_filaments_count) {
+        const std::string& txt_color = global_config->opt_string("filament_colour", i);
+        if (i < color_count) {
+            if (decode_color(txt_color, rgb))
+            {
+                m_filaments_colors[i] = wxColour(rgb.r_uchar(), rgb.g_uchar(), rgb.b_uchar());
             }
-
-            m_filaments_name[i] = wxString::Format("%d: Mixed Filament %d (F%u + F%u)",
-                                                   i + 1, i + 1,
-                                                   unsigned(mf.component_a), unsigned(mf.component_b));
-            break;
+            else
+            {
+                m_filaments_colors[i] = *wxGREEN;
+            }
+        }
+        else {
+            m_filaments_colors[i] = *wxGREEN;
         }
 
-        if (m_filaments_name[i].empty())
-            m_filaments_name[i] = wxString::Format("%d: Filament %d", i + 1, i + 1);
+        //parse the filaments
+        m_filaments_name[i] = wxString(std::to_string(i+1) + ": " + filament_presets[i]);
+
+        i++;
     }
 
     return 0;
@@ -2873,10 +2938,10 @@ void ObjectTablePanel::load_data()
 
     m_object_grid->SetColLabelValue(ObjectGridTable::col_printable, _L("Printable"));
     m_object_grid->SetColLabelValue(ObjectGridTable::col_printable_reset, "");
-    m_object_grid->SetColLabelValue(ObjectGridTable::col_plate_index, wxString::Format("%S%S", _L("Plate"), wxString::FromUTF8("\u2191\u2193")));
+    m_object_grid->SetColLabelValue(ObjectGridTable::col_plate_index, wxString::Format("%S %S", _L("Plate"), wxString::FromUTF8("\u2191\u2193")));
     /*m_object_grid->SetColLabelValue(ObjectGridTable::col_assemble_name, L("Module"));*/
-    m_object_grid->SetColLabelValue(ObjectGridTable::col_name, wxString::Format("%S%S", _L("Name"), wxString::FromUTF8("\u2191\u2193")));
-    m_object_grid->SetColLabelValue(ObjectGridTable::col_filaments, wxString::Format("%S%S", _L("Filament"), wxString::FromUTF8("\u2191\u2193")));
+    m_object_grid->SetColLabelValue(ObjectGridTable::col_name, wxString::Format("%S %S", _L("Name"), wxString::FromUTF8("\u2191\u2193")));
+    m_object_grid->SetColLabelValue(ObjectGridTable::col_filaments, wxString::Format("%S %S", _L("Filament"), wxString::FromUTF8("\u2191\u2193")));
     m_object_grid->SetColLabelValue(ObjectGridTable::col_filaments_reset, "");
     m_object_grid->SetColLabelValue(ObjectGridTable::col_layer_height, _L("Layer height"));
     m_object_grid->SetColLabelValue(ObjectGridTable::col_layer_height_reset, "");
@@ -2891,8 +2956,8 @@ void ObjectTablePanel::load_data()
     m_object_grid->SetColLabelValue(ObjectGridTable::col_speed_perimeter, _L("Outer wall speed"));
     m_object_grid->SetColLabelValue(ObjectGridTable::col_speed_perimeter_reset, "");
     m_object_grid->SetLabelFont(Label::Head_13);
-    m_object_grid->SetLabelTextColour(StateColor::darkModeColorFor(wxColour("#303A3C")));
-    m_object_grid->SetLabelBackgroundColour( wxColour("#FFFFFF"));
+    m_object_grid->SetLabelTextColour(StateColor::darkModeColorFor(wxColour("#363636")));
+    m_object_grid->SetLabelBackgroundColour( StateColor::darkModeColorFor(wxColour("#D9D9D9")));
 #else
     m_object_grid->HideColLabels();
 #endif
@@ -2931,6 +2996,12 @@ void ObjectTablePanel::load_data()
     //m_object_grid->SetSelectionForeground(wxColour(0xDB,0xFD,0xE7));
     //m_object_grid->SetSelectionBackground(*wxWHITE);
     m_object_grid->SetDefaultCellBackgroundColour(StateColor::darkModeColorFor(*wxWHITE));
+    m_object_grid->SetSelectionBackground(StateColor::darkModeColorFor(wxColour("#BFE1DE"))); // its not fully working since background of control's covers cell 
+
+    m_object_grid->SetCellHighlightColour(StateColor::darkModeColorFor(wxColour("#009688")));
+    m_object_grid->SetCellHighlightPenWidth(FromDIP(1));
+    m_object_grid->SetCellHighlightROPenWidth(FromDIP(1)); // Highlight for read-only cells
+
     for (int col = 0; col < cols; col++)
     {
         ObjectGridTable::ObjectGridCol* grid_col = m_object_grid_table->get_grid_col(col);
@@ -2980,7 +3051,8 @@ void ObjectTablePanel::load_data()
                         if (col == ObjectGridTable::col_filaments) {
                             if ((grid_row->model_volume_type != ModelVolumeType::NEGATIVE_VOLUME) && \
                                 (grid_row->model_volume_type != ModelVolumeType::SUPPORT_BLOCKER) && \
-                                (grid_row->model_volume_type != ModelVolumeType::SUPPORT_ENFORCER)) {
+                                (grid_row->model_volume_type != ModelVolumeType::SUPPORT_ENFORCER) && \
+                                !is_precise_seam(grid_row->model_volume_type)) { // Precise Seam is non-printing helper geometry
                                 GridCellFilamentsEditor* filament_editor = new GridCellFilamentsEditor(grid_col->choices, false, &m_color_bitmaps);
                                 m_object_grid->SetCellEditor(row, col, filament_editor);
                                 m_object_grid->SetCellRenderer(row, col, new GridCellFilamentsRenderer());
@@ -3283,7 +3355,7 @@ void ObjectTablePanel::msw_rescale() {
 // ObjectTableDialog
 // ----------------------------------------------------------------------------
 ObjectTableDialog::ObjectTableDialog(wxWindow* parent, Plater* platerObj, Model *modelObj, wxSize maxSize)
-    : GUI::DPIDialog(parent, wxID_ANY, _L("Object/Part Setting"), wxDefaultPosition, wxDefaultSize, wxCAPTION | wxCLOSE_BOX | wxRESIZE_BORDER)
+    : GUI::DPIDialog(parent, wxID_ANY, _L("Object/Part Settings"), wxDefaultPosition, wxDefaultSize, wxCAPTION | wxCLOSE_BOX | wxRESIZE_BORDER)
     ,
     m_model(modelObj), m_plater(platerObj)
 {
@@ -3312,10 +3384,6 @@ ObjectTableDialog::ObjectTableDialog(wxWindow* parent, Plater* platerObj, Model 
     // And also actually enable them.
     //m_panel->SetScrollRate(10, 10);
     auto m_main_sizer = new wxBoxSizer(wxVERTICAL);
-
-    // icon
-    std::string icon_path = (boost::format("%1%/images/Snapmaker_Orca.ico") % resources_dir()).str();
-    SetIcon(wxIcon(encode_path(icon_path.c_str()), wxBITMAP_TYPE_ICO));
 
     //top line
     auto m_line_top = new wxPanel(this, wxID_ANY, wxDefaultPosition, wxSize(-1, 2), wxTAB_TRAVERSAL);
@@ -3420,7 +3488,9 @@ void ObjectTableDialog::OnClose(wxCloseEvent &evt)
 
 void ObjectTableDialog::OnText(wxKeyEvent &evt)
 {
-	if (evt.GetKeyCode() != WXK_ESCAPE) {
+	if (evt.GetKeyCode() == WXK_ESCAPE) {
+		Close();
+	} else {
 		evt.Skip();
 	}
 }
@@ -3491,13 +3561,13 @@ void GridCellTextEditor::BeginEdit(int row, int col, wxGrid *grid)
     Text()->GetTextCtrl()->SetInsertionPointEnd();
     
 
-    m_control->Bind(wxEVT_TEXT_ENTER, [this, row, col, grid](wxCommandEvent &e) {
+    m_control->Bind(wxEVT_TEXT_ENTER, [grid](wxCommandEvent &e) {
         grid->HideCellEditControl();
         grid->SaveEditControlValue();
         e.Skip();
     });
 
-    m_control->Bind(wxEVT_CHAR_HOOK, [this, row, col, grid](wxKeyEvent &e) {
+    m_control->Bind(wxEVT_CHAR_HOOK, [grid](wxKeyEvent &e) {
 		if (e.GetKeyCode() == WXK_ESCAPE) {
             grid->HideCellEditControl();
             grid->SaveEditControlValue();

@@ -1,7 +1,13 @@
 #ifndef MODELARRANGE_HPP
 #define MODELARRANGE_HPP
 
+#include <functional>
+#include <cstddef>
 #include <libslic3r/Arrange.hpp>
+#include <vector>
+#include "Exception.hpp"
+#include <string>
+#include "Point.hpp"
 #include "libslic3r/PrintConfig.hpp"
 #include "libslic3r/Model.hpp"
 
@@ -17,9 +23,9 @@ using arrangement::CircleBed;
 // Do something with ArrangePolygons in virtual beds
 using VirtualBedFn = std::function<void(arrangement::ArrangePolygon&)>;
 
-[[noreturn]] inline void throw_if_out_of_bed(arrangement::ArrangePolygon&) 
+[[noreturn]] inline void throw_if_out_of_bed(arrangement::ArrangePolygon& ap)
 {
-    throw Slic3r::RuntimeError("Objects could not fit on the bed");
+    throw Slic3r::RuntimeError("Objects could not fit on the bed; bed_idx==" + std::to_string(ap.bed_idx));
 }
 
 ArrangePolygons get_arrange_polys(const Model &model, ModelInstancePtrs &instances);

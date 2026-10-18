@@ -1,5 +1,21 @@
 #include "Snapshot.hpp"
 
+#include <fstream>
+#include <stdexcept>
+#include <cstdio>
+#include <algorithm>
+#include <ios>
+#include <ostream>
+#include <string>
+#include <cassert>
+#include <map>
+#include <set>
+#include <boost/filesystem/directory.hpp>
+#include <cstring>
+#include <boost/filesystem/file_status.hpp>
+#include "libslic3r/Exception.hpp"
+#include "slic3r/Config/Version.hpp"
+#include <exception>
 #include <time.h>
 
 #include <boost/algorithm/string/predicate.hpp>
@@ -26,12 +42,15 @@
 #include "../GUI/MainFrame.hpp"
 #include "../GUI/MsgDialog.hpp"
 
+#include <vector>
+#include <utility>
 #include <wx/richmsgdlg.h>
+#include <wx/string.h>
 
 #define SLIC3R_SNAPSHOTS_DIR "snapshots"
 #define SLIC3R_SNAPSHOT_FILE "snapshot.ini"
 
-namespace Slic3r { 
+namespace Slic3r {
 namespace GUI {
 namespace Config {
 
@@ -132,7 +151,7 @@ void Snapshot::load_ini(const std::string &path)
             vc.name = section.first.substr(group_name_vendor.size());
             for (auto &kvp : section.second) {
             	if (kvp.first == "version" || kvp.first == "min_slic3r_version" || kvp.first == "max_slic3r_version") {
-            		// Version of the vendor specific config bundle bundled with this snapshot.            		
+            		// Version of the vendor specific config bundle bundled with this snapshot.
                 	auto semver = Semver::parse(kvp.second.data());
                 	if (! semver)
                 		throw_on_parse_error("invalid " + kvp.first + " format for " + section.first);
@@ -155,11 +174,11 @@ void Snapshot::load_ini(const std::string &path)
         }
     }
     // Sort the vendors lexicographically.
-    std::sort(this->vendor_configs.begin(), this->vendor_configs.begin(), 
+    std::sort(this->vendor_configs.begin(), this->vendor_configs.begin(),
         [](const VendorConfig &cfg1, const VendorConfig &cfg2) { return cfg1.name < cfg2.name; });
 }
 
-static std::string reason_string(const Snapshot::Reason reason) 
+static std::string reason_string(const Snapshot::Reason reason)
 {
     switch (reason) {
     case Snapshot::SNAPSHOT_UPGRADE:
@@ -372,9 +391,9 @@ static void copy_config_dir_single_level(const boost::filesystem::path &path_src
 {
 //BBS: remove snapshots function currently
 #if 0
-    if (! boost::filesystem::is_directory(path_dst) && 
+    if (! boost::filesystem::is_directory(path_dst) &&
         ! boost::filesystem::create_directory(path_dst))
-        throw Slic3r::RuntimeError(std::string("Snapmaker_Orca was unable to create a directory at ") + path_dst.string());
+        throw Slic3r::RuntimeError(std::string("OrcaSlicer was unable to create a directory at ") + path_dst.string());
 
     for (auto &dir_entry : boost::filesystem::directory_iterator(path_src))
         if (Slic3r::is_ini_file(dir_entry))
@@ -432,14 +451,9 @@ const Snapshot&	SnapshotDB::take_snapshot(const AppConfig &app_config, Snapshot:
                 cfg.models_variants_installed.erase(it ++);
             else
                 ++ it;
-        // Read the active config bundle, parse the config version.
-        PresetBundle bundle;
-        //BBS: change directoties by design
-        //bundle.load_configbundle((data_dir / PRESET_SYSTEM_DIR / (cfg.name + ".ini")).string(), PresetBundle::LoadConfigBundleAttribute::LoadVendorOnly, ForwardCompatibilitySubstitutionRule::EnableSilent);
-        bundle.load_vendor_configs_from_json((data_dir/PRESET_SYSTEM_DIR).string(), cfg.name, PresetBundle::LoadConfigBundleAttribute::LoadVendorOnly, ForwardCompatibilitySubstitutionRule::EnableSilent);
-        for (const auto &vp : bundle.vendors)
-            if (vp.second.id == cfg.name)
-                cfg.version.config_version = vp.second.config_version;
+        // Orca: the version the vendor is installed at, read from its profile or —
+        // where the cache is the whole installation — from the cache's own stamp.
+        cfg.version.config_version = installed_vendor_version(cfg.name);
         snapshot.vendor_configs.emplace_back(std::move(cfg));
     }
 
@@ -521,7 +535,7 @@ SnapshotDB::const_iterator SnapshotDB::snapshot_with_vendor_preset(const std::st
     key.name = vendor_name;
     for (auto it = m_snapshots.begin(); it != m_snapshots.end(); ++ it) {
         const Snapshot &snapshot = *it;
-        auto it_vendor_config = std::lower_bound(snapshot.vendor_configs.begin(), snapshot.vendor_configs.end(), 
+        auto it_vendor_config = std::lower_bound(snapshot.vendor_configs.begin(), snapshot.vendor_configs.end(),
             key, [](const Snapshot::VendorConfig &cfg1, const Snapshot::VendorConfig &cfg2) { return cfg1.name < cfg2.name; });
         if (it_vendor_config != snapshot.vendor_configs.end() && it_vendor_config->name == vendor_name &&
             config_version == it_vendor_config->version.config_version) {
@@ -548,7 +562,7 @@ boost::filesystem::path SnapshotDB::create_db_dir()
     for (const boost::filesystem::path &path : { data_dir, snapshots_dir }) {
 		boost::filesystem::path subdir = path;
         subdir.make_preferred();
-        if (! boost::filesystem::is_directory(subdir) && 
+        if (! boost::filesystem::is_directory(subdir) &&
             ! boost::filesystem::create_directory(subdir))
             throw Slic3r::RuntimeError(std::string("Slic3r was unable to create a directory at ") + subdir.string());
     }
@@ -580,7 +594,7 @@ const Snapshot* take_config_snapshot_report_error(const AppConfig &app_config, S
     try {
         return &SnapshotDB::singleton().take_snapshot(app_config, reason, comment);
     } catch (std::exception &err) {
-        show_error(static_cast<wxWindow*>(wxGetApp().mainframe), 
+        show_error(static_cast<wxWindow*>(wxGetApp().mainframe),
             _L("Taking a configuration snapshot failed.") + "\n\n" + from_u8(err.what()));
         return nullptr;
     }
@@ -593,8 +607,8 @@ bool take_config_snapshot_cancel_on_error(const AppConfig &app_config, Snapshot:
         return true;
     } catch (std::exception &err) {
         RichMessageDialog dlg(static_cast<wxWindow*>(wxGetApp().mainframe),
-            _L("Snapmaker Orca has encountered an error while taking a configuration snapshot.") + "\n\n" + from_u8(err.what()) + "\n\n" + from_u8(message),
-            _L("Snapmaker Orca error"),
+            _L("OrcaSlicer has encountered an error while taking a configuration snapshot.") + "\n\n" + from_u8(err.what()) + "\n\n" + from_u8(message),
+            _L("OrcaSlicer error"),
             wxYES_NO);
         dlg.SetYesNoLabels(_L("Continue"), _L("Abort"));
         return dlg.ShowModal() == wxID_YES;

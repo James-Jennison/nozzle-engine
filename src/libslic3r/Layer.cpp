@@ -1,54 +1,32 @@
 #include "Layer.hpp"
 #include "ClipperUtils.hpp"
+#include "Polygon.hpp"
+#include "Point.hpp"
+#include "ExPolygon.hpp"
+#include "ExtrusionEntity.hpp"
+#include "Exception.hpp"
+#include "Flow.hpp"
 #include "Print.hpp"
-#include "Fill/Fill.hpp"
+#include "PrintConfig.hpp"
 #include "ShortestPath.hpp"
 #include "SVG.hpp"
 #include "BoundingBox.hpp"
+#include "Surface.hpp"
+#include "libslic3r.h"
+#include "Utils.hpp"
 
+#include <algorithm>
 #include <boost/log/trivial.hpp>
+#include <vector>
+#include <cstddef>
+#include <utility>
+#include <cassert>
+#include <map>
+#include "Config.hpp"
+#include "MultiMaterialSegmentation.hpp"
+#include "ObjectID.hpp"
 
 namespace Slic3r {
-
-namespace {
-
-SurfaceCollection split_fill_surfaces_by_region(const SurfaceCollection &fill_surfaces, const SurfaceCollection &region_slices)
-{
-    SurfaceCollection out;
-    if (fill_surfaces.empty() || region_slices.empty())
-        return out;
-
-    for (size_t surface_type = 0; surface_type < size_t(stCount); ++surface_type) {
-        Surfaces typed_fill_surfaces;
-        for (const Surface &surface : fill_surfaces.surfaces)
-            if (surface.surface_type == SurfaceType(surface_type))
-                typed_fill_surfaces.emplace_back(surface);
-
-        if (typed_fill_surfaces.empty())
-            continue;
-
-        ExPolygons clipped = intersection_ex(typed_fill_surfaces, region_slices.surfaces, ApplySafetyOffset::Yes);
-        if (!clipped.empty())
-            out.append(std::move(clipped), SurfaceType(surface_type));
-    }
-
-    return out;
-}
-
-using SliceMergeKey = std::tuple<int, double, unsigned short, double, unsigned short>;
-
-SliceMergeKey slice_merge_key(const Surface &surface)
-{
-    return {
-        int(surface.surface_type),
-        surface.thickness,
-        surface.thickness_layers,
-        surface.bridge_angle,
-        surface.extra_perimeters
-    };
-}
-
-} // namespace
 
 Layer::~Layer()
 {
@@ -87,19 +65,19 @@ void Layer::make_slices()
             polygons_append(slices_p, to_polygons(layerm->slices.surfaces));
         slices = union_safety_offset_ex(slices_p);
     }
-    
+
     this->lslices.clear();
     this->lslices.reserve(slices.size());
-    
+
     // prepare ordering points
     Points ordering_points;
     ordering_points.reserve(slices.size());
     for (const ExPolygon &ex : slices)
         ordering_points.push_back(ex.contour.first_point());
-    
+
     // sort slices
     std::vector<Points::size_type> order = chain_points(ordering_points);
-    
+
     // populate slices vector
     for (size_t i : order)
         this->lslices.emplace_back(std::move(slices[i]));
@@ -176,21 +154,24 @@ ExPolygons Layer::merged(float offset_scaled) const
     return out;
 }
 
-bool Layer::is_perimeter_compatible(const PrintRegion& a, const PrintRegion& b)
+bool Layer::is_perimeter_compatible(const Print& print, const PrintRegion& a, const PrintRegion& b)
 {
     const PrintRegionConfig& config       = a.config();
     const PrintRegionConfig& other_config = b.config();
 
-    return config.wall_filament             == other_config.wall_filament
+        return config.outer_wall_filament_id       == other_config.outer_wall_filament_id
+		&& config.inner_wall_filament_id       == other_config.inner_wall_filament_id
 		&& config.wall_loops                  == other_config.wall_loops
 		&& config.wall_sequence               == other_config.wall_sequence
 		&& config.is_infill_first             == other_config.is_infill_first
-		&& config.inner_wall_speed             == other_config.inner_wall_speed
-		&& config.outer_wall_speed    == other_config.outer_wall_speed
-		&& config.small_perimeter_speed    == other_config.small_perimeter_speed
-        && config.gap_infill_speed == other_config.gap_infill_speed
+		&& config.inner_wall_speed.get_at(print.get_extruder_id(config.outer_wall_filament_id)) == other_config.inner_wall_speed.get_at(print.get_extruder_id(config.outer_wall_filament_id))
+		&& config.outer_wall_speed.get_at(print.get_extruder_id(config.outer_wall_filament_id)) == other_config.outer_wall_speed.get_at(print.get_extruder_id(config.outer_wall_filament_id))
+		&& config.small_perimeter_speed.get_at(print.get_extruder_id(config.outer_wall_filament_id)) == other_config.small_perimeter_speed.get_at(print.get_extruder_id(config.outer_wall_filament_id))
+		&& config.small_support_perimeter_speed.get_at(print.get_extruder_id(config.outer_wall_filament_id)) == other_config.small_support_perimeter_speed.get_at(print.get_extruder_id(config.outer_wall_filament_id))
+        && config.gap_infill_speed.get_at(print.get_extruder_id(config.outer_wall_filament_id)) == other_config.gap_infill_speed.get_at(print.get_extruder_id(config.outer_wall_filament_id))
         && config.filter_out_gap_fill.value == other_config.filter_out_gap_fill.value
 		&& config.detect_overhang_wall                   == other_config.detect_overhang_wall
+		&& config.unsupported_wall_last                  == other_config.unsupported_wall_last
 		&& config.overhang_reverse                       == other_config.overhang_reverse
 		&& config.overhang_reverse_threshold             == other_config.overhang_reverse_threshold
 		&& config.wall_direction                         == other_config.wall_direction
@@ -199,6 +180,12 @@ bool Layer::is_perimeter_compatible(const PrintRegion& a, const PrintRegion& b)
 		&& config.detect_thin_wall                  == other_config.detect_thin_wall
 		&& config.infill_wall_overlap              == other_config.infill_wall_overlap
         && config.top_bottom_infill_wall_overlap              == other_config.top_bottom_infill_wall_overlap
+        // Orca: these flags directly change the effective wall count produced by the perimeter
+        // generator. If two regions disagree on any of them, merging their slices into one shared make_perimeters
+        // call would silently use the first region's flag for both.
+        && config.only_one_wall_first_layer == other_config.only_one_wall_first_layer
+        && config.only_one_wall_top         == other_config.only_one_wall_top
+        && config.min_width_top_surface     == other_config.min_width_top_surface
         && config.seam_slope_type         == other_config.seam_slope_type
         && config.seam_slope_conditional == other_config.seam_slope_conditional
         && config.scarf_angle_threshold  == other_config.scarf_angle_threshold
@@ -218,11 +205,17 @@ bool Layer::is_perimeter_compatible(const PrintRegion& a, const PrintRegion& b)
 void Layer::make_perimeters()
 {
     BOOST_LOG_TRIVIAL(trace) << "Generating perimeters for layer " << this->id();
-    
+
+    const auto clear_generated_extrusions = [](LayerRegion *layer_region) {
+        layer_region->perimeters.clear();
+        layer_region->fills.clear();
+        layer_region->thin_fills.clear();
+    };
+
     // keep track of regions whose perimeters we have already generated
     std::vector<unsigned char> done(m_regions.size(), false);
-    
-    for (LayerRegionPtrs::iterator layerm = m_regions.begin(); layerm != m_regions.end(); ++ layerm) 
+
+    for (LayerRegionPtrs::iterator layerm = m_regions.begin(); layerm != m_regions.end(); ++ layerm)
     	if ((*layerm)->slices.empty()) {
  			(*layerm)->perimeters.clear();
  			(*layerm)->fills.clear();
@@ -234,7 +227,7 @@ void Layer::make_perimeters()
 	        BOOST_LOG_TRIVIAL(trace) << "Generating perimeters for layer " << this->id() << ", region " << region_id;
 	        done[region_id] = true;
 	        const PrintRegion &this_region = (*layerm)->region();
-	        
+
 	        // find compatible regions
 	        LayerRegionPtrs layerms;
 	        layerms.push_back(*layerm);
@@ -242,38 +235,46 @@ void Layer::make_perimeters()
 	            if (! (*it)->slices.empty()) {
 		            LayerRegion* other_layerm = *it;
 		            const PrintRegion &other_region = other_layerm->region();
-                    if (is_perimeter_compatible(this_region, other_region))
-		            {
-			 			other_layerm->perimeters.clear();
-			 			other_layerm->fills.clear();
-			 			other_layerm->thin_fills.clear();
-		                layerms.push_back(other_layerm);
-		                done[it - m_regions.begin()] = true;
-		            }
+                    // Per-part gradient tags a region with its owning ModelVolume; merging two
+                    // differently-tagged regions would collapse volumes that need independent
+                    // gradient runs. Both tags are invalid unless per-part gradient is on, so
+                    // this is a no-op for every other configuration.
+                    if (this_region.gradient_volume_id() != other_region.gradient_volume_id())
+                        continue;
+                    if (is_perimeter_compatible(*m_object->print(), this_region, other_region))
+                    {
+                        clear_generated_extrusions(other_layerm);
+                        layerms.push_back(other_layerm);
+                        done[it - m_regions.begin()] = true;
+                    }
 		        }
-	        
+
 	        if (layerms.size() == 1) {  // optimization
 	            (*layerm)->fill_surfaces.surfaces.clear();
                 (*layerm)->make_perimeters((*layerm)->slices, {*layerm}, &(*layerm)->fill_surfaces, &(*layerm)->fill_no_overlap_expolygons);
 	            (*layerm)->fill_expolygons = to_expolygons((*layerm)->fill_surfaces.surfaces);
 	        } else {
+	            // Orca: Unlike the compatible regions above, the initiating region has not
+	            // been cleared yet and may contain paths from a previous incompatible run.
+	            clear_generated_extrusions(*layerm);
+
 	            SurfaceCollection new_slices;
 	            // Use the region with highest infill rate, as the make_perimeters() function below decides on the gap fill based on the infill existence.
 	            LayerRegion *layerm_config = layerms.front();
 	            {
-	                // Keep surface typing intact when compatible regions are merged for perimeter generation.
-	                std::map<SliceMergeKey, Surfaces> slices;
+	                // group slices (surfaces) according to number of extra perimeters
+	                std::map<unsigned short, Surfaces> slices;  // extra_perimeters => [ surface, surface... ]
 	                for (LayerRegion *layerm : layerms) {
 	                    for (const Surface &surface : layerm->slices.surfaces)
-	                        slices[slice_merge_key(surface)].emplace_back(surface);
+	                        slices[surface.extra_perimeters].emplace_back(surface);
 	                    if (layerm->region().config().sparse_infill_density > layerm_config->region().config().sparse_infill_density)
 	                    	layerm_config = layerm;
 	                }
 	                // merge the surfaces assigned to each group
-	                for (auto &entry : slices)
-	                    new_slices.append(offset_ex(entry.second, ClipperSafetyOffset), entry.second.front());
+	                for (std::pair<const unsigned short,Surfaces> &surfaces_with_extra_perimeters : slices)
+	                    new_slices.append(offset_ex(surfaces_with_extra_perimeters.second, ClipperSafetyOffset), surfaces_with_extra_perimeters.second.front());
 	            }
-	            
+
 	            // make perimeters
 	            SurfaceCollection fill_surfaces;
                 //BBS
@@ -281,14 +282,31 @@ void Layer::make_perimeters()
 	            layerm_config->make_perimeters(new_slices, layerms, &fill_surfaces, &fill_no_overlap);
 
 	            // assign fill_surfaces to each layer
-	            if (!fill_surfaces.surfaces.empty()) { 
+	            if (!fill_surfaces.surfaces.empty()) {
 	                for (LayerRegionPtrs::iterator l = layerms.begin(); l != layerms.end(); ++l) {
 	                    // Separate the fill surfaces.
-                        SurfaceCollection split_fill_surfaces = split_fill_surfaces_by_region(fill_surfaces, (*l)->slices);
-	                    (*l)->fill_expolygons = to_expolygons(split_fill_surfaces.surfaces);
-	                    (*l)->fill_surfaces = std::move(split_fill_surfaces);
+	                    ExPolygons expp = intersection_ex(fill_surfaces.surfaces, (*l)->slices.surfaces);
+	                    (*l)->fill_expolygons = expp;
+	                    (*l)->fill_surfaces.set(std::move(expp), fill_surfaces.surfaces.front());
                         //BBS: Separate fill_no_overlap
-                        (*l)->fill_no_overlap_expolygons = intersection_ex((*l)->slices.surfaces, fill_no_overlap, ApplySafetyOffset::Yes);
+                        (*l)->fill_no_overlap_expolygons = intersection_ex((*l)->slices.surfaces, fill_no_overlap);
+	                }
+
+	                // When counterbore hole bridging (chbFilled) is active, process_no_bridge may
+	                // create fill surfaces that extend beyond all region slices (e.g. by clearing
+	                // holes in the bridge expolygon). These "extra" fills are lost during the
+	                // intersection-based splitting above. Recover them and assign to the first
+	                // merged region so the sacrificial bridge layer is not broken.
+	                if (layerm_config->region().config().counterbore_hole_bridging.value != chbNone) {
+	                    Polygons all_region_slices_p;
+	                    for (LayerRegion *l : layerms)
+	                        polygons_append(all_region_slices_p, to_polygons(l->slices.surfaces));
+	                    ExPolygons extra_fill = diff_ex(fill_surfaces.surfaces, all_region_slices_p, ApplySafetyOffset::Yes);
+	                    if (!extra_fill.empty()) {
+	                        append(layerms.front()->fill_expolygons, extra_fill);
+	                        layerms.front()->fill_expolygons = union_ex(layerms.front()->fill_expolygons);
+	                        layerms.front()->fill_surfaces.append(std::move(extra_fill), fill_surfaces.surfaces.front());
+	                    }
 	                }
 	            }
 	        }
@@ -312,7 +330,7 @@ void Layer::export_region_slices_to_svg(const char *path) const
         for (const auto &surface : region->slices.surfaces)
             svg.draw(surface.expolygon, surface_type_to_color_name(surface.surface_type), transparency);
     export_surface_type_legend_to_svg(svg, legend_pos);
-    svg.Close(); 
+    svg.Close();
 }
 
 // Export to "out/LayerRegion-name-%d.svg" with an increasing index with every export.
@@ -360,7 +378,7 @@ void Layer::simplify_support_entity_collection(ExtrusionEntityCollection* entity
 //BBS: method to simplify support path
 void Layer::simplify_support_path(ExtrusionPath * path)
 {
-    const auto print_config = this->object()->print()->config();
+    const auto &print_config = this->object()->print()->config();
     const bool spiral_mode = print_config.spiral_mode;
     const bool enable_arc_fitting = print_config.enable_arc_fitting;
     const auto scaled_resolution = scaled<double>(print_config.resolution.value);
@@ -375,7 +393,7 @@ void Layer::simplify_support_path(ExtrusionPath * path)
 //BBS: method to simplify support path
 void Layer::simplify_support_multi_path(ExtrusionMultiPath* multipath)
 {
-    const auto print_config = this->object()->print()->config();
+    const auto &print_config = this->object()->print()->config();
     const bool spiral_mode = print_config.spiral_mode;
     const bool enable_arc_fitting = print_config.enable_arc_fitting;
     const auto scaled_resolution = scaled<double>(print_config.resolution.value);
@@ -392,7 +410,7 @@ void Layer::simplify_support_multi_path(ExtrusionMultiPath* multipath)
 //BBS: method to simplify support path
 void Layer::simplify_support_loop(ExtrusionLoop* loop)
 {
-    const auto print_config = this->object()->print()->config();
+    const auto &print_config = this->object()->print()->config();
     const bool spiral_mode = print_config.spiral_mode;
     const bool enable_arc_fitting = print_config.enable_arc_fitting;
     const auto scaled_resolution = scaled<double>(print_config.resolution.value);
@@ -419,15 +437,20 @@ coordf_t Layer::get_sparse_infill_max_void_area()
     double max_void_area = 0.;
     for (auto layerm : m_regions) {
         Flow flow = layerm->flow(frInfill);
-        float density = layerm->region().config().sparse_infill_density;
-        InfillPattern pattern = layerm->region().config().sparse_infill_pattern;
+        const PrintRegionConfig &config = layerm->region().config();
+        float density = config.sparse_infill_density;
+        InfillPattern pattern = config.sparse_infill_pattern;
         if (density == 0.)
             return -1;
+        // Orca: the adaptive TPMS infill is as sparse as its interior density.
+        if (density < 100.f && config.tpms_adaptive != TpmsAdaptiveMode::Disabled && is_tpms_adaptive_pattern(pattern))
+            density = std::min(density, std::max(1.f, float(config.tpms_interior_density)));
 
         //BBS: rough estimation and need to be optimized
         double spacing = flow.scaled_spacing() * (100 - density) / density;
         switch (pattern) {
             case ipConcentric:
+            case ipSpiralInset:
             case ipRectilinear:
             case ipLine:
             case ipGyroid:
@@ -460,6 +483,11 @@ coordf_t Layer::get_sparse_infill_max_void_area()
         }
     };
     return max_void_area;
+}
+
+size_t Layer::get_extruder_id(unsigned int filament_id) const
+{
+    return m_object->print()->get_extruder_id(filament_id);
 }
 
 BoundingBox get_extents(const LayerRegion &layer_region)

@@ -1,7 +1,10 @@
 #ifndef slic3r_PresetUpdate_hpp_
 #define slic3r_PresetUpdate_hpp_
 
+#include <functional>
 #include <memory>
+#include <set>
+#include <string>
 #include <vector>
 
 #include <wx/event.h>
@@ -58,27 +61,21 @@ public:
 
 	void on_update_notification_confirm();
     void do_printer_config_update();
+	void check_vendor_update(const std::string& vendor_id);
+	// Orca: async, mirrors check_vendor_update()/sync_vendor_config() — the network query and any
+	// download/install work happen on a background thread; only the confirmation dialog runs on
+	// the UI thread. `callback` is invoked on the UI thread with the ids of vendors that were
+	// installed (empty if none were found, or the user declined) and whether the user declined.
+	void check_new_vendors(const std::set<std::string>& system_vendors,
+	                        std::function<void(std::vector<std::string> installed_vendors, bool declined)> callback);
 
 	bool version_check_enabled() const;
 
-	void import_system_profile();
-
-	void import_flutter_web();
-
-	// serverUpdate=true: pass extracted flutter_web directory.
-	// serverUpdate=false: pass zip file chosen by user.
-	void load_flutter_web(const std::string& resource_path, bool serverUpdate = false);
-
-    void sync_config_async();
-
-    void sync_web_async(bool isAutoUpdata = false);
-public:
+private:
 	struct priv;
 	std::unique_ptr<priv> p;
 };
-wxDECLARE_EVENT(EVT_REQUEST_SERVER_FAIL, wxCommandEvent);
-wxDECLARE_EVENT(EVT_NO_WEB_RESOURCE_UPDATE, wxCommandEvent);
-wxDECLARE_EVENT(EVT_NO_PRESET_UPDATE, wxCommandEvent);
+
 wxDECLARE_EVENT(EVT_SLIC3R_VERSION_ONLINE, wxCommandEvent);
 wxDECLARE_EVENT(EVT_SLIC3R_EXPERIMENTAL_VERSION_ONLINE, wxCommandEvent);
 

@@ -1,7 +1,8 @@
 {
-    "type": "filament",
-    "from": "system",
-    "instantiation": "false",
-    "name": "Generic PA-CF @U1 base",
-    "inherits": "fdm_filament_pa_cf_category"
+	"type": "filament",
+	"from": "system",
+	"instantiation": "false",
+	"name": "Generic PA-CF @U1 base",
+	"inherits": "fdm_filament_pa_cf_category",
+	"filament_id": "P4368d01"
 }

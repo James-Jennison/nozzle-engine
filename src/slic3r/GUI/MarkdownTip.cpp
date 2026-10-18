@@ -7,8 +7,22 @@
 #include "libslic3r/Utils.hpp"
 #include "I18N.hpp"
 
+#include <string>
+#include <sstream>
+#include <ios>
+#include <cctype>
+#include <iomanip>
+#include <boost/filesystem/operations.hpp>
+#include <boost/log/trivial.hpp>
+#include <cstddef>
 #include <wx/display.h>
-#include "sentry_wrapper/SentryWrapper.hpp"
+#include <wx/gdicmn.h>
+#include <wx/popupwin.h>
+#include <wx/sizer.h>
+#include <wx/timer.h>
+#include <wx/file.h>
+#include <wx/webview.h>
+#include <wx/window.h>
 
 namespace fs = boost::filesystem;
 
@@ -99,10 +113,7 @@ void MarkdownTip::LoadStyle()
         ph /= "tooltip/styled.html";
         _data_dir = false;
     }
-    auto url = ph.string();
-    std::replace(url.begin(), url.end(), '\\', '/');
-    url = "file:///" + url;
-    _tipView->LoadURL(from_u8(url));
+    _tipView->LoadURL(file_url_from_path(ph));
     _lastTip.clear();
 }
 
@@ -146,15 +157,8 @@ bool MarkdownTip::ShowTip(wxPoint pos, std::string const &tip, std::string const
     if (_tipView->GetParent() == this) {
         wxSize size = wxDisplay(this).GetClientArea().GetSize();
         _requestPos = pos;
-        // Ensure display size is valid
-        if (size.y <= 0) size.y = 600;
         if (pos.y + this->GetSize().y > size.y)
-        {
-            pos.y = 0;
-            if( (size.y - this->GetSize().y) > 0)
-                pos.y = (size.y - this->GetSize().y);
-        }
-            
+            pos.y = size.y - this->GetSize().y;
         this->SetPosition(pos);
         if (tipChanged || _hide) {
             _hide = false;
@@ -265,38 +269,17 @@ void MarkdownTip::OnTitleChanged(wxWebViewEvent& event)
         _lastHeight = height;
         height *= 1.25; height += 50;
         wxSize size = wxDisplay(this).GetClientArea().GetSize();
-        // Ensure display size is valid
-        if (size.y <= 0) size.y = 600;
         if (height > size.y)
             height = size.y;
         wxPoint pos = _requestPos;
-        if (pos.y + height > size.y) 
-        {
-            pos.y= 0;
-            if(size.y-height>0)
-                pos.y = size.y - height;
-        }
-             
-        // Ensure height is valid
-        if (height <= 0) height = 100;
+        if (pos.y + height > size.y)
+            pos.y = size.y - height;
         this->SetSize({ 400, (int)height });
         this->SetPosition(pos);
     }
 }
 void MarkdownTip::OnError(wxWebViewEvent& event)
 {
-    auto e = "unknown error";
-    switch (event.GetInt()) {
-    case wxWEBVIEW_NAV_ERR_CONNECTION: e = "wxWEBVIEW_NAV_ERR_CONNECTION"; break;
-    case wxWEBVIEW_NAV_ERR_CERTIFICATE: e = "wxWEBVIEW_NAV_ERR_CERTIFICATE"; break;
-    case wxWEBVIEW_NAV_ERR_AUTH: e = "wxWEBVIEW_NAV_ERR_AUTH"; break;
-    case wxWEBVIEW_NAV_ERR_SECURITY: e = "wxWEBVIEW_NAV_ERR_SECURITY"; break;
-    case wxWEBVIEW_NAV_ERR_NOT_FOUND: e = "wxWEBVIEW_NAV_ERR_NOT_FOUND"; break;
-    case wxWEBVIEW_NAV_ERR_REQUEST: e = "wxWEBVIEW_NAV_ERR_REQUEST"; break;
-    case wxWEBVIEW_NAV_ERR_USER_CANCELLED: e = "wxWEBVIEW_NAV_ERR_USER_CANCELLED"; break;
-    case wxWEBVIEW_NAV_ERR_OTHER: e = "wxWEBVIEW_NAV_ERR_OTHER"; break;
-    }
-    BOOST_LOG_TRIVIAL(fatal) << __FUNCTION__<< boost::format(":MarkdownTip error loading page %1% %2% %3% %4%") % event.GetURL() % event.GetTarget() %e % event.GetString();
 }
 
 void MarkdownTip::OnTimer(wxTimerEvent& event)

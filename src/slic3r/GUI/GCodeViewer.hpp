@@ -8,12 +8,32 @@
 #include "GLModel.hpp"
 #include "I18N.hpp"
 
+#include <algorithm>
 #include <boost/iostreams/device/mapped_file.hpp>
 
+#include "LibVGCode/LibVGCodeWrapper.hpp"
+// needed for tech VGCODE_ENABLE_COG_AND_TOOL_MARKERS
+#include "libslic3r/Technologies.hpp"
+#include "libslic3r/Color.hpp"
+#include "libslic3r/Point.hpp"
+#include "libslic3r/BoundingBox.hpp"
+#include <cstddef>
+#include "libslic3r/Config.hpp"
+#include "libvgcode/include/GCodeInputData.hpp"
+#include <iterator>
+#include "libvgcode/include/PathVertex.hpp"
+#include <libvgcode/include/Types.hpp>
+
+#include <array>
 #include <cstdint>
 #include <float.h>
 #include <set>
+#include "slic3r/GUI/MeshUtils.hpp"
+#include <string>
+#include <tuple>
 #include <unordered_set>
+#include <utility>
+#include <vector>
 
 namespace Slic3r {
 
@@ -29,598 +49,48 @@ class OpenGLManager;
 static const float GCODE_VIEWER_SLIDER_SCALE = 0.6f;
 static const float SLIDER_DEFAULT_RIGHT_MARGIN  = 10.0f;
 static const float SLIDER_DEFAULT_BOTTOM_MARGIN = 10.0f;
-static const float SLIDER_RIGHT_MARGIN = 124.0f;
+// ORCA: match right margin to the vertical slider window width to prevent overlap.
+static inline const float SLIDER_RIGHT_MARGIN = IMSlider::vertical_slider_window_width();
 static const float SLIDER_BOTTOM_MARGIN = 64.0f;
 class GCodeViewer
 {
-    using IBufferType = unsigned short;
-    using VertexBuffer = std::vector<float>;
-    using MultiVertexBuffer = std::vector<VertexBuffer>;
-    using IndexBuffer = std::vector<IBufferType>;
-    using MultiIndexBuffer = std::vector<IndexBuffer>;
-    using InstanceBuffer = std::vector<float>;
-    using InstanceIdBuffer = std::vector<size_t>;
-    using InstancesOffsets = std::vector<Vec3f>;
-
-    static const std::vector<ColorRGBA> Extrusion_Role_Colors;
-    static const std::vector<ColorRGBA> Options_Colors;
-    static const std::vector<ColorRGBA> Travel_Colors;
-    static const std::vector<ColorRGBA> Range_Colors;
-    static const ColorRGBA              Wipe_Color;
-    static const ColorRGBA              Neutral_Color;
-
-    enum class EOptionsColors : unsigned char
-    {
-        Retractions,
-        Unretractions,
-        Seams,
-        ToolChanges,
-        ColorChanges,
-        PausePrints,
-        CustomGCodes
-    };
-
-    // vbo buffer containing vertices data used to render a specific toolpath type
-    struct VBuffer
-    {
-        enum class EFormat : unsigned char
-        {
-            // vertex format: 3 floats -> position.x|position.y|position.z
-            Position,
-            // vertex format: 4 floats -> position.x|position.y|position.z|normal.x
-            PositionNormal1,
-            // vertex format: 6 floats -> position.x|position.y|position.z|normal.x|normal.y|normal.z
-            PositionNormal3
-        };
-
-        EFormat format{ EFormat::Position };
-        // vbos id
-        std::vector<unsigned int> vbos;
-        // sizes of the buffers, in bytes, used in export to obj
-        std::vector<size_t> sizes;
-        // count of vertices, updated after data are sent to gpu
-        size_t count{ 0 };
-
-        size_t data_size_bytes() const { return count * vertex_size_bytes(); }
-        // We set 65536 as max count of vertices inside a vertex buffer to allow
-        // to use unsigned short in place of unsigned int for indices in the index buffer, to save memory
-        size_t max_size_bytes() const { return 65536 * vertex_size_bytes(); }
-
-        size_t vertex_size_floats() const { return position_size_floats() + normal_size_floats(); }
-        size_t vertex_size_bytes() const { return vertex_size_floats() * sizeof(float); }
-
-        size_t position_offset_floats() const { return 0; }
-        size_t position_offset_bytes() const { return position_offset_floats() * sizeof(float); }
-
-        size_t position_size_floats() const { return 3; }
-        size_t position_size_bytes() const { return position_size_floats() * sizeof(float); }
-
-        size_t normal_offset_floats() const {
-            assert(format == EFormat::PositionNormal1 || format == EFormat::PositionNormal3);
-            return position_size_floats();
-        }
-        size_t normal_offset_bytes() const { return normal_offset_floats() * sizeof(float); }
-
-        size_t normal_size_floats() const {
-            switch (format)
-            {
-            case EFormat::PositionNormal1: { return 1; }
-            case EFormat::PositionNormal3: { return 3; }
-            default:                       { return 0; }
-            }
-        }
-        size_t normal_size_bytes() const { return normal_size_floats() * sizeof(float); }
-
-        void reset();
-    };
-
-    // buffer containing instances data used to render a toolpaths using instanced or batched models
-    // instance record format:
-    // instanced models: 5 floats -> position.x|position.y|position.z|width|height (which are sent to the shader as -> vec3 (offset) + vec2 (scales) in GLModel::render_instanced())
-    // batched models:   3 floats -> position.x|position.y|position.z
-    struct InstanceVBuffer
-    {
-        // ranges used to render only subparts of the intances
-        struct Ranges
-        {
-            struct Range
-            {
-                // offset in bytes of the 1st instance to render
-                unsigned int offset;
-                // count of instances to render
-                unsigned int count;
-                // vbo id
-                unsigned int vbo{ 0 };
-                // Color to apply to the instances
-                ColorRGBA color;
-            };
-
-            std::vector<Range> ranges;
-
-            void reset();
-        };
-
-        enum class EFormat : unsigned char
-        {
-            InstancedModel,
-            BatchedModel
-        };
-
-        EFormat format;
-
-        // cpu-side buffer containing all instances data
-        InstanceBuffer buffer;
-        // indices of the moves for all instances
-        std::vector<size_t> s_ids;
-        // position offsets, used to show the correct value of the tool position
-        InstancesOffsets offsets;
-        Ranges render_ranges;
-
-        size_t data_size_bytes() const { return s_ids.size() * instance_size_bytes(); }
-
-        size_t instance_size_floats() const {
-            switch (format)
-            {
-            case EFormat::InstancedModel: { return 5; }
-            case EFormat::BatchedModel: { return 3; }
-            default: { return 0; }
-            }
-        }
-        size_t instance_size_bytes() const { return instance_size_floats() * sizeof(float); }
-
-        void reset();
-    };
-
-    // ibo buffer containing indices data (for lines/triangles) used to render a specific toolpath type
-    struct IBuffer
-    {
-        // id of the associated vertex buffer
-        unsigned int vbo{ 0 };
-        // ibo id
-        unsigned int ibo{ 0 };
-        // count of indices, updated after data are sent to gpu
-        size_t count{ 0 };
-
-        void reset();
-    };
-
-    // Used to identify different toolpath sub-types inside a IBuffer
-    struct Path
-    {
-        struct Endpoint
-        {
-            // index of the buffer in the multibuffer vector
-            // the buffer type may change:
-            // it is the vertex buffer while extracting vertices data,
-            // the index buffer while extracting indices data
-            unsigned int b_id{ 0 };
-            // index into the buffer
-            size_t i_id{ 0 };
-            // move id
-            size_t s_id{ 0 };
-            Vec3f position{ Vec3f::Zero() };
-        };
-
-        struct Sub_Path
-        {
-            Endpoint first;
-            Endpoint last;
-
-            bool contains(size_t s_id) const {
-                return first.s_id <= s_id && s_id <= last.s_id;
-            }
-        };
-
-        EMoveType type{ EMoveType::Noop };
-        ExtrusionRole role{ erNone };
-        float delta_extruder{ 0.0f };
-        float height{ 0.0f };
-        float width{ 0.0f };
-        float feedrate{ 0.0f };
-        float fan_speed{ 0.0f };
-        float temperature{ 0.0f };
-        float volumetric_rate{ 0.0f };
-        float layer_time{ 0.0f };
-        unsigned char extruder_id{ 0 };
-        unsigned char cp_color_id{ 0 };
-        std::vector<Sub_Path> sub_paths;
-
-        bool matches(const GCodeProcessorResult::MoveVertex& move) const;
-        size_t vertices_count() const {
-            return sub_paths.empty() ? 0 : sub_paths.back().last.s_id - sub_paths.front().first.s_id + 1;
-        }
-        bool contains(size_t s_id) const {
-            return sub_paths.empty() ? false : sub_paths.front().first.s_id <= s_id && s_id <= sub_paths.back().last.s_id;
-        }
-        int get_id_of_sub_path_containing(size_t s_id) const {
-            if (sub_paths.empty())
-                return -1;
-            else {
-                for (int i = 0; i < static_cast<int>(sub_paths.size()); ++i) {
-                    if (sub_paths[i].contains(s_id))
-                        return i;
-                }
-                return -1;
-            }
-        }
-        void add_sub_path(const GCodeProcessorResult::MoveVertex& move, unsigned int b_id, size_t i_id, size_t s_id) {
-            Endpoint endpoint = { b_id, i_id, s_id, move.position };
-            sub_paths.push_back({ endpoint , endpoint });
-        }
-    };
-
-    // Used to batch the indices needed to render the paths
-    struct RenderPath
-    {
-        // Index of the parent tbuffer
-        unsigned char               tbuffer_id;
-        // Render path property
-        ColorRGBA                       color;
-        // Index of the buffer in TBuffer::indices
-        unsigned int                ibuffer_id;
-        // Render path content
-        // Index of the path in TBuffer::paths
-        unsigned int                path_id;
-        std::vector<unsigned int>   sizes;
-        std::vector<size_t>         offsets; // use size_t because we need an unsigned integer whose size matches pointer's size (used in the call glMultiDrawElements())
-        bool contains(size_t offset) const {
-            for (size_t i = 0; i < offsets.size(); ++i) {
-                if (offsets[i] <= offset && offset <= offsets[i] + static_cast<size_t>(sizes[i] * sizeof(IBufferType)))
-                    return true;
-            }
-            return false;
-        }
-    };
-    struct RenderPathPropertyLower {
-        bool operator() (const RenderPath &l, const RenderPath &r) const {
-            if (l.tbuffer_id < r.tbuffer_id)
-                return true;
-            if (l.color < r.color)
-                return true;
-            else if (l.color > r.color)
-                return false;
-            return l.ibuffer_id < r.ibuffer_id;
-        }
-    };
-    struct RenderPathPropertyEqual {
-        bool operator() (const RenderPath &l, const RenderPath &r) const {
-            return l.tbuffer_id == r.tbuffer_id && l.ibuffer_id == r.ibuffer_id && l.color == r.color;
-        }
-    };
-
-    // buffer containing data for rendering a specific toolpath type
-    struct TBuffer
-    {
-        enum class ERenderPrimitiveType : unsigned char
-        {
-            Line,
-            Triangle,
-            InstancedModel,
-            BatchedModel
-        };
-
-        ERenderPrimitiveType render_primitive_type;
-
-        // buffers for point, line and triangle primitive types
-        VBuffer vertices;
-        std::vector<IBuffer> indices;
-
-        struct Model
-        {
-            GLModel model;
-            ColorRGBA color;
-            InstanceVBuffer instances;
-            GLModel::Geometry data;
-
-            void reset();
-        };
-
-        // contain the buffer for model primitive types
-        Model model;
-
-        std::string shader;
-        std::vector<Path> paths;
-        std::vector<RenderPath> render_paths;
-        bool visible{ false };
-
-        void reset();
-
-        // b_id index of buffer contained in this->indices
-        // i_id index of first index contained in this->indices[b_id]
-        // s_id index of first vertex contained in this->vertices
-        void add_path(const GCodeProcessorResult::MoveVertex& move, unsigned int b_id, size_t i_id, size_t s_id);
-
-        unsigned int max_vertices_per_segment() const {
-            switch (render_primitive_type)
-            {
-            case ERenderPrimitiveType::Line:     { return 2; }
-            case ERenderPrimitiveType::Triangle: { return 8; }
-            default:                             { return 0; }
-            }
-        }
-
-        size_t max_vertices_per_segment_size_floats() const { return vertices.vertex_size_floats() * static_cast<size_t>(max_vertices_per_segment()); }
-        size_t max_vertices_per_segment_size_bytes() const { return max_vertices_per_segment_size_floats() * sizeof(float); }
-        unsigned int indices_per_segment() const {
-            switch (render_primitive_type)
-            {
-            case ERenderPrimitiveType::Line:     { return 2; }
-            case ERenderPrimitiveType::Triangle: { return 30; } // 3 indices x 10 triangles
-            default:                             { return 0; }
-            }
-        }
-        size_t indices_per_segment_size_bytes() const { return static_cast<size_t>(indices_per_segment() * sizeof(IBufferType)); }
-        unsigned int max_indices_per_segment() const {
-            switch (render_primitive_type)
-            {
-            case ERenderPrimitiveType::Line:     { return 2; }
-            case ERenderPrimitiveType::Triangle: { return 36; } // 3 indices x 12 triangles
-            default:                             { return 0; }
-            }
-        }
-        size_t max_indices_per_segment_size_bytes() const { return max_indices_per_segment() * sizeof(IBufferType); }
-
-        bool has_data() const {
-            switch (render_primitive_type)
-            {
-            case ERenderPrimitiveType::Line:
-            case ERenderPrimitiveType::Triangle: {
-                return !vertices.vbos.empty() && vertices.vbos.front() != 0 && !indices.empty() && indices.front().ibo != 0;
-            }
-            case ERenderPrimitiveType::InstancedModel: { return model.model.is_initialized() && !model.instances.buffer.empty(); }
-            case ERenderPrimitiveType::BatchedModel: {
-                return !model.data.vertices.empty() && !model.data.indices.empty() &&
-                    !vertices.vbos.empty() && vertices.vbos.front() != 0 && !indices.empty() && indices.front().ibo != 0;
-            }
-            default: { return false; }
-            }
-        }
-    };
-
-    // helper to render shells
-    struct Shells
-    {
-        GLVolumeCollection volumes;
-        bool visible{ false };
-        //BBS: always load shell when preview
-        int print_id{ -1 };
-        int print_modify_count { -1 };
-        bool previewing{ false };
-    };
-
-    // helper to render extrusion paths
-    struct Extrusions
-    {
-        struct Range
-        {
-            float min;
-            float max;
-            unsigned int count;
-            bool log_scale;
-
-            Range() { reset(); }
-            void update_from(const float value) {
-                if (value != max && value != min)
-                    ++count;
-                min = std::min(min, value);
-                max = std::max(max, value);
-            }
-            void reset(bool log = false) { min = FLT_MAX; max = -FLT_MAX; count = 0; log_scale = log; }
-
-            float step_size() const;
-            ColorRGBA get_color_at(float value) const;
-            float get_value_at_step(int step) const;
-
-        };
-
-        struct Ranges
-        {
-            // Color mapping by layer height.
-            Range height;
-            // Color mapping by extrusion width.
-            Range width;
-            // Color mapping by feedrate.
-            Range feedrate;
-            // Color mapping by fan speed.
-            Range fan_speed;
-            // Color mapping by volumetric extrusion rate.
-            Range volumetric_rate;
-            // Color mapping by extrusion temperature.
-            Range temperature;
-            // Color mapping by layer time.
-            Range layer_duration;
-Range layer_duration_log;
-            void reset() {
-                height.reset();
-                width.reset();
-                feedrate.reset();
-                fan_speed.reset();
-                volumetric_rate.reset();
-                temperature.reset();
-                layer_duration.reset();
-                layer_duration_log.reset(true);
-            }
-        };
-
-        unsigned int role_visibility_flags{ 0 };
-        Ranges ranges;
-
-        void reset_role_visibility_flags() {
-            role_visibility_flags = 0;
-            for (unsigned int i = 0; i < erCount; ++i) {
-                role_visibility_flags |= 1 << i;
-            }
-        }
-
-        void reset_ranges() { ranges.reset(); }
-    };
-
-    class Layers
-    {
-    public:
-        struct Endpoints
-        {
-            size_t first{ 0 };
-            size_t last{ 0 };
-
-            bool operator == (const Endpoints& other) const { return first == other.first && last == other.last; }
-            bool operator != (const Endpoints& other) const { return !operator==(other); }
-        };
-
-    private:
-        std::vector<double> m_zs;
-        std::vector<Endpoints> m_endpoints;
-
-    public:
-        void append(double z, Endpoints endpoints) {
-            m_zs.emplace_back(z);
-            m_endpoints.emplace_back(endpoints);
-        }
-
-        void reset() {
-            m_zs = std::vector<double>();
-            m_endpoints = std::vector<Endpoints>();
-        }
-
-        size_t size() const { return m_zs.size(); }
-        bool empty() const { return m_zs.empty(); }
-        const std::vector<double>& get_zs() const { return m_zs; }
-        const std::vector<Endpoints>& get_endpoints() const { return m_endpoints; }
-        std::vector<Endpoints>& get_endpoints() { return m_endpoints; }
-        double get_z_at(unsigned int id) const { return (id < m_zs.size()) ? m_zs[id] : 0.0; }
-        Endpoints get_endpoints_at(unsigned int id) const { return (id < m_endpoints.size()) ? m_endpoints[id] : Endpoints(); }
-        int                           get_l_at(float z) const
-        {
-            auto iter = std::upper_bound(m_zs.begin(), m_zs.end(), z);
-            return std::distance(m_zs.begin(), iter);
-        }
-
-        bool operator != (const Layers& other) const {
-            if (m_zs != other.m_zs)
-                return true;
-            if (m_endpoints != other.m_endpoints)
-                return true;
-            return false;
-        }
-    };
-
-    // used to render the toolpath caps of the current sequential range
-    // (i.e. when sliding on the horizontal slider)
-    struct SequentialRangeCap
-    {
-        TBuffer* buffer{ nullptr };
-        unsigned int ibo{ 0 };
-        unsigned int vbo{ 0 };
-        ColorRGBA color;
-
-        ~SequentialRangeCap();
-        bool is_renderable() const { return buffer != nullptr; }
-        void reset();
-        size_t indices_count() const { return 6; }
-    };
-
-#if ENABLE_GCODE_VIEWER_STATISTICS
-    struct Statistics
-    {
-        // time
-        int64_t results_time{ 0 };
-        int64_t load_time{ 0 };
-        int64_t load_vertices{ 0 };
-        int64_t smooth_vertices{ 0 };
-        int64_t load_indices{ 0 };
-        int64_t refresh_time{ 0 };
-        int64_t refresh_paths_time{ 0 };
-        // opengl calls
-        int64_t gl_multi_lines_calls_count{ 0 };
-        int64_t gl_multi_triangles_calls_count{ 0 };
-        int64_t gl_triangles_calls_count{ 0 };
-        int64_t gl_instanced_models_calls_count{ 0 };
-        int64_t gl_batched_models_calls_count{ 0 };
-        // memory
-        int64_t results_size{ 0 };
-        int64_t total_vertices_gpu_size{ 0 };
-        int64_t total_indices_gpu_size{ 0 };
-        int64_t total_instances_gpu_size{ 0 };
-        int64_t max_vbuffer_gpu_size{ 0 };
-        int64_t max_ibuffer_gpu_size{ 0 };
-        int64_t paths_size{ 0 };
-        int64_t render_paths_size{ 0 };
-        int64_t models_instances_size{ 0 };
-        // other
-        int64_t travel_segments_count{ 0 };
-        int64_t wipe_segments_count{ 0 };
-        int64_t extrude_segments_count{ 0 };
-        int64_t instances_count{ 0 };
-        int64_t batched_count{ 0 };
-        int64_t vbuffers_count{ 0 };
-        int64_t ibuffers_count{ 0 };
-
-        void reset_all() {
-            reset_times();
-            reset_opengl();
-            reset_sizes();
-            reset_others();
-        }
-
-        void reset_times() {
-            results_time = 0;
-            load_time = 0;
-            load_vertices = 0;
-            smooth_vertices = 0;
-            load_indices = 0;
-            refresh_time = 0;
-            refresh_paths_time = 0;
-        }
-
-        void reset_opengl() {
-            gl_multi_lines_calls_count = 0;
-            gl_multi_triangles_calls_count = 0;
-            gl_triangles_calls_count = 0;
-            gl_instanced_models_calls_count = 0;
-            gl_batched_models_calls_count = 0;
-        }
-
-        void reset_sizes() {
-            results_size = 0;
-            total_vertices_gpu_size = 0;
-            total_indices_gpu_size = 0;
-            total_instances_gpu_size = 0;
-            max_vbuffer_gpu_size = 0;
-            max_ibuffer_gpu_size = 0;
-            paths_size = 0;
-            render_paths_size = 0;
-            models_instances_size = 0;
-        }
-
-        void reset_others() {
-            travel_segments_count = 0;
-            wipe_segments_count = 0;
-            extrude_segments_count = 0;
-            instances_count = 0;
-            batched_count = 0;
-            vbuffers_count = 0;
-            ibuffers_count = 0;
-        }
-    };
-#endif // ENABLE_GCODE_VIEWER_STATISTICS
-
 public:
     enum class EViewType : unsigned char;
     struct SequentialView
     {
+#if ENABLE_ACTUAL_SPEED_DEBUG
+        struct ActualSpeedImguiWidget
+        {
+            std::pair<float, float> y_range = { 0.0f, 0.0f };
+            std::vector<std::pair<float, ColorRGBA>> levels;
+            struct Item
+            {
+              float pos{ 0.0f };
+              float speed{ 0.0f };
+              bool internal{ false };
+            };
+            std::vector<Item> data;
+            int plot(const char* label, const std::array<float, 2>& frame_size = { 0.0f, 0.0f });
+        };
+#endif // ENABLE_ACTUAL_SPEED_DEBUG
+
         class Marker
         {
             GLModel m_model;
             Vec3f m_world_position;
-            Transform3f m_world_transform;
             // for seams, the position of the marker is on the last endpoint of the toolpath containing it
             // the offset is used to show the correct value of tool position in the "ToolPosition" window
             // see implementation of render() method
             Vec3f m_world_offset;
-            float m_z_offset{ 0.5f };
-            GCodeProcessorResult::MoveVertex m_curr_move;
+            float m_z_offset{ 0.0f };
+            // z offset of the model
+            float m_model_z_offset{ 0.5f };
             bool m_visible{ true };
             bool m_is_dark = false;
+            float m_scale_factor{ 1.0f };
+#if ENABLE_ACTUAL_SPEED_DEBUG
+            ActualSpeedImguiWidget m_actual_speed_imgui_widget;
+#endif // ENABLE_ACTUAL_SPEED_DEBUG
 
         public:
             float m_scale = 1.0f;
@@ -629,16 +99,31 @@ public:
 
             const BoundingBoxf3& get_bounding_box() const { return m_model.get_bounding_box(); }
 
-            void set_world_position(const Vec3f& position);
+            void set_world_position(const Vec3f& position) { m_world_position = position; }
             void set_world_offset(const Vec3f& offset) { m_world_offset = offset; }
+            void set_z_offset(float z_offset) { m_z_offset = z_offset; }
+
+#if ENABLE_ACTUAL_SPEED_DEBUG
+            void set_actual_speed_y_range(const std::pair<float, float>& y_range) {
+                m_actual_speed_imgui_widget.y_range = y_range;
+            }
+            void set_actual_speed_levels(const std::vector<std::pair<float, ColorRGBA>>& levels) {
+                m_actual_speed_imgui_widget.levels = levels;
+            }
+            void set_actual_speed_data(const std::vector<ActualSpeedImguiWidget::Item>& data) {
+                m_actual_speed_imgui_widget.data = data;
+            }
+#endif // ENABLE_ACTUAL_SPEED_DEBUG
 
             bool is_visible() const { return m_visible; }
             void set_visible(bool visible) { m_visible = visible; }
+            // What a marker looks like when no IDEX/IQEX carriage colour applies to it.
+            static ColorRGBA default_color() { return { 1.0f, 1.0f, 1.0f, 0.5f }; }
+            void set_color(const ColorRGBA& color) { m_model.set_color(color); }
 
-            void render(int canvas_width, int canvas_height, const EViewType& view_type);
+            void render(int canvas_width, int canvas_height, const libvgcode::EViewType& view_type);
+            void render_position_window(const libvgcode::Viewer* viewer, int canvas_width, int canvas_height, const libvgcode::EViewType& view_type);
             void on_change_color_mode(bool is_dark) { m_is_dark = is_dark; }
-
-            void update_curr_move(const GCodeProcessorResult::MoveVertex move);
         };
 
         class GCodeWindow
@@ -682,65 +167,60 @@ public:
             void stop_mapping_file();
         };
 
-        struct Endpoints
-        {
-            size_t first{ 0 };
-            size_t last{ 0 };
-        };
-
-        bool skip_invisible_moves{ false };
-        Endpoints endpoints;
-        Endpoints current;
-        Endpoints last_current;
-        Endpoints global;
-        Vec3f current_position{ Vec3f::Zero() };
-        Vec3f current_offset{ Vec3f::Zero() };
         Marker marker;
+        std::vector<Marker> m_imex_secondary_markers; // one per active secondary carriage in IDEX/IQEX mode
         GCodeWindow gcode_window;
-        std::vector<unsigned int> gcode_ids;
         float m_scale = 1.0;
         bool m_show_marker = false;
-        void render(const bool has_render_path, float legend_height, int canvas_width, int canvas_height, int right_margin, const EViewType& view_type);
+        // The tool marker at the current move, drawn in 3D.
+        void render_marker(const bool has_render_path, int canvas_width, int canvas_height, const libvgcode::EViewType& view_type);
+        // The marker's position window and the G-code window, both ImGui.
+        void render_overlay(const bool has_render_path, float legend_height, const libvgcode::Viewer* viewer, uint32_t gcode_id, int canvas_width, int canvas_height, int right_margin, const libvgcode::EViewType& view_type);
     };
-
-    struct ETools
+    struct ExtruderFilament
     {
-        std::vector<ColorRGBA> m_tool_colors;
-        std::vector<bool>  m_tool_visibles;
+        std::string   type;
+        std::string   hex_color;
+        unsigned char filament_id;
+        bool is_support_filament;
     };
-
-    enum class EViewType : unsigned char
+    // helper to render shells
+    struct Shells
     {
-        FeatureType = 0,
-        Height,
-        Width,
-        Feedrate,
-        FanSpeed,
-        Temperature,
-        VolumetricRate,
-        Tool,
-        ColorPrint,
-        FilamentId,
-        LayerTime,
-        LayerTimeLog,
-        Count
+        GLVolumeCollection volumes;
+        bool               visible{false};
+        // BBS: always load shell when preview
+        int  print_id{-1};
+        int  print_modify_count{-1};
+        bool previewing{false};
     };
-
     //BBS
     ConflictResultOpt m_conflict_result;
+    GCodeCheckResult  m_gcode_check_result;
+    FilamentPrintableResult filament_printable_reuslt;
+    Shells            m_shells;
+
 private:
     std::vector<int> m_plater_extruder;
     bool m_gl_data_initialized{ false };
     unsigned int m_last_result_id{ 0 };
-    size_t m_moves_count{ 0 };
+    // Belt printers: the view the loaded result was converted for (see load_as_gcode).
+    bool m_last_belt_show_designed{ true };
+    // Belt printers: the print Z of each viewer layer, in the viewer's layer numbering.
+    std::vector<double> m_belt_layer_zs;
     //BBS: save m_gcode_result as well
     const GCodeProcessorResult* m_gcode_result;
+    std::array<unsigned int, static_cast<size_t>(EMoveType::Count)> m_move_type_counts{};
+    std::array<std::array<float, static_cast<size_t>(PrintEstimatedStatistics::ETimeMode::Count)>, static_cast<size_t>(EMoveType::Count)> m_move_type_times{};
+    std::array<float, static_cast<size_t>(EMoveType::Count)> m_move_type_distances{};
     //BBS: add only gcode mode
     bool m_only_gcode_in_preview {false};
-    bool m_loading{ false };
-    std::vector<size_t> m_ssid_to_moveid_map;
 
-    std::vector<TBuffer> m_buffers{ static_cast<size_t>(EMoveType::Extrude) };
+    //BBS: extruder dispensing filament
+    std::vector<ExtruderFilament> m_left_extruder_filament;
+    std::vector<ExtruderFilament> m_right_extruder_filament;
+    size_t m_nozzle_nums;
+
     // bounding box of toolpaths
     BoundingBoxf3 m_paths_bounding_box;
     // bounding box of toolpaths + marker tools
@@ -748,47 +228,150 @@ private:
     //BBS: add shell bounding box
     BoundingBoxf3 m_shell_bounding_box;
     float m_max_print_height{ 0.0f };
+    bool  m_machine_frame_transform_active{ false };
+    float m_z_offset{ 0.0f };
 
-    //BBS save m_tools_color and m_tools_visible
-    ETools m_tools;
     ConfigOptionMode m_user_mode;
     bool m_fold = {false};
+    std::string m_marker_filename;      // cached for lazy secondary marker init
 
-    Layers m_layers;
-    std::array<unsigned int, 2> m_layers_z_range;
-    std::vector<ExtrusionRole> m_roles;
+    // IDEX/IQEX: everything render_scene() needs to place the secondary carriage markers and the
+    // toolhead footprint boxes, resolved from the printer preset, the active mode and the
+    // plate bed. Resolving it walks the mode string through compute_imex_zone_layout()
+    // (several string parses plus a zone-grid rebuild), and none of its inputs change
+    // between frames, so it is resolved once per input change -- see ImexMarkerKey -- and
+    // replayed on every other frame.
+    struct ImexMarkerPlan
+    {
+        // One entry per secondary carriage that owns a zone, in marker order. Each axis
+        // either TRACKS the primary (pos + term) or MIRRORS it about the boundary the two
+        // zones share (term - pos); which of the two, and the term itself, depend only on
+        // the zone geometry, so both are resolved up front.
+        struct Carriage
+        {
+            int   phys_head    = -1;   // physical head this carriage is, for its filament colour
+            bool  mirror_x     = false;
+            bool  mirror_y     = false;
+            float x_term       = 0.0f;
+            float y_term       = 0.0f;
+            float box_offset_x = 0.0f;
+            float box_offset_y = 0.0f;
+        };
+        std::vector<Carriage> carriages;        // empty => no secondary carriages to draw
+        int   pri_head = -1;                    // the primary's physical head, same purpose
+        float pri_box_offset_x = 0.0f;
+        float pri_box_offset_y = 0.0f;
+        float box_wx = 0.0f;                    // imex_nozzle_clearance_x / _y
+        float box_wy = 0.0f;
+    };
+
+    // Invalidation key for the plan above: every input the plan is derived from, and
+    // nothing that changes between frames. A stale plan would put the preview markers
+    // somewhere the plate's own zones and ghosts do not agree with, which is exactly the
+    // drift the shared layout call exists to prevent -- so this deliberately mirrors
+    // PartPlate::build_imex_cache_key(). The two keys are not field-for-field identical, and
+    // the differences are deliberate rather than incidental:
+    //   - bed extents and plate_index are here and not there. Zone centres scale with the
+    //     extents, and one preview serves every plate, so the preview must key what the plate
+    //     gets for free -- it re-bakes on set_shape() and is keyed by being that plate.
+    //   - mode_names / mode_active_tools hold the printer's WHOLE mode table; the plate resolves
+    //     one active mode and keys that roster plus its primary head. Same information reached
+    //     two ways, so a change to the active mode moves both keys.
+    //   - imex_carriage_margin is there and not here: it only sizes the plate's advisory bands,
+    //     which the preview never draws.
+    // imex_tool_layout is in both, which the plate's key gained for the reason this one has it:
+    // the T0-corner flip moves every zone rectangle while nothing else keyed changes.
+    struct ImexMarkerKey
+    {
+        // Scalar half. Built fresh on the stack each frame -- it allocates nothing -- and
+        // compared as a tuple.
+        struct Scalars
+        {
+            int    plate_index      = -1;
+            int    gantry_count     = 0;
+            int    tools_per_gantry = 0;
+            int    tool_layout      = -1;
+            double clearance_x      = 0.0;
+            double clearance_y      = 0.0;
+            bool   firmware_managed = false;
+            double bed_min_x = 0.0, bed_min_y = 0.0, bed_max_x = 0.0, bed_max_y = 0.0;
+
+            auto tied() const {
+                return std::tie(plate_index, gantry_count, tools_per_gantry, tool_layout,
+                                clearance_x, clearance_y, firmware_managed,
+                                bed_min_x, bed_min_y, bed_max_x, bed_max_y);
+            }
+            bool operator==(const Scalars& rhs) const { return tied() == rhs.tied(); }
+        };
+        Scalars s;
+        // Resolved active mode (the plate's mode beats the process preset), plus the printer
+        // preset's whole mode table. The name alone is not identity: two presets can carry
+        // the same mode name over different tool rosters, and editing a roster in place
+        // moves neither the name nor any scalar above. Compared by value, never copied
+        // unless something actually changed.
+        std::string              mode;
+        std::vector<std::string> mode_names;
+        std::vector<std::string> mode_active_tools;
+    };
+    ImexMarkerKey  m_imex_marker_key;
+    ImexMarkerPlan m_imex_marker_plan;
+    static ImexMarkerPlan resolve_imex_marker_plan(const DynamicPrintConfig& printer_cfg,
+                                                   const std::string&        mode,
+                                                   const BoundingBoxf&       bed_extents);
+
+    GLModel     m_imex_toolhead_box;    // shared box mesh for all carriage footprint overlays
+    float       m_imex_box_mesh_wx{ 0.0f };  // clearance dimensions m_imex_toolhead_box was built for
+    float       m_imex_box_mesh_wy{ 0.0f };
+
     size_t m_extruders_count;
-    std::vector<unsigned char> m_extruder_ids;
     std::vector<float> m_filament_diameters;
     std::vector<float> m_filament_densities;
-    Extrusions m_extrusions;
     SequentialView m_sequential_view;
     IMSlider* m_moves_slider;
     IMSlider* m_layers_slider;
-    Shells m_shells;
+#if VGCODE_ENABLE_COG_AND_TOOL_MARKERS
+    // whether or not to render the cog model with fixed screen size
+    bool m_cog_marker_fixed_screen_size{ true };
+    float m_cog_marker_size{ 1.0f };
+    bool m_tool_marker_fixed_screen_size{ false };
+    float m_tool_marker_size{ 1.0f };
+#endif // VGCODE_ENABLE_COG_AND_TOOL_MARKERS
+
     /*BBS GUI refactor, store displayed items in color scheme combobox */
-    std::vector<EViewType> view_type_items;
+    std::vector<libvgcode::EViewType> view_type_items;
     std::vector<std::string> view_type_items_str;
     int       m_view_type_sel = 0;
-    EViewType m_view_type{ EViewType::FeatureType };
+    // ORCA: which default view type was last applied, see apply_default_view_type(). Empty until the first one is applied.
+    std::string m_applied_default_view_type_key;
     std::vector<EMoveType> options_items;
 
+    bool m_legend_visible{ true };
     bool m_legend_enabled{ true };
+
     float m_legend_height;
     PrintEstimatedStatistics m_print_statistics;
-    PrintEstimatedStatistics::ETimeMode m_time_estimate_mode{ PrintEstimatedStatistics::ETimeMode::Normal };
-#if ENABLE_GCODE_VIEWER_STATISTICS
-    Statistics m_statistics;
-#endif // ENABLE_GCODE_VIEWER_STATISTICS
     std::array<float, 2> m_detected_point_sizes = { 0.0f, 0.0f };
     GCodeProcessorResult::SettingsIds m_settings_ids;
-    std::array<SequentialRangeCap, 2> m_sequential_range_caps;
 
     std::vector<CustomGCode::Item> m_custom_gcode_per_print_z;
+    GCodeProcessorResult::ObjectMass              m_plate_mass;
+    std::vector<GCodeProcessorResult::ObjectMass> m_object_masses;
+    std::vector<GCodeProcessorResult::ObjectMass> m_body_masses;
+    std::vector<GCodeProcessorResult::ObjectMass> m_support_masses;
 
     bool m_contained_in_bed{ true };
 mutable bool m_no_render_path { false };
     bool m_is_dark = false;
+
+    bool  m_belt_view_enabled = false;
+    bool  m_belt_show_designed = true;   // Designed (upright, back-transformed) view by default; off shows
+                                         // the raw machine-frame G-code (canvas view menu, hotkey B).
+    float m_belt_angle_deg = 0.f;
+
+    libvgcode::Viewer m_viewer;
+    // ORCA: section view, as the viewer has it. What it cuts away casts no shadow.
+    std::array<float, 4> m_clipping_plane{ 0.0f, 0.0f, 0.0f, 1.0f };
+    bool m_loaded_as_preview{ false };
 
 public:
     GCodeViewer();
@@ -802,14 +385,10 @@ public:
 
     // extract rendering data from the given parameters
     //BBS: add only gcode mode
-   void load(const GCodeProcessorResult& gcode_result, const Print& print, const BuildVolume& build_volume,
-           const std::vector<BoundingBoxf3>& exclude_bounding_box, ConfigOptionMode mode, bool only_gcode = false,
-           bool skip_toolpaths = false);
-    // skip_toolpaths: when true, always take Z-scan path (no GPU vertex buffers)
-    //                  used by the memory-warning dialog when user chooses to continue without preview
-    // recalculate ranges in dependence of what is visible and sets tool/print colors
-    void refresh(const GCodeProcessorResult& gcode_result, const std::vector<std::string>& str_tool_colors);
-    void refresh_render_paths();
+    void load_as_gcode(const GCodeProcessorResult& gcode_result, const Print& print, const std::vector<std::string>& str_tool_colors,
+        const std::vector<std::string>& str_color_print_colors, const BuildVolume& build_volume,
+        const std::vector<BoundingBoxf3>& exclude_bounding_box, ConfigOptionMode mode, bool only_gcode = false);
+    void load_as_preview(libvgcode::GCodeInputData&& data);
     void update_shells_color_by_extruder(const DynamicPrintConfig* config);
     void set_shell_transparency(float alpha = 0.15f);
 
@@ -821,22 +400,55 @@ public:
     //BBS: add all plates filament statistics
     void render_all_plates_stats(const std::vector<const GCodeProcessorResult*>& gcode_result_list, bool show = true) const;
     //BBS: GUI refactor: add canvas width and height
-    void render(int canvas_width, int canvas_height, int right_margin);
+    // Shells, toolpaths, the sequential markers and the IDEX/IQEX toolhead boxes, drawn in 3D.
+    void render_scene(int canvas_width, int canvas_height);
+    // Legend, sliders, the marker's position window and the G-code window, all ImGui.
+    void render_overlay(int canvas_width, int canvas_height, int right_margin);
+    // ORCA: realistic view. Depth-only pass drawing the toolpaths as the light sees them, into
+    // the shadow map the caller has bound, and the map they sample back in render_scene.
+    void render_shadow_casters(const Transform3d& light_view_matrix, const Transform3d& light_projection_matrix, const Vec3d& light_position);
+    void set_shadow_map(int texture_unit, const Transform3d& light_view_projection, float intensity, float texel_size);
+    // ORCA: tone applied to the shaded toolpaths, paying back the light the lighting term,
+    // the shadow and the SSAO pass each take off. 1.0/1.0 is a no-op.
+    void set_tone(float exposure, float saturation);
+    // ORCA: section view
+    void set_clipping_plane(const ClippingPlane& plane);
+    void set_light_top_dir(const Vec3d& direction);
     //BBS
-    void _render_calibration_thumbnail_internal(ThumbnailData& thumbnail_data, const ThumbnailsParams& thumbnail_params, PartPlateList& partplate_list, OpenGLManager& opengl_manager);
-    void _render_calibration_thumbnail_framebuffer(ThumbnailData& thumbnail_data, unsigned int w, unsigned int h, const ThumbnailsParams& thumbnail_params, PartPlateList& partplate_list, OpenGLManager& opengl_manager);
-    void render_calibration_thumbnail(ThumbnailData& thumbnail_data, unsigned int w, unsigned int h, const ThumbnailsParams& thumbnail_params, PartPlateList& partplate_list, OpenGLManager& opengl_manager);
+    // void _render_calibration_thumbnail_internal(ThumbnailData& thumbnail_data, const ThumbnailsParams& thumbnail_params, PartPlateList& partplate_list, OpenGLManager& opengl_manager);
+    // void _render_calibration_thumbnail_framebuffer(ThumbnailData& thumbnail_data, unsigned int w, unsigned int h, const ThumbnailsParams& thumbnail_params, PartPlateList& partplate_list, OpenGLManager& opengl_manager);
+    // void render_calibration_thumbnail(ThumbnailData& thumbnail_data, unsigned int w, unsigned int h, const ThumbnailsParams& thumbnail_params, PartPlateList& partplate_list, OpenGLManager& opengl_manager);
+    bool has_data() const { return !m_viewer.get_extrusion_roles().empty(); }
 
-    bool has_data() const { return !m_roles.empty(); }
     bool can_export_toolpaths() const;
     std::vector<int> get_plater_extruder();
 
     const float                get_max_print_height() const { return m_max_print_height; }
+    bool                       is_machine_frame_transform_active() const { return m_machine_frame_transform_active; }
     const BoundingBoxf3& get_paths_bounding_box() const { return m_paths_bounding_box; }
     const BoundingBoxf3& get_max_bounding_box() const { return m_max_bounding_box; }
     const BoundingBoxf3& get_shell_bounding_box() const { return m_shell_bounding_box; }
-    const std::vector<double>& get_layers_zs() const { return m_layers.get_zs(); }
-    const std::array<unsigned int,2> &get_layers_z_range() const { return m_layers_z_range; }
+    std::vector<double> get_layers_zs() const {
+        // Belt printers: the layer Z the slider labels and the colour-change ticks
+        // use is the layer's print Z (see load_as_gcode), not a toolpath height.
+        if (! m_belt_layer_zs.empty())
+            return m_belt_layer_zs;
+        const std::vector<float> zs = m_viewer.get_layers_zs();
+        std::vector<double> ret;
+        std::transform(zs.begin(), zs.end(), std::back_inserter(ret), [](float z) { return static_cast<double>(z); });
+        return ret;
+    }
+    std::vector<float> get_layers_times() const { return m_viewer.get_layers_estimated_times(); }
+
+    const std::array<size_t,2> &get_layers_z_range() const { return m_viewer.get_layers_view_range(); }
+    const GCodeProcessorResult::ObjectMass&              get_plate_mass() const { return m_plate_mass; }
+    const std::vector<GCodeProcessorResult::ObjectMass>& get_object_masses() const { return m_object_masses; }
+    const std::vector<GCodeProcessorResult::ObjectMass>& get_body_masses() const { return m_body_masses; }
+    const std::vector<GCodeProcessorResult::ObjectMass>& get_support_masses() const { return m_support_masses; }
+    size_t get_vertices_count() const { return m_viewer.get_vertices_count(); }
+    size_t get_layers_count() const { return m_viewer.get_layers_count(); }
+    // ORCA: realistic view. Changes whenever the toolpaths casting shadows do.
+    size_t shadow_casters_signature() const;
 
     const SequentialView& get_sequential_view() const { return m_sequential_view; }
     void update_sequential_view_current(unsigned int first, unsigned int last);
@@ -847,73 +459,87 @@ public:
     void enable_moves_slider(bool enable) const;
     void update_moves_slider(bool set_to_max = false);
     void update_layers_slider_mode();
-    void update_marker_curr_move();
+
+    const libvgcode::Interval& get_gcode_view_full_range() const { return m_viewer.get_view_full_range(); }
+    const libvgcode::Interval& get_gcode_view_enabled_range() const { return m_viewer.get_view_enabled_range(); }
+    const libvgcode::Interval& get_gcode_view_visible_range() const { return m_viewer.get_view_visible_range(); }
+    const libvgcode::PathVertex& get_gcode_vertex_at(size_t id) const { return m_viewer.get_vertex_at(id); }
 
     bool is_contained_in_bed() const { return m_contained_in_bed; }
     //BBS: add only gcode mode
     bool is_only_gcode_in_preview() const { return m_only_gcode_in_preview; }
 
-    EViewType get_view_type() const { return m_view_type; }
-    void set_view_type(EViewType type, bool reset_feature_type_visible = true) {
-        if (type == EViewType::Count)
-            type = EViewType::FeatureType;
-        m_view_type = (EViewType)type;
-        if (reset_feature_type_visible && type == EViewType::ColorPrint) {
-            reset_visible(EViewType::FeatureType);
-        }
+    void set_view_type(libvgcode::EViewType type) {
+        m_viewer.set_view_type(type);
     }
-    void reset_visible(EViewType type) {
-        if (type == EViewType::FeatureType) {
-            for (size_t i = 0; i < m_roles.size(); ++i) {
-                ExtrusionRole role = m_roles[i];
-                m_extrusions.role_visibility_flags = m_extrusions.role_visibility_flags | (1 << role);
+    // ORCA: select a view type in the preview combo box and apply it
+    void select_view_type(libvgcode::EViewType type);
+    // ORCA: apply the "preview_default_view_type" preference, see the definition for the supported values
+    void apply_default_view_type();
+
+    // ORCA: stable, locale independent name of a view type, as stored in the application config
+    static std::string view_type_to_config_name(libvgcode::EViewType type);
+    static bool view_type_from_config_name(const std::string& name, libvgcode::EViewType& type);
+    // ORCA: (config value, translated label) pairs for the "preview_default_view_type" preference combo box
+    static std::vector<std::pair<std::string, std::string>> default_view_type_choices();
+    void reset_visible(libvgcode::EViewType type) {
+        if (type == libvgcode::EViewType::FeatureType) {
+            auto roles = m_viewer.get_extrusion_roles();
+            for (size_t i = 0; i < roles.size(); ++i) {
+                auto role = roles[i];
+                if (!m_viewer.is_extrusion_role_visible(role)) {
+                    m_viewer.toggle_extrusion_role_visibility(role);
+                }
             }
-        } else if (type == EViewType::ColorPrint){
-            m_tools.m_tool_visibles.assign(m_tools.m_tool_visibles.size(), true);
         }
     }
 
-    bool is_toolpath_move_type_visible(EMoveType type) const;
-    void set_toolpath_move_type_visible(EMoveType type, bool visible);
-    unsigned int get_toolpath_role_visibility_flags() const { return m_extrusions.role_visibility_flags; }
-    void set_toolpath_role_visibility_flags(unsigned int flags) { m_extrusions.role_visibility_flags = flags; }
-    unsigned int get_options_visibility_flags() const;
-    void set_options_visibility_from_flags(unsigned int flags);
+    libvgcode::EViewType get_view_type() const { return m_viewer.get_view_type(); }
+
+    // ORCA: darken the layers not scrubbed to while using the preview layer slider
+    void set_dim_previous_layers(bool value) { m_viewer.set_dim_previous_layers(value); }
+    bool is_dim_previous_layers() const { return m_viewer.is_dim_previous_layers(); }
+    // ORCA: brightness of those darkened layers, 1.0 = unchanged, 0.0 = black
+    void set_dim_previous_layers_brightness(float value) { m_viewer.set_dim_previous_layers_brightness(value); }
+    float get_dim_previous_layers_brightness() const { return m_viewer.get_dim_previous_layers_brightness(); }
+
     void set_layers_z_range(const std::array<unsigned int, 2>& layers_z_range);
 
-    bool is_legend_enabled() const { return m_legend_enabled; }
+    bool is_legend_shown() const { return m_legend_visible && m_legend_enabled; }
+    void show_legend(bool show) { m_legend_visible = show; }
     void enable_legend(bool enable) { m_legend_enabled = enable; }
     float get_legend_height() { return m_legend_height; }
 
     void export_toolpaths_to_obj(const char* filename) const;
 
-    std::vector<CustomGCode::Item>& get_custom_gcode_per_print_z() { return m_custom_gcode_per_print_z; }
+    void set_belt_printer(bool enabled, float angle_deg) { m_belt_view_enabled = enabled; m_belt_angle_deg = angle_deg; }
+    bool is_belt_view() const { return m_belt_view_enabled && m_belt_angle_deg > 0.f; }
+    void toggle_belt_show_designed() { if (m_belt_view_enabled) m_belt_show_designed = !m_belt_show_designed; }
+    bool is_belt_show_designed() const { return m_belt_show_designed; }
+
     size_t get_extruders_count() { return m_extruders_count; }
     void push_combo_style();
     void pop_combo_style();
 
+    void invalidate_legend() { /*TODO: m_legend_resizer.reset();*/ }
+
+#if VGCODE_ENABLE_COG_AND_TOOL_MARKERS
+    float get_cog_marker_scale_factor() const { return m_viewer.get_cog_marker_scale_factor(); }
+    void set_cog_marker_scale_factor(float factor) { return m_viewer.set_cog_marker_scale_factor(factor); }
+#endif // VGCODE_ENABLE_COG_AND_TOOL_MARKERS
+
 private:
-    void extract_layer_metadata(const GCodeProcessorResult& gcode_result);
-    void load_toolpaths(const GCodeProcessorResult& gcode_result, const BuildVolume& build_volume, const std::vector<BoundingBoxf3>& exclude_bounding_box);
     //BBS: always load shell at preview
     //void load_shells(const Print& print);
-    void refresh_render_paths(bool keep_sequential_current_first, bool keep_sequential_current_last) const;
+    // Canvas height minus the room the horizontal slider takes.
+    int sequential_view_height(int canvas_height) const;
     void render_toolpaths();
-    void render_shells();
+    void render_shells(int canvas_width, int canvas_height);
 
     //BBS: GUI refactor: add canvas size
     void render_legend(float &legend_height, int canvas_width, int canvas_height, int right_margin);
+    void render_legend_color_arr_recommen(float window_padding);
     void render_slider(int canvas_width, int canvas_height);
-
-#if ENABLE_GCODE_VIEWER_STATISTICS
-    void render_statistics();
-#endif // ENABLE_GCODE_VIEWER_STATISTICS
-    bool is_visible(ExtrusionRole role) const {
-        return role < erCount && (m_extrusions.role_visibility_flags & (1 << role)) != 0;
-    }
-    bool is_visible(const Path& path) const { return is_visible(path.role); }
-    void log_memory_used(const std::string& label, int64_t additional = 0) const;
-    ColorRGBA option_color(EMoveType move_type) const;
 };
 
 } // namespace GUI

@@ -1,28 +1,87 @@
+#include <array>
+#include <cassert>
+#include <cmath>
+#include <boost/algorithm/string/erase.hpp>
+#include <boost/algorithm/string/split.hpp>
+#include <boost/algorithm/string/classification.hpp>
 #include <cstddef>
 #include <algorithm>
+#include "libslic3r/Color.hpp"
+#include "libslic3r/Point.hpp"
+#include "libslic3r/Config.hpp"
+#include "libslic3r/PrintConfig.hpp"
+#include "libslic3r/Line.hpp"
+#include "libslic3r/Polyline.hpp"
+#include "libslic3r/ExPolygon.hpp"
+#include <functional>
+#include <iterator>
+#include "libslic3r/BuildVolume.hpp"
+#include "libslic3r/GCode/WipeTower.hpp"
+#include "libslic3r/CustomGCode.hpp"
+#include "libslic3r/GCode/GCodeProcessor.hpp"
+#include "libslic3r/GCode/GCodeStatistics.hpp"
+#include <ios>
+#include <iomanip>
+#include "libslic3r/Arrange.hpp"
+#include "libslic3r/PrintBase.hpp"
+#include "libslic3r/Model.hpp"
+#include "libslic3r/format.hpp"
+#include <cstring>
+#include <exception>
+#include "libslic3r/ParameterUtils.hpp"
+#include <imgui.h>
+#include "libslic3r/Format/bbs_3mf.hpp"
+#include "libslic3r/Print.hpp"
+#include "libslic3r/LocalesUtils.hpp"
+#include <cstdlib>
+#include <limits>
+#include <memory>
+#include <map>
+#include <mutex>
 #include <numeric>
+#include "slic3r/GUI/ImGuiWrapper.hpp"
+#include <optional>
+#include <tuple>
+#include <utility>
+#include "slic3r/GUI/MeshUtils.hpp"
+#include "slic3r/GUI/GLTexture.hpp"
+#include "slic3r/GUI/GLShader.hpp"
+#include "slic3r/GUI/OpenGLManager.hpp"
+#include "slic3r/GUI/SceneRaycaster.hpp"
+#include <set>
+#include <unordered_map>
+#include <unordered_set>
+#include "slic3r/GUI/3DScene.hpp"
+#include "slic3r/GUI/Plater.hpp"
+#include "slic3r/GUI/GUI_ObjectLayers.hpp"
 #include <vector>
 #include <string>
+#include <sstream>
 #include <regex>
+#include "libslic3r/MultiNozzleUtils.hpp"
+#include "libslic3r/FilamentMixer.hpp"
 #include <future>
-#include <GL/glew.h>
+#include <glad/gl.h>
 #include <boost/algorithm/string.hpp>
-#include <boost/optional.hpp>
 #include <boost/filesystem/path.hpp>
 #include <boost/filesystem/operations.hpp>
 #include <boost/log/trivial.hpp>
 #include <boost/nowide/convert.hpp>
 #include <boost/nowide/cstdio.hpp>
+#include <boost/nowide/fstream.hpp>
 #include <boost/algorithm/string/predicate.hpp>
 
 #include "libslic3r/libslic3r.h"
 #include "libslic3r/Polygon.hpp"
+#include "libslic3r/GCode/WipeTowerEstimate.hpp"
 #include "libslic3r/ClipperUtils.hpp"
 #include "libslic3r/BoundingBox.hpp"
 #include "libslic3r/Geometry.hpp"
-#include "libslic3r/Tesselate.hpp"
 #include "libslic3r/GCode/ThumbnailData.hpp"
+#include "libslic3r/IMEXHelpers.hpp"
+#include "libslic3r/IMEXZones.hpp"
 #include "libslic3r/Utils.hpp"
+#include "libslic3r/LifecycleEvents.hpp"
 
 #include "I18N.hpp"
 #include "GUI_App.hpp"
@@ -39,10 +98,25 @@
 #include "Tab.hpp"
 #include "format.hpp"
 #include "slic3r/GUI/GUI.hpp"
+#include "slic3r/Utils/FileHelp.hpp"
 #include <imgui/imgui_internal.h>
+#include <wx/colour.h>
 #include <wx/dcgraph.h>
-using boost::optional;
-namespace fs = boost::filesystem;
+#include <wx/string.h>
+#include <wx/types.h>
+#include <wx/dcmemory.h>
+#include <wx/intl.h>
+#include <wx/event.h>
+#include <wx/image.h>
+#include <wx/gdicmn.h>
+#include "libslic3r/ObjectID.hpp"
+#include "libslic3r/Preset.hpp"
+#include "libslic3r/SLA/Pad.hpp"
+#include "libslic3r/TriangleMesh.hpp"
+#include "slic3r/GUI/GLCanvas3D.hpp"
+#include "slic3r/GUI/GLModel.hpp"
+
+class wxFont;
 
 static const float GROUND_Z = -0.03f;
 static const float GROUND_Z_GRIDLINE = -0.26f;
@@ -62,8 +136,10 @@ static const int PARTPLATE_TEXT_OFFSET_X2 = 1;
 static const int PARTPLATE_TEXT_OFFSET_Y = 1;
 static const int PARTPLATE_PLATENAME_OFFSET_Y  = 10;
 
-const float WIPE_TOWER_DEFAULT_X_POS = 13.;
-const float WIPE_TOWER_DEFAULT_Y_POS = 214.5;  // Max y
+const float WIPE_TOWER_DEFAULT_X_POS = 165.;
+const float WIPE_TOWER_DEFAULT_Y_POS = 250.;  // Max y
+
+const float N9_WIPE_TOWER_DEFAULT_Y_POS = 160.;
 
 const float I3_WIPE_TOWER_DEFAULT_X_POS = 0.;
 const float I3_WIPE_TOWER_DEFAULT_Y_POS = 250.; // Max y
@@ -74,17 +150,6 @@ namespace Slic3r {
 namespace GUI {
 
 class Bed3D;
-
-namespace {
-
-template <typename ConfigLike>
-int resolve_sparse_infill_filament(const ConfigLike &config, int inherited_sparse_infill_filament)
-{
-    const ConfigOption *sparse_opt = config.option("sparse_infill_filament");
-    return sparse_opt != nullptr && sparse_opt->getInt() > 0 ? sparse_opt->getInt() : inherited_sparse_infill_filament;
-}
-
-} // namespace
 
 ColorRGBA PartPlate::SELECT_COLOR		= { 0.2666f, 0.2784f, 0.2784f, 1.0f }; //{ 0.4196f, 0.4235f, 0.4235f, 1.0f };
 ColorRGBA PartPlate::UNSELECT_COLOR		= { 0.82f, 0.82f, 0.82f, 1.0f };
@@ -162,7 +227,7 @@ PartPlate::PartPlate()
 	init();
 }
 
-PartPlate::PartPlate(PartPlateList *partplate_list, Vec3d origin, int width, int depth, int height, Plater* platerObj, Model* modelObj, bool printable, PrinterTechnology tech)
+PartPlate::PartPlate(PartPlateList *partplate_list, Vec3d origin, int width, int depth, double height, Plater* platerObj, Model* modelObj, bool printable, PrinterTechnology tech)
 	:m_partplate_list(partplate_list), m_plater(platerObj), m_model(modelObj), printer_technology(tech), m_origin(origin), m_width(width), m_depth(depth), m_height(height),  m_printable(printable)
 {
 	init();
@@ -182,7 +247,8 @@ void PartPlate::init()
 	m_locked = false;
 	m_ready_for_slice = true;
 	m_slice_result_valid = false;
-	m_slice_percent = 0.0f;
+	m_slice_percent = -1.0f; // ORCA create new plates with negative values or it will take "slicing" role on toolbar
+                             // condition for sliced / slicing -- if (plate_list.get_plate(i)->get_slicing_percent() < 0.0f)
 	m_hover_id = -1;
 	m_selected = false;
 	//m_quadric = ::gluNewQuadric();
@@ -191,6 +257,7 @@ void PartPlate::init()
 
 	m_print_index = -1;
 	m_print = nullptr;
+	m_config.option<ConfigOptionEnum<FilamentMapMode>>("filament_map_mode", true)->value = FilamentMapMode::fmmAutoForFlush;
 }
 
 BedType PartPlate::get_bed_type(bool load_from_project) const
@@ -311,6 +378,44 @@ PrintSequence PartPlate::get_real_print_seq(bool* plate_same_as_global) const
     return curr_plate_seq;
 }
 
+std::vector<int> PartPlate::get_real_filament_maps(const DynamicConfig& g_config, bool* use_global_param) const
+{
+	auto maps = get_filament_maps();
+	if (!maps.empty()) {
+		if (use_global_param) { *use_global_param = false; }
+		return maps;
+	}
+	auto g_maps = g_config.option<ConfigOptionInts>("filament_map")->values;
+	if (use_global_param) { *use_global_param = true; }
+	return g_maps;
+}
+
+std::vector<int> PartPlate::get_real_filament_volume_maps(const DynamicConfig& g_config, bool* use_global_param) const
+{
+	auto maps = get_filament_volume_maps();
+	if (!maps.empty()) {
+		if (use_global_param) { *use_global_param = false; }
+		return maps;
+	}
+	auto g_maps = g_config.option<ConfigOptionInts>("filament_volume_map")->values;
+	if (use_global_param) { *use_global_param = true; }
+	return g_maps;
+}
+
+FilamentMapMode PartPlate::get_real_filament_map_mode(const DynamicConfig& g_config, bool* use_global_param) const
+{
+	auto mode = get_filament_map_mode();
+	if (FilamentMapMode::fmmDefault != mode) {
+		if (use_global_param) { *use_global_param = false; };
+		return mode;
+	}
+
+	auto g_mode = g_config.option<ConfigOptionEnum<FilamentMapMode>>("filament_map_mode")->value;
+	if (use_global_param) { *use_global_param = true; }
+	return g_mode;
+}
+
+
 bool PartPlate::has_spiral_mode_config() const
 {
 	std::string key = "spiral_mode";
@@ -329,6 +434,138 @@ bool PartPlate::get_spiral_vase_mode() const
 			return global_config->opt_bool(key);
 	}
 	return false;
+}
+
+std::vector<Vec2d> PartPlate::get_plate_wrapping_detection_area() const
+{
+    DynamicPrintConfig  gconfig                  = wxGetApp().preset_bundle->printers.get_edited_preset().config;
+    ConfigOptionPoints *wrapping_exclude_area_opt = gconfig.option<ConfigOptionPoints>("wrapping_exclude_area");
+    if (wrapping_exclude_area_opt) {
+        std::vector<Vec2d> wrapping_area = wrapping_exclude_area_opt->values;
+        for (Vec2d& pt : wrapping_area) {
+            pt += Vec2d(m_origin.x(), m_origin.y());
+        }
+        return wrapping_area;
+    }
+
+    return std::vector<Vec2d>();
+}
+
+std::string PartPlate::get_imex_mode() const
+{
+    if (m_config.has("imex_parallel_mode")) {
+        auto* opt = m_config.option<ConfigOptionString>("imex_parallel_mode");
+        if (opt && !opt->value.empty())
+            return opt->value;
+    }
+    return kImexPrimaryMode;
+}
+
+std::string PartPlate::get_effective_imex_mode() const
+{
+    // Per-plate mode takes priority over the process preset; set_imex_mode() erases the
+    // key on Primary, which is what lets the preset's value survive the config merge and
+    // reach the slicer. Resolve it the same way here.
+    std::string mode = get_imex_mode();
+    if (mode != kImexPrimaryMode)
+        return mode;
+    // wxGetApp() is not available headless -- see build_imex_cache_key, which guards on the
+    // same thing. Nothing calls this from the CLI today; this keeps that from being fatal.
+    if (!m_plater)
+        return mode;
+    if (auto* bundle = wxGetApp().preset_bundle) {
+        if (auto* opt = bundle->prints.get_edited_preset().config.option<ConfigOptionString>("imex_parallel_mode"))
+            if (!opt->value.empty())
+                return opt->value;
+    }
+    return kImexPrimaryMode;
+}
+
+void PartPlate::set_imex_mode(const std::string& mode)
+{
+    if (mode.empty() || mode == kImexPrimaryMode) {
+        m_config.erase("imex_parallel_mode");
+    } else {
+        m_config.set_key_value("imex_parallel_mode", new ConfigOptionString(mode));
+    }
+    update_slice_result_valid_state(false);
+    m_imex_zones_mode_cache = "\x01"; // force zone rebuild
+    m_imex_ghost_cache_key = "\x01";  // force ghost rebuild
+}
+
+void PartPlate::reset_imex_mode()
+{
+    m_config.erase("imex_parallel_mode");
+    update_slice_result_valid_state(false);
+    m_imex_zones_mode_cache = "\x01";
+    m_imex_ghost_cache_key  = "\x01";
+}
+
+std::map<int,int> PartPlate::get_imex_head_filament_map() const
+{
+    if (!m_config.has("imex_head_filament_map"))
+        return {};
+    auto* opt = m_config.option<ConfigOptionString>("imex_head_filament_map");
+    if (!opt) return {};
+    return parse_imex_head_filament_map(opt->value);
+}
+
+void PartPlate::set_imex_head_filament_map(const std::map<int,int>& m)
+{
+    if (m.empty()) {
+        m_config.erase("imex_head_filament_map");
+    } else {
+        std::ostringstream os;
+        bool first = true;
+        for (const auto& [phys, slot] : m) {
+            if (!first) os << ',';
+            os << phys << ':' << slot;
+            first = false;
+        }
+        m_config.set_key_value("imex_head_filament_map", new ConfigOptionString(os.str()));
+    }
+    update_slice_result_valid_state(false);
+    // No ghost rebuild: routing only affects color, which update_imex_ghost_colors
+    // restamps live every frame.
+}
+
+void PartPlate::reset_imex_head_filament_map()
+{
+    m_config.erase("imex_head_filament_map");
+    update_slice_result_valid_state(false);
+}
+
+ColorRGBA PartPlate::get_imex_head_filament_color(int physical_head) const
+{
+    auto* pb = wxGetApp().preset_bundle;
+    if (!pb)
+        return GLVolume::UNPRINTABLE_COLOR;
+
+    return get_imex_head_filament_color(physical_head,
+                                        effective_physical_extruder_map(*pb),
+                                        get_imex_head_filament_map());
+}
+
+ColorRGBA PartPlate::get_imex_head_filament_color(int physical_head,
+                                                  const ConfigOptionInts& pem,
+                                                  const std::map<int, int>& plate_map) const
+{
+    auto* pb = wxGetApp().preset_bundle;
+    if (!pb)
+        return GLVolume::UNPRINTABLE_COLOR;
+
+    const int logical = resolve_filament_for_head(plate_map, pem, physical_head);
+    if (logical < 0)
+        return GLVolume::UNPRINTABLE_COLOR;
+
+    auto* colours = pb->project_config.option<ConfigOptionStrings>("filament_colour");
+    if (!colours || logical >= (int)colours->values.size())
+        return GLVolume::UNPRINTABLE_COLOR;
+
+    ColorRGBA rgba;
+    if (!decode_color(colours->values[logical], rgba))
+        return GLVolume::UNPRINTABLE_COLOR;
+    return rgba;
 }
 
 void PartPlate::set_spiral_vase_mode(bool spiral_mode, bool as_global)
@@ -352,7 +589,7 @@ void PartPlate::set_spiral_vase_mode(bool spiral_mode, bool as_global)
 	}
 }
 
-bool PartPlate::valid_instance(int obj_id, int instance_id)
+bool PartPlate::valid_instance(int obj_id, int instance_id) const
 {
 	if ((obj_id >= 0) && (obj_id < m_model->objects.size()))
 	{
@@ -417,6 +654,777 @@ void PartPlate::calc_exclude_triangles(const ExPolygon &poly)
 
     if (!init_model_from_poly(m_exclude_triangles, poly, GROUND_Z))
 		BOOST_LOG_TRIVIAL(error) << __FUNCTION__ << ":Unable to create exclude triangles\n";
+}
+
+// Forward declaration (defined later in this file)
+static bool init_model_from_lines(GLModel &model, const Lines &lines, float z);
+
+// Thin GUI wrapper: fetch the configs, hand the geometry to libslic3r, turn the returned
+// rectangles into render meshes. Every zone/strip/margin decision lives in
+// compute_imex_zone_layout (libslic3r/IMEXZones.cpp), which is unit-tested headlessly;
+// the only work left here is clipping each rectangle to the bed outline and building the
+// GLModel for it, which needs the GUI's model helpers.
+void PartPlate::calc_imex_zones()
+{
+    m_imex_copy_zones.clear();
+    m_imex_mirror_zones.clear();
+    // Clear blocking vectors at the top so early returns don't leave stale data.
+    m_imex_secondary_zone_boxes.clear();
+    m_imex_collision_zones.clear();
+    m_imex_collision_overlay.clear();
+    m_imex_margin_overlay.clear();
+    m_imex_primary_zone_box = std::nullopt;
+    m_imex_head_zone_centers.clear();
+    m_imex_primary_head = -1;
+
+    if (!wxGetApp().preset_bundle)
+        return;
+
+    PresetBundle&             bundle      = *wxGetApp().preset_bundle;
+    const DynamicPrintConfig& printer_cfg = bundle.printers.get_edited_preset().config;
+
+    // Process-preset mode is the fallback the library applies when the plate is still on
+    // the reserved Primary mode; it ignores this string otherwise.
+    std::string process_mode;
+    if (auto* mode_opt = bundle.prints.get_edited_preset().config.option<ConfigOptionString>("imex_parallel_mode"))
+        process_mode = mode_opt->value;
+
+    const ImexZoneLayout layout = compute_imex_zone_layout(printer_cfg, get_imex_mode(),
+                                                           process_mode, get_extents(m_shape));
+
+    m_imex_primary_head         = layout.primary_head;
+    m_imex_head_zone_centers    = layout.head_zone_centers;
+    m_imex_primary_zone_box     = layout.primary_zone_box;
+    m_imex_secondary_zone_boxes = layout.secondary_zone_boxes;
+    m_imex_collision_zones      = layout.collision_zones;
+
+    // No primary zone means the layout is empty (IMEX off, Primary mode, single-tool grid,
+    // or a mode with no tools) -- exactly the cases that returned before touching geometry.
+    if (!m_imex_primary_zone_box.has_value())
+        return;
+
+    ExPolygon bed_poly;
+    generate_print_polygon(bed_poly);
+
+    // Build a clipped filled GLModel for one zone rect and push it into a vector.
+    // A rect falling entirely outside the bed outline contributes no model.
+    auto push_zone_fill = [&](std::vector<GLModel>& vec, double cx0, double cx1, double cy0, double cy1) {
+        ExPolygon cell;
+        cell.contour.append({ scale_(cx0), scale_(cy0) });
+        cell.contour.append({ scale_(cx1), scale_(cy0) });
+        cell.contour.append({ scale_(cx1), scale_(cy1) });
+        cell.contour.append({ scale_(cx0), scale_(cy1) });
+        ExPolygons clipped = intersection_ex({ cell }, { bed_poly });
+        if (!clipped.empty()) {
+            GLModel m;
+            if (init_model_from_poly(m, clipped.front(), GROUND_Z))
+                vec.push_back(std::move(m));
+        }
+    };
+
+    for (const BoundingBoxf& b : layout.copy_zones)
+        push_zone_fill(m_imex_copy_zones, b.min.x(), b.max.x(), b.min.y(), b.max.y());
+    for (const BoundingBoxf& b : layout.mirror_zones)
+        push_zone_fill(m_imex_mirror_zones, b.min.x(), b.max.x(), b.min.y(), b.max.y());
+    // Red-orange fill for each carriage danger strip, and the amber advisory band just
+    // inside it. Both are visual only -- blocking is driven by m_imex_collision_zones.
+    for (const BoundingBoxf3& b : layout.collision_zones)
+        push_zone_fill(m_imex_collision_overlay, b.min.x(), b.max.x(), b.min.y(), b.max.y());
+    for (const BoundingBoxf& b : layout.margin_bands)
+        push_zone_fill(m_imex_margin_overlay, b.min.x(), b.max.x(), b.min.y(), b.max.y());
+}
+
+// Build a cache key from the current IDEX/IQEX config options, or "" if IDEX/IQEX is off.
+// Reads per-plate mode from m_config first, falling back to the process preset.
+//
+// Inputs that contribute to the key (any change must invalidate the IMEX zone cache):
+//   - active_mode (per-plate or process-preset fallback)
+//   - imex_tools_per_gantry, imex_gantry_count                  (grid shape)
+//   - imex_tool_layout                                          (which corner tool 0 occupies)
+//   - imex_nozzle_clearance_x, imex_nozzle_clearance_y          (zone widths / collision strips)
+//   - imex_carriage_margin                                       (zone shrink)
+//   - the active mode's tool roster and its Primary head        (same name, different roster)
+//   - imex_firmware_managed_zones                               (suppresses ghost generation)
+//
+// IMPORTANT: if you add a printer config option that affects zone geometry, ghost transforms,
+// or collision strips, it MUST be incorporated here — otherwise ghost meshes and zone overlays
+// will go stale silently after a config change. Float values are scaled by 10 before integer
+// cast so 0.1 mm steps invalidate the cache; if you add a float option needing finer precision,
+// adjust the scale.
+std::string PartPlate::build_imex_cache_key() const
+{
+    // CLI / headless slice: no GUI_App is initialized, so `wxGetApp()` returns
+    // memory that segfaults on member access. `m_plater` is set only by the GUI
+    // construction path; treat its absence as "no IMEX state to compute" and
+    // return an empty key. Same guard pattern used by calc_imex_ghosts.
+    if (!m_plater || !wxGetApp().preset_bundle)
+        return "";
+    const DynamicPrintConfig& printer_cfg = wxGetApp().preset_bundle->printers.get_edited_preset().config;
+    auto* is_imex_opt = printer_cfg.option<ConfigOptionBool>("is_imex");
+    if (!is_imex_opt || !is_imex_opt->value)
+        return "";
+    std::string active_mode = get_effective_imex_mode();
+    // Mode NAME alone is not printer identity: two presets can define the same mode
+    // name with different tool rosters/primary, and imex_firmware_managed_zones
+    // suppresses ghost generation entirely. Both shape the baked zone/ghost set, so
+    // key them directly (previously caught only incidentally, via the ghost key's
+    // since-removed pem entry).
+    std::string active_tools;
+    int         primary_phys = -1;
+    resolve_active_mode_tools(active_tools, primary_phys); // empty on failure — keyed as such
+    // imex_tool_layout decides which physical corner tool 0 occupies (flip_x / flip_y inside
+    // compute_imex_zone_layout), so every zone rectangle, collision strip and ghost offset moves
+    // when it changes while every other keyed field stays put. Without it the key is identical
+    // across a layout change and the baked zones go stale; that this currently appears to work is
+    // incidental -- some other path happens to rebuild -- not something to rely on.
+    // Geometry values go through imex_cfg_* so the key is built from the same numbers
+    // compute_imex_zone_layout() lays out with; a literal here could key on a value the layout
+    // never used.
+    return active_mode
+         + "|" + std::to_string(imex_cfg_int(printer_cfg, "imex_tools_per_gantry"))
+         + "x" + std::to_string(imex_cfg_int(printer_cfg, "imex_gantry_count"))
+         + "|ly" + std::to_string((int)imex_cfg_enum<ImexToolLayout>(printer_cfg, "imex_tool_layout"))
+         + "|cw" + std::to_string((int)(imex_cfg_float(printer_cfg, "imex_nozzle_clearance_x") * 10))
+         + "|ch" + std::to_string((int)(imex_cfg_float(printer_cfg, "imex_nozzle_clearance_y") * 10))
+         + "|mg" + std::to_string((int)(imex_cfg_float(printer_cfg, "imex_carriage_margin") * 10))
+         + "|t" + active_tools
+         + "|p" + std::to_string(primary_phys)
+         + "|fw" + (imex_cfg_bool(printer_cfg, "imex_firmware_managed_zones") ? "1" : "0");
+}
+
+// Reposition the IMEX mode icon without requiring a full set_shape() rebuild.
+static void register_model_for_picking(GLCanvas3D &canvas, PickingModel &model, int id);
+
+// Called when is_imex is toggled on a printer whose bed shape matches the current plate,
+// which would otherwise cause set_shape() to short-circuit before reaching icon calc.
+void PartPlate::refresh_imex_icon()
+{
+    if (!m_plater) return;
+    PresetBundle* preset = wxGetApp().preset_bundle;
+    if (!preset) return;
+    bool dual_bbl = preset->is_bbl_vendor() && preset->get_printer_extruder_count() == 2;
+    auto* is_imex_opt = preset->printers.get_edited_preset().config.option<ConfigOptionBool>("is_imex");
+    if (is_imex_opt && is_imex_opt->value) {
+        int imex_slot = dual_bbl ? 7 : 6;
+        calc_vertex_for_icons(imex_slot, m_imex_mode_icon);
+        calc_vertex_for_imex_warn_badge(imex_slot, m_imex_warn_icon);
+
+        // calc_vertex_for_icons() destroyed the MeshRaycaster that SceneRaycaster still
+        // holds by raw pointer; swap the registration as calc_vertex_for_plate_name() does.
+        // Only the mode icon is picked -- the warn badge is a plain GLModel.
+        if (GLCanvas3D *canvas = m_plater->get_view3D_canvas3D()) {
+            canvas->remove_raycasters_for_picking(SceneRaycaster::EType::Bed,
+                                                  picking_id_component(PLATE_IMEX_MODE_ID));
+            register_model_for_picking(*canvas, m_imex_mode_icon, picking_id_component(PLATE_IMEX_MODE_ID));
+        }
+    }
+}
+
+// Ensure zone geometry (secondary boxes, collision strips, visual meshes) is up to date.
+// Called before any collision check AND before rendering so both paths share the same data.
+void PartPlate::ensure_imex_zones()
+{
+    // CLI / headless slice: no GUI_App, no plater, no IMEX state to track. Bail out
+    // before touching `wxGetApp()` (which segfaults without a GUI_App) — placement
+    // checks reach this from the headless 3MF-load path through `check_outside`.
+    if (!m_plater) return;
+    std::string cache_key = build_imex_cache_key();
+    if (cache_key != m_imex_zones_mode_cache) {
+        m_imex_zones_mode_cache = cache_key;
+        calc_imex_zones();
+    }
+}
+
+std::string PartPlate::build_imex_ghost_cache_key() const
+{
+    // Ghost shape depends on: mode topology (same inputs as zone key) + set of
+    // objects on plate + each primary instance's transform. Filament routing and
+    // colors are deliberately NOT keyed: ghost RGB is restamped live every frame
+    // by update_imex_ghost_colors, so color-only changes never need a mesh rebuild.
+    std::string k = build_imex_cache_key();
+    if (k.empty()) return "";  // ghost-off when zones-off
+
+    k += "|obj";
+    for (const auto& oi : obj_to_instance_set)
+        k += std::to_string(oi.first) + "." + std::to_string(oi.second) + ",";
+    return k;
+}
+
+void PartPlate::ensure_imex_ghosts()
+{
+    std::string key = build_imex_ghost_cache_key();
+    if (key != m_imex_ghost_cache_key) {
+        m_imex_ghost_cache_key = key;
+        calc_imex_ghosts();
+    }
+}
+
+bool PartPlate::resolve_active_mode_tools(std::string& out_tools_str, int& out_primary_phys) const
+{
+    if (!wxGetApp().preset_bundle) return false;
+    const DynamicPrintConfig& printer_cfg = wxGetApp().preset_bundle->printers.get_edited_preset().config;
+    auto* is_imex_opt = printer_cfg.option<ConfigOptionBool>("is_imex");
+    if (!is_imex_opt || !is_imex_opt->value) return false;
+
+    const std::string active_mode = get_effective_imex_mode();
+    if (active_mode == kImexPrimaryMode) return false;
+
+    const ImexMode mode = find_imex_mode(printer_cfg, active_mode);
+    if (!mode.found()) return false;
+
+    // Also the ragged case: a tools array too short to reach this row hands back an empty
+    // string, which has no declared primary, which is the same "no zones here" answer the
+    // explicit bounds check used to give.
+    const int primary_phys = imex_primary_tool_for_mode(mode.active_tools);
+    if (primary_phys < 0) return false;
+
+    out_tools_str    = mode.active_tools;
+    out_primary_phys = primary_phys;
+    return true;
+}
+
+// Ghost opacity, stamped together with RGB by update_imex_ghost_colors every
+// frame — the sole author of ghost color.
+static constexpr float IMEX_GHOST_ALPHA = 0.55f;
+
+void PartPlate::calc_imex_ghosts()
+{
+    m_imex_ghost_volumes.clear();
+    if (!m_plater || !m_model) return;
+    if (obj_to_instance_set.empty()) return;
+
+    std::string active_tools_str;
+    int primary_phys = -1;
+    if (!resolve_active_mode_tools(active_tools_str, primary_phys)) return;
+
+    // IMEX firmware-managed zones: the slicer emits a centered single-half slice and the
+    // firmware fans copies/mirrors out from there — placement is not slicer-authoritative.
+    // Rendering secondary-tool ghosts via imex_head_transform (which assumes slicer-managed
+    // placement at primary_zone_center + gantry_offset) would draw them at positions the
+    // firmware doesn't honor (e.g. off-bed once the centered slice is in play). Suppress
+    // ghost generation entirely so we don't lie about something the slicer doesn't own.
+    if (imex_cfg_bool(wxGetApp().preset_bundle->printers.get_edited_preset().config,
+                      "imex_firmware_managed_zones"))
+        return;
+
+    // Zone centers are the basis for ghost placement; make sure they exist before
+    // we read them. render_imex_zones already ensures this, but ghost rebuild can
+    // also be driven from mode/preset invalidation paths that don't touch zones.
+    ensure_imex_zones();
+
+    const auto heads = parse_imex_active_tools(active_tools_str);
+
+    // When primary's gantry has a Span tool, paired-gantry aggregation means each
+    // non-primary gantry is represented by a single ghost — its column-paired rep —
+    // so non-rep tools on aggregated gantries are skipped. This single source of
+    // pairing truth keeps ghost emission and zone aggregation in lockstep.
+    // Grouping must divide the grid the same way compute_imex_zone_layout() does, so the key is
+    // read through the same accessor rather than against a literal repeated here.
+    const int tpg = std::max(1, imex_cfg_int(
+        wxGetApp().preset_bundle->printers.get_edited_preset().config, "imex_tools_per_gantry"));
+    const ImexGantryGrouping grouping =
+        group_imex_active_tools_by_gantry(active_tools_str, tpg);
+    auto is_aggregated = [&](int phys) -> bool {
+        const int g = phys / tpg;
+        for (const auto& grp : grouping.groups)
+            if (grp.gantry_index == g) return grp.aggregate;
+        return false;
+    };
+    auto skip_for_aggregation = [&](int phys) -> bool {
+        const int g = phys / tpg;
+        for (const auto& grp : grouping.groups) {
+            if (grp.gantry_index != g) continue;
+            return grp.aggregate && phys != grp.representative_phys;
+        }
+        return false;
+    };
+
+    auto mirror_axis_for = [&](int phys) {
+        return imex_mirror_axis_for(primary_phys, phys, tpg);
+    };
+
+    // Zone centers are the source of truth for ghost placement: they come from the
+    // same grid math that paints the colored secondary zones, so a ghost always lands
+    // in its own tool's zone. extruder_offset is physical-nozzle data and is left at
+    // zero on most IMEX presets — sourcing offsets from it stacks every ghost on top
+    // of the primary, which is what motivated this switch.
+    auto center_for = [&](int phys) -> Vec2d {
+        auto it = m_imex_head_zone_centers.find(phys);
+        return (it == m_imex_head_zone_centers.end()) ? Vec2d::Zero() : it->second;
+    };
+    const Vec2d primary_off = center_for(primary_phys);
+
+    // An aggregated gantry's zone is a full-X row strip, so it has no column of its own to
+    // align to. Putting BOTH the primary and target X frames on the bed centerline makes
+    // gantry_offset.x zero, which is what we want: a cross-gantry tool tracks primary's X
+    // (it reflects in Y, not X — see imex_mirror_axis_for) and only translates along Y.
+    // NB: the X frame is NOT a reflection plane. Do not "simplify" the bed_x_center
+    // substitution away on the grounds that the mirror no longer reflects in X — dropping it
+    // reintroduces a nonzero gantry_offset.x and shoves aggregated ghosts a column off their
+    // strip.
+    auto bed_ext = get_extents(m_shape);
+    const double bed_x_center = 0.5 * (bed_ext.min(0) + bed_ext.max(0));
+    auto resolve_centers = [&](int phys) -> std::pair<Vec2d, Vec2d> {
+        const Vec2d target_off = center_for(phys);
+        if (!is_aggregated(phys)) {
+            // Per-tool: target stays at its column-aligned zone center.
+            return {primary_off, target_off - primary_off};
+        }
+        const Vec2d aggregated_primary{bed_x_center, primary_off.y()};
+        const Vec2d aggregated_target {bed_x_center, target_off.y()};
+        return {aggregated_primary, aggregated_target - aggregated_primary};
+    };
+
+    // Mesh is object-local and identical across all instances and heads of a given object.
+    // Build the merged TriangleMesh once per obj_idx and reuse across the inner head loop.
+    // (Per-ghost GLModel::init_from still runs once each, since GLVolume owns its GLModel by value;
+    // sharing a GLModel across GLVolumes would require API changes outside this task's scope.)
+    std::map<int, TriangleMesh> mesh_by_obj;
+    auto get_combined_mesh = [&](int obj_idx, const ModelObject* mo) -> const TriangleMesh& {
+        auto it = mesh_by_obj.find(obj_idx);
+        if (it != mesh_by_obj.end()) return it->second;
+        TriangleMesh combined;
+        for (const ModelVolume* mv : mo->volumes) {
+            if (!mv->is_model_part()) continue;
+            TriangleMesh tm = mv->mesh();
+            tm.transform(mv->get_matrix());
+            combined.merge(tm);
+        }
+        return mesh_by_obj.emplace(obj_idx, std::move(combined)).first->second;
+    };
+
+    for (const auto& oi : obj_to_instance_set) {
+        const int obj_idx  = oi.first;
+        const int inst_idx = oi.second;
+        if (obj_idx < 0 || obj_idx >= (int)m_model->objects.size()) continue;
+        ModelObject* mo = m_model->objects[obj_idx];
+        if (!mo || inst_idx < 0 || inst_idx >= (int)mo->instances.size()) continue;
+        ModelInstance* mi = mo->instances[inst_idx];
+
+        const Transform3d inst_world = mi->get_matrix();
+        const TriangleMesh& combined = get_combined_mesh(obj_idx, mo);
+
+        for (const auto& [phys, role] : heads) {
+            if (phys == primary_phys) continue;
+            if (phys >= IMEX_GHOST_MAX_HEADS) continue;
+            if (role == ImexRole::Span) continue;  // within-gantry partner; primary's zone covers it
+            if (skip_for_aggregation(phys)) continue;  // non-rep on an aggregated gantry
+
+            const auto [pri_center, gantry] = resolve_centers(phys);
+            // A mirror on the primary's own gantry sits beside it in X, so it reflects across
+            // the vertical boundary between their zones. A mirror on another gantry sits in
+            // front of / behind it, so it reflects across the horizontal boundary between the
+            // row strips — the Y axis. Copy translates by `gantry`; aggregated tools resolve
+            // gantry.x to 0, so a cross-gantry mirror tracks primary's X and reflects only Y.
+            const Transform3d head_xf = imex_head_transform(
+                primary_phys, phys, role, gantry, pri_center, mirror_axis_for(phys));
+            const Transform3d ghost_xf = head_xf * inst_world;
+
+            // No color at bake time: update_imex_ghost_colors is the sole author of
+            // ghost color, restamping RGB + alpha from the live palette every frame.
+            auto ghost = std::make_unique<GLVolume>();
+            ghost->set_instance_transformation(ghost_xf);
+            ghost->force_transparent    = 1;
+            ghost->force_native_color   = 1;
+            ghost->disabled             = 1;  // skip selection path
+            // is_active defaults to true in GLVolume's ctor — leave it alone.
+            ghost->zoom_to_volumes      = 0;
+            // Ghosts live in secondary zones that are by definition outside the primary
+            // printable area; suppress the red "outside bed" overlay for them.
+            ghost->shader_outside_printer_detection_enabled = 0;
+            ghost->picking              = 1;
+            // object_id = sentinel-encoded physical head; volume_id = source obj_idx (for live-drag);
+            // instance_id = source inst_idx.
+            ghost->composite_id = GLVolume::CompositeID(
+                imex_ghost_composite_id_for_head(phys), obj_idx, inst_idx);
+            ghost->model.init_from(combined);
+            m_imex_ghost_volumes.push_back(std::move(ghost));
+        }
+    }
+}
+
+void PartPlate::update_imex_ghost_transforms(
+    const std::function<std::optional<Transform3d>(int, int)>& primary_live_xf)
+{
+    if (m_imex_ghost_volumes.empty() || !m_plater || !m_model) return;
+
+    std::string active_tools_str;
+    int primary_phys = -1;
+    if (!resolve_active_mode_tools(active_tools_str, primary_phys)) return;
+
+    // Reuse zone-center-derived offsets (same source calc_imex_ghosts uses), so
+    // update and rebuild paths always agree on where each ghost belongs.
+    ensure_imex_zones();
+    auto center_for = [&](int phys) -> Vec2d {
+        auto it = m_imex_head_zone_centers.find(phys);
+        return (it == m_imex_head_zone_centers.end()) ? Vec2d::Zero() : it->second;
+    };
+    const Vec2d primary_off = center_for(primary_phys);
+
+    // Same aggregation-aware center resolution as calc_imex_ghosts uses, so a live drag
+    // moves the ghost exactly as a rebuild would place it. See the note there: for an
+    // aggregated gantry both X frames sit on the bed centerline, which zeroes gantry_offset.x
+    // so the cross-gantry mirror tracks primary's X and reflects in Y.
+    // Same accessor, same reason as calc_imex_ghosts() above: this must group the grid the way
+    // compute_imex_zone_layout() does. The grouping/is_aggregated preamble that follows is
+    // duplicated from that function; the duplication predates this change and is left alone.
+    const int tpg = std::max(1, imex_cfg_int(
+        wxGetApp().preset_bundle->printers.get_edited_preset().config, "imex_tools_per_gantry"));
+    const ImexGantryGrouping grouping =
+        group_imex_active_tools_by_gantry(active_tools_str, tpg);
+    auto is_aggregated = [&](int phys) -> bool {
+        const int g = phys / tpg;
+        for (const auto& grp : grouping.groups)
+            if (grp.gantry_index == g) return grp.aggregate;
+        return false;
+    };
+    auto bed_ext = get_extents(m_shape);
+    const double bed_x_center = 0.5 * (bed_ext.min(0) + bed_ext.max(0));
+    auto resolve_centers = [&](int phys) -> std::pair<Vec2d, Vec2d> {
+        const Vec2d target_off = center_for(phys);
+        if (!is_aggregated(phys))
+            return {primary_off, target_off - primary_off};
+        const Vec2d ap{bed_x_center, primary_off.y()};
+        const Vec2d at{bed_x_center, target_off.y()};
+        return {ap, at - ap};
+    };
+    auto mirror_axis_for = [&](int phys) {
+        return imex_mirror_axis_for(primary_phys, phys, tpg);
+    };
+
+    // Build a phys → role map once so the per-ghost loop is a lookup, not a reparse.
+    std::map<int, ImexRole> role_by_phys;
+    for (const auto& [phys, role] : parse_imex_active_tools(active_tools_str))
+        role_by_phys[phys] = role;
+    auto role_for = [&](int phys) -> ImexRole {
+        auto it = role_by_phys.find(phys);
+        return (it == role_by_phys.end()) ? ImexRole::Copy : it->second;
+    };
+
+    for (auto& ghost : m_imex_ghost_volumes) {
+        const int head = imex_ghost_head_from_composite_id(ghost->composite_id.object_id);
+        const int inst_idx = ghost->composite_id.instance_id;
+        const int obj_idx  = ghost->composite_id.volume_id;  // stashed by calc_imex_ghosts
+        if (obj_idx < 0 || obj_idx >= (int)m_model->objects.size()) continue;
+        const ModelObject* mo = m_model->objects[obj_idx];
+        if (!mo || inst_idx < 0 || inst_idx >= (int)mo->instances.size()) continue;
+
+        // Live-drag path: GLVolume carries the in-progress gizmo transform, while
+        // ModelInstance::get_matrix() only reflects the last committed state. Use
+        // the live lookup when the caller provides it so ghosts track drags frame
+        // by frame instead of snapping on mouse-up.
+        Transform3d primary_xf;
+        if (primary_live_xf) {
+            if (auto live = primary_live_xf(obj_idx, inst_idx))
+                primary_xf = *live;
+            else
+                primary_xf = mo->instances[inst_idx]->get_matrix();
+        } else {
+            primary_xf = mo->instances[inst_idx]->get_matrix();
+        }
+
+        const ImexRole role = role_for(head);
+        const auto [pri_center, gantry] = resolve_centers(head);
+        // Mirror axis follows the gantry row — see calc_imex_ghosts(). A cross-gantry mirror
+        // reflects in Y and tracks primary's X, so drag no longer pushes it off-bed and the
+        // old bake-the-flip-into-the-mesh workaround is unnecessary.
+        const Transform3d head_xf = imex_head_transform(
+            primary_phys, head, role, gantry, pri_center, mirror_axis_for(head));
+        const Transform3d ghost_xf = head_xf * primary_xf;
+        ghost->set_instance_transformation(ghost_xf);
+    }
+}
+
+// Restamp every ghost's RGB from the current filament palette. Called per frame
+// from the render loop, so ghosts can never go stale against filament preset or
+// color changes — the ghost cache key deliberately ignores color-only inputs.
+// This is the same resolution the hover tooltip runs (resolve_filament_for_head
+// over the effective pem + per-plate override map), so the two cannot disagree.
+void PartPlate::update_imex_ghost_colors()
+{
+    // !m_plater is the headless sentinel: without a GUI_App, calling wxGetApp()
+    // below is unsafe — same guard pattern as ensure_imex_zones.
+    if (m_imex_ghost_volumes.empty() || !m_plater) return;
+    auto* pb = wxGetApp().preset_bundle;
+    if (!pb) return;
+
+    // Plate-level inputs hoisted once; per-head results memoized across instances.
+    const ConfigOptionInts pem = effective_physical_extruder_map(*pb);
+    const auto plate_map = get_imex_head_filament_map();
+
+    std::map<int, ColorRGBA> head_colors;
+    for (auto& ghost : m_imex_ghost_volumes) {
+        if (!ghost) continue;
+        const int head = imex_ghost_head_from_composite_id(ghost->composite_id.object_id);
+        auto hc = head_colors.find(head);
+        if (hc == head_colors.end())
+            hc = head_colors.emplace(head, get_imex_head_filament_color(head, pem, plate_map)).first;
+        ColorRGBA color = hc->second;
+        color.a(IMEX_GHOST_ALPHA);
+        ghost->color = color;
+    }
+}
+
+// True if `hull` (scaled, plate-list coordinates) overlaps a secondary zone or a
+// carriage danger strip. Shared by the object and prime-tower checks so both use one
+// definition of "overlap" — see imex_hull_violates_zones() for those semantics.
+bool PartPlate::imex_hull_violates(const Polygon& hull) const
+{
+    return imex_hull_violates_zones(m_imex_secondary_zone_boxes, hull)
+        || imex_hull_violates_zones(m_imex_collision_zones, hull);
+}
+
+// The prime tower is not a ModelObject, so the instance loop below cannot see it. Validate
+// the same footprint the scene draws. Empty polygon when the plate has no tower.
+Polygon PartPlate::imex_wipe_tower_hull() const
+{
+    // The estimate walks m_model->objects, and this runs even on an empty plate. The
+    // m_print arm is dead since the estimate stopped reading it; dropping it would newly
+    // validate plates this currently skips.
+    if (!m_plater || !m_print || !m_model)
+        return Polygon();
+    PresetBundle* preset_bundle = wxGetApp().preset_bundle;
+    if (!preset_bundle)
+        return Polygon();
+
+    const DynamicPrintConfig& print_cfg = preset_bundle->prints.get_edited_preset().config;
+
+    // Whether a tower is PRINTED is normalize_fdm_2's rule, shared with the slicer through
+    // prime_tower_is_printed() rather than re-derived here - re-deriving it is what let this
+    // validate a tower the slicer had already cancelled. Do not substitute the footprint
+    // estimate: it never reads enable_prime_tower or print_sequence, so it still sizes a tower
+    // for a plate that switched the tower off or prints by object, which would hard-block a
+    // plate with nothing drawn on screen to move.
+    //
+    // Counts are the ones normalize_fdm_2 is handed: filament slots as authored, so a mixed
+    // slot counts once, and distinct objects rather than instances. filament_is_mixed is a
+    // project option, hence read separately.
+    const auto* mixed_opt = preset_bundle->project_config.option<ConfigOptionBools>("filament_is_mixed");
+    const bool  has_mixed = mixed_opt != nullptr && has_any_mixed_filament(mixed_opt->values);
+    std::set<int> plate_objects;
+    for (const auto& pr : obj_to_instance_set)
+        plate_objects.insert(pr.first);
+    if (!prime_tower_is_printed(print_cfg, (int) get_extruders(true, /*expand_mixed_slots=*/false).size(),
+                                (int) plate_objects.size(), has_mixed))
+        return Polygon();
+
+    // The estimate's floor counts what is purged, so a mixed slot counts as its components here.
+    const int plate_extruder_size = (int) get_extruders(true).size();
+
+    Vec3d wt_pos, wt_size;
+    // full_config(), not the print preset: wipe_tower_x/y are project options the estimate
+    // dereferences unchecked. apply_extruder=false, so the per-filament arrays arrive as the
+    // concatenation of each preset's declared variants rather than one entry per filament.
+    // That matters now: filament_minimal_purge_on_wipe_tower became variant-keyed upstream and
+    // WipeTower2::extract_wipe_volumes indexes it by raw filament slot, so a multi-variant
+    // filament preset on a single-extruder-multi-material machine would estimate the tower
+    // from the wrong column. No shipped preset pairs the two today.
+    // plate_extruder_size is a floor, not an override; the scene passes 0, and both counts
+    // come from the same object walk.
+    arrangement::ArrangePolygon ap = estimate_wipe_tower_polygon(preset_bundle->full_config(false), m_plate_index, wt_pos, wt_size, plate_extruder_size);
+    if (wt_size(0) <= 0. || wt_size(1) <= 0. || ap.poly.contour.points.empty())
+        return Polygon();
+
+    // Only the estimated box and brim are validated. The depth is approximate, so a sliced
+    // tower can exceed it (the true footprint is Print::first_layer_wipe_tower_corners(),
+    // post-slice only). A Type2 cone's bulge is already in the margin the hull is built
+    // from - do not add a second allowance. Object brim, skirt and supports are unvalidated
+    // here too.
+    Polygon hull = ap.poly.contour;
+
+    // The estimate is an axis-aligned box, but the real tower is rotated about its anchor
+    // corner before placement, so without this a rotated footprint escapes the hull.
+    if (const auto* rot = print_cfg.option<ConfigOptionFloat>("wipe_tower_rotation_angle");
+        rot && rot->value != 0.)
+        hull.rotate(Geometry::deg2rad(rot->value),
+                    Point(scaled(wt_pos.x()), scaled(wt_pos.y())));
+
+    // Plate-local mm to plate-list coordinates, which the zones and instance hulls use.
+    hull.translate(Point(scaled(m_origin.x()), scaled(m_origin.y())));
+    return hull;
+}
+
+PartPlate::ImexPlacementViolation PartPlate::imex_placement_violation()
+{
+    ensure_imex_zones();
+    if (m_imex_secondary_zone_boxes.empty() && m_imex_collision_zones.empty())
+        return ImexPlacementViolation::None;
+    for (const auto& pr : obj_to_instance_set) {
+        int obj_id = pr.first;
+        int instance_id = pr.second;
+        if (!valid_instance(obj_id, instance_id))
+            continue;
+        ModelInstance* instance = m_model->objects[obj_id]->instances[instance_id];
+        if (imex_hull_violates(instance->convex_hull_2d()))
+            return ImexPlacementViolation::Object;
+    }
+    if (imex_hull_violates(imex_wipe_tower_hull()))
+        return ImexPlacementViolation::PrimeTower;
+    return ImexPlacementViolation::None;
+}
+
+bool PartPlate::has_imex_multimaterial_conflict() const
+{
+    // Mirror the logic Print::validate uses so the plater badge fires exactly when
+    // slicing would be blocked — no false positives where the badge warns but the
+    // slice goes through anyway. Delegates to imex_multicolor_block_reason() so
+    // both paths share one source of truth.
+    auto* pb = wxGetApp().preset_bundle;
+    if (!pb) return false;
+    const DynamicPrintConfig& printer_cfg = pb->printers.get_edited_preset().config;
+    auto* is_imex_opt = printer_cfg.option<ConfigOptionBool>("is_imex");
+    if (!is_imex_opt || !is_imex_opt->value) return false;
+
+    // Resolved, not the raw plate value: a plate left on Primary still slices in the
+    // process preset's mode, and this badge has to fire wherever validate() would block.
+    const std::string mode = get_effective_imex_mode();
+    if (mode == kImexPrimaryMode) return false;
+
+    // Bails rather than defaulting through imex_cfg_int(), deliberately: this reports a routing
+    // CONFLICT, so it must run on the printer's real configuration or not at all. With a defaulted
+    // grid the conflict would be computed against a shape the printer does not have. A false
+    // conflict warning is worse than staying quiet, so an absent key means "no answer" here --
+    // unlike the geometry paths, where a defaulted value still describes a drawable bed.
+    auto* tpg_opt   = printer_cfg.option<ConfigOptionInt>("imex_tools_per_gantry");
+    if (!tpg_opt) return false;
+    // The map Print::apply() hands validate(): a printer that authors none gets the identity,
+    // which the raw key's single default entry does not describe.
+    const ConfigOptionInts pem = effective_physical_extruder_map(*pb);
+
+    // Resolve the active mode's tools string from the printer config. Print::validate()
+    // resolves the same name the same way and keeps going on an empty result -- the mixed
+    // filament rule below does not depend on the roster -- so this must too, or the badge
+    // goes quiet on exactly the plates the slicer refuses.
+    const std::string active_tools_str = find_imex_mode(printer_cfg, mode).active_tools;
+
+    // Convert PartPlate's 1-based extruder list to the 0-based form the helper expects.
+    //
+    // get_extruders(true) expands a mixed slot into its physical components, which is right for
+    // AMS mapping but wrong here: Print::validate counts the slot itself, so an expanded list
+    // makes the badge disagree with the thing it is previewing. A plate holding one 2-component
+    // blend reads as 2 filaments to the badge and 1 to validate -- the badge stays silent and
+    // the slice is then refused, or it warns about "multi-material objects" on a plate the user
+    // sees as single-colour. Undo the expansion so both sides count the same way.
+    const std::vector<int> used_1b = get_extruders(true, /*expand_mixed_slots=*/false);
+    std::vector<int> used_0b;
+    used_0b.reserve(used_1b.size());
+    for (int e : used_1b) if (e > 0) used_0b.push_back(e - 1);
+
+    // validate()'s first rule: a mixed filament is unsupported in a parallel mode outright,
+    // ahead of any multi-color reasoning. The badge has to agree or it under-reports.
+    if (auto* is_mixed_opt = wxGetApp().preset_bundle->project_config.option<ConfigOptionBools>("filament_is_mixed")) {
+        const auto& is_mixed = is_mixed_opt->values;
+        if (std::any_of(used_0b.begin(), used_0b.end(),
+                        [&](int slot) { return slot >= 0 && slot < (int) is_mixed.size() && is_mixed[slot]; }))
+            return true;
+    }
+
+    return !imex_multicolor_block_reason(mode, active_tools_str, tpg_opt->value, used_0b, pem).empty();
+}
+
+void PartPlate::render_imex_zones(bool force_default_color)
+{
+    if (force_default_color)
+        return;
+
+    ensure_imex_zones();
+    ensure_imex_ghosts();
+
+    // Read visualization theme from printer config.
+    struct IMEXTheme {
+        ColorRGBA copy;     // secondary copy zone fill
+        ColorRGBA mirror;   // secondary mirror zone fill
+        ColorRGBA danger;   // blocking collision strip
+        ColorRGBA margin;   // advisory safety margin
+    };
+
+    // Standard (Okabe-Ito orange + sky blue)
+    // Alphas are deliberately low: these fills cover whole quadrants of the bed and sit under
+    // the model for the entire session, so at the saturation that reads well on a swatch they
+    // dominate the scene. The zone a tool owns only has to be legible, not loud.
+    // The three themes below keep their original alphas -- they are chosen for discriminability
+    // (and k_high_contrast explicitly for low vision), which is the opposite trade.
+    static const IMEXTheme k_standard = {
+        { 0.337f, 0.706f, 0.914f, 0.22f },   // copy   — sky blue  #56B4E9
+        { 0.902f, 0.624f, 0.000f, 0.22f },   // mirror — orange    #E69F00
+        // Dimmed less than the fills: this strip marks where a head collides, so it stays the
+        // most prominent thing on the bed even after the surrounding zones recede.
+        { 0.850f, 0.100f, 0.100f, 0.40f },   // danger — red
+        { 0.300f, 0.900f, 0.200f, 0.20f },   // margin — lime green
+    };
+    // Deuteranopia / Protanopia: avoids red-green confusion.
+    // Danger strip uses strong blue-violet (red invisible to protanopes).
+    static const IMEXTheme k_deuteranopia = {
+        { 0.000f, 0.447f, 0.698f, 0.50f },   // copy   — blue       #0072B2
+        { 0.941f, 0.894f, 0.259f, 0.50f },   // mirror — yellow     #F0E442
+        { 0.200f, 0.100f, 0.800f, 0.65f },   // danger — blue-violet (red not visible)
+        { 0.800f, 0.475f, 0.655f, 0.45f },   // margin — reddish purple #CC79A7
+    };
+    // Tritanopia: avoids blue-yellow confusion.
+    // Copy uses vermilion, mirror uses reddish-purple, margin uses teal.
+    static const IMEXTheme k_tritanopia = {
+        { 0.835f, 0.369f, 0.000f, 0.50f },   // copy   — vermilion  #D55E00
+        { 0.800f, 0.475f, 0.655f, 0.50f },   // mirror — reddish purple #CC79A7
+        { 0.850f, 0.100f, 0.100f, 0.55f },   // danger — red (visible to tritanopes)
+        { 0.000f, 0.700f, 0.600f, 0.45f },   // margin — teal
+    };
+    // High contrast: saturated, higher alpha for low-vision users.
+    static const IMEXTheme k_high_contrast = {
+        { 0.000f, 0.600f, 1.000f, 0.65f },   // copy   — vivid blue
+        { 1.000f, 0.600f, 0.000f, 0.65f },   // mirror — vivid orange
+        { 1.000f, 0.000f, 0.000f, 0.75f },   // danger — full red
+        { 0.000f, 1.000f, 0.200f, 0.60f },   // margin — bright green
+    };
+
+    const IMEXTheme* theme = &k_standard;
+    if (wxGetApp().preset_bundle) {
+        const DynamicPrintConfig& pcfg = wxGetApp().preset_bundle->printers.get_edited_preset().config;
+        switch (imex_cfg_enum<ImexVizTheme>(pcfg, "imex_viz_theme")) {
+        case ImexVizTheme::Deuteranopia: theme = &k_deuteranopia;  break;
+        case ImexVizTheme::Tritanopia:   theme = &k_tritanopia;    break;
+        case ImexVizTheme::HighContrast: theme = &k_high_contrast; break;
+        default: break; // Standard
+        }
+    }
+
+    // Both fills and border lines use the flat shader already active from render().
+    glsafe(::glDepthMask(GL_FALSE));
+
+    if (!m_imex_copy_zones.empty())
+        for (GLModel& z : m_imex_copy_zones)
+            if (z.is_initialized()) { z.set_color(theme->copy); z.render(); }
+
+    if (!m_imex_mirror_zones.empty())
+        for (GLModel& z : m_imex_mirror_zones)
+            if (z.is_initialized()) { z.set_color(theme->mirror); z.render(); }
+
+    glsafe(::glDepthMask(GL_TRUE));
+
+
+    if (!m_imex_collision_overlay.empty()) {
+        glsafe(::glDepthMask(GL_FALSE));
+        for (GLModel& s : m_imex_collision_overlay)
+            if (s.is_initialized()) { s.set_color(theme->danger); s.render(); }
+        glsafe(::glDepthMask(GL_TRUE));
+    }
+
+    if (!m_imex_margin_overlay.empty()) {
+        glsafe(::glDepthMask(GL_FALSE));
+        for (GLModel& b : m_imex_margin_overlay)
+            if (b.is_initialized()) { b.set_color(theme->margin); b.render(); }
+        glsafe(::glDepthMask(GL_TRUE));
+    }
+}
+
+void PartPlate::calc_triangles_from_polygon(const ExPolygon &poly, GLModel &render_model){
+    if (poly.empty()) {
+        render_model.reset();
+        return;
+    }
+    render_model.reset();
+    if (!init_model_from_poly(render_model, poly, GROUND_Z)) {
+        BOOST_LOG_TRIVIAL(error) << __FUNCTION__ << "calc_triangles_from_polygon fail";
+    }
 }
 
 static bool init_model_from_lines(GLModel &model, const Lines &lines, float z)
@@ -548,6 +1556,17 @@ void PartPlate::calc_height_limit() {
 		BOOST_LOG_TRIVIAL(error) << __FUNCTION__ << "Unable to create height limit top lines\n";
 }
 
+// The plate's icons and labels grow with its depth, but they sit in the gap to the
+// next plate, which grows with its width: on a long, narrow bed (a belt) they would
+// otherwise run across the neighbouring plate.
+float PartPlate::icon_scale_factor() const
+{
+    const BoundingBoxf bed_ext  = get_extents(m_shape);
+    const double       by_depth = bed_ext.size().y() / 200.;
+    const double       by_gap   = bed_ext.size().x() * LOGICAL_PART_PLATE_GAP / (PARTPLATE_ICON_SIZE + 2 * PARTPLATE_ICON_GAP_LEFT);
+    return float(std::min(by_depth, by_gap));
+}
+
 void PartPlate::calc_vertex_for_number(int index, bool one_number, GLModel &buffer)
 {
     buffer.reset();
@@ -564,7 +1583,7 @@ void PartPlate::calc_vertex_for_number(int index, bool one_number, GLModel &buff
 #else //in the bottom
     auto bed_ext   = get_extents(m_shape);
     Vec2d p        = bed_ext[1];
-    float factor   = bed_ext.size()(1) / 200.0;
+    float factor   = icon_scale_factor();
     float size     = PARTPLATE_ICON_SIZE     * factor;
     float offset_y = PARTPLATE_TEXT_OFFSET_Y * factor;
     float offset_x = (one_number?PARTPLATE_TEXT_OFFSET_X1: PARTPLATE_TEXT_OFFSET_X2) * factor;
@@ -586,7 +1605,7 @@ void PartPlate::calc_vertex_for_plate_name_edit_icon(GLTexture *texture, int ind
     ExPolygon poly;
     auto  bed_ext  = get_extents(m_shape);
     Vec2d p        = bed_ext[3];
-    float factor   = bed_ext.size()(1) / 200.0;
+    float factor   = icon_scale_factor();
     float icon_sz  = factor * PARTPLATE_EDIT_PLATE_NAME_ICON_SIZE;
     float width    = icon_sz;
     float height   = icon_sz;
@@ -619,7 +1638,7 @@ void PartPlate::calc_vertex_for_icons(int index, PickingModel &model)
     ExPolygon poly;
     auto  bed_ext  = get_extents(m_shape);
     Vec2d p        = bed_ext[2];
-    auto  factor   = bed_ext.size()(1) / 200.0;
+    float factor   = icon_scale_factor();
     float size     = PARTPLATE_ICON_SIZE     * factor;
     float gap_left = PARTPLATE_ICON_GAP_LEFT * factor;
     float gap_y    = PARTPLATE_ICON_GAP_Y    * factor;
@@ -638,6 +1657,37 @@ void PartPlate::calc_vertex_for_icons(int index, PickingModel &model)
 		BOOST_LOG_TRIVIAL(error) << __FUNCTION__ << "Unable to generate geometry buffers for icons\n";
 
 	init_raycaster_from_model(model);
+}
+
+// Positions the IMEX multi-material warning badge as a small overlay at the bottom-right
+// corner of the IMEX mode icon.  The icon slot index matches the one used in calc_vertex_for_icons.
+void PartPlate::calc_vertex_for_imex_warn_badge(int imex_icon_index, GLModel &model)
+{
+    model.reset();
+
+    auto  bed_ext  = get_extents(m_shape);
+    Vec2d p        = bed_ext[2];
+    auto  factor   = bed_ext.size()(1) / 200.0;
+    float size     = PARTPLATE_ICON_SIZE     * factor;
+    float gap_left = PARTPLATE_ICON_GAP_LEFT * factor;
+    float gap_y    = PARTPLATE_ICON_GAP_Y    * factor;
+    float gap_top  = PARTPLATE_ICON_GAP_TOP  * factor;
+
+    // Centre of the IMEX mode icon (top-left corner = p after offset)
+    p += Vec2d(gap_left, -1 * (imex_icon_index * (size + gap_y) + gap_top));
+
+    // Badge is half the icon size, anchored to the bottom-right corner of the icon slot
+    float badge = size * 0.55f;
+    Vec2d bp(p(0) + size - badge, p(1) - size);
+
+    ExPolygon poly;
+    poly.contour.append({ scale_(bp(0))        , scale_(bp(1))        });
+    poly.contour.append({ scale_(bp(0) + badge), scale_(bp(1))        });
+    poly.contour.append({ scale_(bp(0) + badge), scale_(bp(1) + badge)});
+    poly.contour.append({ scale_(bp(0))        , scale_(bp(1) + badge)});
+
+    if (!init_model_from_poly(model, poly, GROUND_Z + 0.01f))
+        BOOST_LOG_TRIVIAL(error) << __FUNCTION__ << "Unable to generate geometry for IMEX warn badge\n";
 }
 
 /*
@@ -734,67 +1784,8 @@ void PartPlate::render_logo(bool bottom, bool render_cali)
 {
 	if (!m_partplate_list->render_bedtype_logo) {
 		// render third-party printer texture logo
-		if (m_partplate_list->m_logo_texture_filename.empty()) {
-			m_partplate_list->m_logo_texture.reset();
+		if (!m_partplate_list->load_logo_texture())
 			return;
-		}
-
-		//GLTexture* temp_texture = const_cast<GLTexture*>(&m_temp_texture);
-
-		if (m_partplate_list->m_logo_texture.get_id() == 0 || m_partplate_list->m_logo_texture.get_source() != m_partplate_list->m_logo_texture_filename) {
-			m_partplate_list->m_logo_texture.reset();
-
-			if (boost::algorithm::iends_with(m_partplate_list->m_logo_texture_filename, ".svg")) {
-				/*// use higher resolution images if graphic card and opengl version allow
-				GLint max_tex_size = OpenGLManager::get_gl_info().get_max_tex_size();
-				if (temp_texture->get_id() == 0 || temp_texture->get_source() != m_texture_filename) {
-					// generate a temporary lower resolution texture to show while no main texture levels have been compressed
-					if (!temp_texture->load_from_svg_file(m_texture_filename, false, false, false, max_tex_size / 8)) {
-						render_default(bottom, false);
-						return;
-					}
-					canvas.request_extra_frame();
-				}*/
-
-				// starts generating the main texture, compression will run asynchronously
-				GLint max_tex_size = OpenGLManager::get_gl_info().get_max_tex_size();
-				GLint logo_tex_size = (max_tex_size < 2048) ? max_tex_size : 2048;
-				if (!m_partplate_list->m_logo_texture.load_from_svg_file(m_partplate_list->m_logo_texture_filename, true, true, true, logo_tex_size)) {
-					BOOST_LOG_TRIVIAL(warning) << __FUNCTION__ << boost::format(": load logo texture from %1% failed!") % m_partplate_list->m_logo_texture_filename;
-					return;
-				}
-			}
-			else if (boost::algorithm::iends_with(m_partplate_list->m_logo_texture_filename, ".png")) {
-				// generate a temporary lower resolution texture to show while no main texture levels have been compressed
-				/* if (temp_texture->get_id() == 0 || temp_texture->get_source() != m_logo_texture_filename) {
-					if (!temp_texture->load_from_file(m_logo_texture_filename, false, GLTexture::None, false)) {
-						render_default(bottom, false);
-						return;
-					}
-					canvas.request_extra_frame();
-				}*/
-
-				// starts generating the main texture, compression will run asynchronously
-				if (!m_partplate_list->m_logo_texture.load_from_file(m_partplate_list->m_logo_texture_filename, true, GLTexture::MultiThreaded, true)) {
-					BOOST_LOG_TRIVIAL(warning) << __FUNCTION__ << boost::format(": load logo texture from %1% failed!") % m_partplate_list->m_logo_texture_filename;
-					return;
-				}
-			}
-			else {
-				BOOST_LOG_TRIVIAL(warning) << __FUNCTION__ << boost::format(": can not load logo texture from %1%, unsupported format") % m_partplate_list->m_logo_texture_filename;
-				return;
-			}
-		}
-		else if (m_partplate_list->m_logo_texture.unsent_compressed_data_available()) {
-			// sends to gpu the already available compressed levels of the main texture
-			m_partplate_list->m_logo_texture.send_compressed_data_to_gpu();
-
-			// the temporary texture is not needed anymore, reset it
-			//if (temp_texture->get_id() != 0)
-			//    temp_texture->reset();
-
-			//canvas.request_extra_frame();
-		}
 
 		if (m_logo_triangles.is_initialized())
 			render_logo_texture(m_partplate_list->m_logo_texture, m_logo_triangles, bottom);
@@ -803,7 +1794,7 @@ void PartPlate::render_logo(bool bottom, bool render_cali)
 
 	m_partplate_list->load_bedtype_textures();
 	m_partplate_list->load_cali_textures();
-
+    m_partplate_list->load_extruder_only_area_textures();
 	// btDefault should be skipped
 	auto curr_bed_type = get_bed_type();
 	if (curr_bed_type == btDefault) {
@@ -812,6 +1803,12 @@ void PartPlate::render_logo(bool bottom, bool render_cali)
             curr_bed_type = proj_cfg.opt_enum<BedType>(std::string("curr_bed_type"));
 	}
 	int bed_type_idx = (int)curr_bed_type;
+    auto is_single_extruder = wxGetApp().preset_bundle->get_printer_extruder_count() == 1;
+    if (!is_single_extruder) {
+        if (m_partplate_list->m_allow_bed_type_in_double_nozzle.find(bed_type_idx) == m_partplate_list->m_allow_bed_type_in_double_nozzle.end()) {
+            bed_type_idx = 0;
+        }
+    }
 	// render bed textures
 	for (auto &part : m_partplate_list->bed_texture_info[bed_type_idx].parts) {
 		if (part.texture) {
@@ -845,6 +1842,32 @@ void PartPlate::render_logo(bool bottom, bool render_cali)
 			}
 		}
 	}
+
+	//render extruder_only_area_info
+    bool is_zh        = wxGetApp().app_config->get("language") == "zh_CN";
+    int  language_idx = (int) (is_zh ? ExtruderOnlyAreaType::Chinese:ExtruderOnlyAreaType::Engilish);
+    if (!is_single_extruder) {
+        for (auto &part : m_partplate_list->extruder_only_area_info[language_idx].parts) {
+            if (part.texture) {
+                if (part.buffer && part.buffer->is_initialized()) {
+                    if (part.offset.x() != m_origin.x() || part.offset.y() != m_origin.y()) {
+                        part.offset = Vec2d(m_origin.x(), m_origin.y());
+                        part.update_buffer();
+                    }
+                    render_logo_texture(*(part.texture), *(part.buffer), bottom);
+                }
+            }
+        }
+	}
+}
+
+void PartPlate::render_wrapping_detection_area(bool force_default_color)
+{
+    if (force_default_color || !m_wrapping_detection_triangles.is_initialized())
+        return;
+    ColorRGBA select_color{0.765f, 0.7686f, 0.7686f, 1.0f};
+    m_wrapping_detection_triangles.set_color(select_color);
+    m_wrapping_detection_triangles.render();
 }
 
 void PartPlate::render_exclude_area(bool force_default_color) {
@@ -858,18 +1881,10 @@ void PartPlate::render_exclude_area(bool force_default_color) {
 	// draw exclude area
 	glsafe(::glDepthMask(GL_FALSE));
 
-	if (m_selected) {
-		glsafe(::glColor4fv(select_color.data()));
-	}
-	else {
-		glsafe(::glColor4fv(unselect_color.data()));
-	}
-
 	m_exclude_triangles.set_color(m_selected ? select_color : unselect_color);
     m_exclude_triangles.render();
 	glsafe(::glDepthMask(GL_TRUE));
 }
-
 
 /*void PartPlate::render_background_for_picking(const ColorRGBA render_color) const
 {
@@ -886,7 +1901,30 @@ void PartPlate::render_exclude_area(bool force_default_color) {
 void PartPlate::render_grid(bool bottom) {
 	//glsafe(::glEnable(GL_MULTISAMPLE));
 	// draw grid
-	glsafe(::glLineWidth(1.0f * m_scale_factor));
+
+    // ORCA: OpenGL Core Profile support
+    // FIXME: ideally, we'd use the same shader for both the thin and thick lines, but for some reason setting the uniforms has no effect
+    GLShaderProgram* shader = wxGetApp().get_shader("flat");
+    if (shader == nullptr) {
+        return;
+    }
+
+    shader->start_using();
+    glsafe(::glEnable(GL_BLEND));
+    glsafe(::glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
+
+    const Camera& camera = wxGetApp().plater()->get_camera();
+    const std::array<int, 4>& viewport = camera.get_viewport();
+    const Transform3d& view_matrix = camera.get_view_matrix();
+    const Transform3d& projection_matrix = camera.get_projection_matrix();
+
+    shader->set_uniform("view_model_matrix", view_matrix);
+    shader->set_uniform("projection_matrix", projection_matrix);
+
+#if !SLIC3R_OPENGL_ES
+    if (!OpenGLManager::get_gl_info().is_core_profile())
+        glsafe(::glLineWidth(1.0f * m_scale_factor));
+#endif // !SLIC3R_OPENGL_ES
 
     ColorRGBA color;
 	if (bottom)
@@ -900,30 +1938,76 @@ void PartPlate::render_grid(bool bottom) {
     m_gridlines.set_color(color);
     m_gridlines.render();
 
-	glsafe(::glLineWidth(2.0f * m_scale_factor));
+    shader->stop_using();
+
+    // ORCA: OpenGL Core Profile support
+#if SLIC3R_OPENGL_ES
+    shader = wxGetApp().get_shader("dashed_lines");
+#else
+    shader = OpenGLManager::get_gl_info().is_core_profile() ? wxGetApp().get_shader("dashed_thick_lines") : wxGetApp().get_shader("flat");
+#endif // SLIC3R_OPENGL_ES
+    if (shader == nullptr) {
+        return;
+    }
+    shader->start_using();
+
+    shader->set_uniform("view_model_matrix", view_matrix);
+    shader->set_uniform("projection_matrix", projection_matrix);
+
+#if !SLIC3R_OPENGL_ES
+    if (OpenGLManager::get_gl_info().is_core_profile()) {
+#endif // !SLIC3R_OPENGL_ES
+        shader->set_uniform("viewport_size", Vec2d(double(viewport[2]), double(viewport[3])));
+        shader->set_uniform("width", 0.25f);
+#if !SLIC3R_OPENGL_ES
+    } else {
+        glsafe(::glLineWidth(2.0f * m_scale_factor));
+    }
+#endif // !SLIC3R_OPENGL_ES
+
     m_gridlines_bolder.set_color(color);
     m_gridlines_bolder.render();
+
+    shader->stop_using();
 }
 
 void PartPlate::render_height_limit(PartPlate::HeightLimitMode mode)
 {
-	if (m_print && m_print->config().print_sequence == PrintSequence::ByObject && mode != HEIGHT_LIMIT_NONE)
+	// Orca: a prime tower compacted by "No sparse layers" drags the nozzle back down to the plate on
+	// every toolchange, so the rod and the lid limit how tall a neighbouring object may be exactly as
+	// they do in sequential printing. The reference lines are just as useful there.
+	const bool relevant_for_print_mode = m_print && (m_print->config().print_sequence == PrintSequence::ByObject ||
+	                                                 (m_print->config().print_sequence == PrintSequence::ByLayer &&
+	                                                  wipe_tower_sparse_layers_skipped(m_print->config()) && m_print->has_wipe_tower()));
+	if (relevant_for_print_mode && mode != HEIGHT_LIMIT_NONE)
 	{
 		// draw lower limit
-		glsafe(::glLineWidth(3.0f * m_scale_factor));
+	    // ORCA: OpenGL Core Profile
+#if !SLIC3R_OPENGL_ES
+	    if (!OpenGLManager::get_gl_info().is_core_profile())
+	        glsafe(::glLineWidth(3.0f * m_scale_factor));
+#endif // !SLIC3R_OPENGL_ES
         m_height_limit_common.set_color(HEIGHT_LIMIT_BOTTOM_COLOR);
         m_height_limit_common.render();
 
 		if ((mode == HEIGHT_LIMIT_BOTTOM) || (mode == HEIGHT_LIMIT_BOTH)) {
-			glsafe(::glLineWidth(3.0f * m_scale_factor));
-            m_height_limit_bottom.set_color(HEIGHT_LIMIT_BOTTOM_COLOR);
+		    // ORCA: OpenGL Core Profile
+#if !SLIC3R_OPENGL_ES
+		    if (!OpenGLManager::get_gl_info().is_core_profile())
+		        glsafe(::glLineWidth(3.0f * m_scale_factor));
+#endif // !SLIC3R_OPENGL_ES
+		    m_height_limit_bottom.set_color(HEIGHT_LIMIT_BOTTOM_COLOR);
             m_height_limit_bottom.render();
 		}
 
 		// draw upper limit
 		if ((mode == HEIGHT_LIMIT_TOP) || (mode == HEIGHT_LIMIT_BOTH)){
-            glsafe(::glLineWidth(3.0f * m_scale_factor));
-            m_height_limit_top.set_color(HEIGHT_LIMIT_TOP_COLOR);
+		    // ORCA: OpenGL Core Profile
+#if !SLIC3R_OPENGL_ES
+		    if (!OpenGLManager::get_gl_info().is_core_profile())
+		        glsafe(::glLineWidth(3.0f * m_scale_factor));
+#endif // !SLIC3R_OPENGL_ES
+		    m_height_limit_top.set_color(HEIGHT_LIMIT_TOP_COLOR);
             m_height_limit_top.render();
 		}
 	}
@@ -939,8 +2023,11 @@ void PartPlate::render_icon_texture(GLModel &buffer, GLTexture &texture)
 
 void PartPlate::render_plate_name_texture()
 {
-	if (m_name_texture.get_id() == 0)
+	if (m_plate_name_edit_icon.mesh_raycaster == nullptr)
 		generate_plate_name_texture();
+
+	if (m_name_texture.get_id() == 0)
+		return;
 
 	GLuint tex_id = (GLuint)m_name_texture.get_id();
 	glsafe(::glBindTexture(GL_TEXTURE_2D, tex_id));
@@ -948,19 +2035,9 @@ void PartPlate::render_plate_name_texture()
 	glsafe(::glBindTexture(GL_TEXTURE_2D, 0));
 }
 
-void PartPlate::show_tooltip(const std::string tooltip)
+void PartPlate::set_hover_tooltip(const std::string& tooltip)
 {
-    const auto scale = m_plater->get_current_canvas3D()->get_scale();
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {6 * scale, 3 * scale});
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, {3 * scale});
-    ImGui::PushStyleColor(ImGuiCol_PopupBg, ImGuiWrapper::COL_WINDOW_BACKGROUND);
-    ImGui::PushStyleColor(ImGuiCol_Border, {0, 0, 0, 0});
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.00f, 1.00f, 1.00f, 1.00f));
-    ImGui::BeginTooltip();
-    ImGui::TextUnformatted(tooltip.c_str());
-    ImGui::EndTooltip();
-    ImGui::PopStyleColor(3);
-    ImGui::PopStyleVar(2);
+    m_partplate_list->m_hover_tooltip = tooltip;
 }
 
 void PartPlate::render_icons(bool bottom, bool only_name, int hover_id)
@@ -985,21 +2062,21 @@ void PartPlate::render_icons(bool bottom, bool only_name, int hover_id)
         if (!only_name) {
             if (hover_id == 1) {
                 render_icon_texture(m_del_icon.model, m_partplate_list->m_del_hovered_texture);
-                show_tooltip(_u8L("Remove current plate (if not last one)"));
+                set_hover_tooltip(_u8L("Remove current plate (if not last one)"));
             }
             else
                 render_icon_texture(m_del_icon.model, m_partplate_list->m_del_texture);
 
             if (hover_id == 2) {
                 render_icon_texture(m_orient_icon.model, m_partplate_list->m_orient_hovered_texture);
-                show_tooltip(_u8L("Auto orient objects on current plate"));
+                set_hover_tooltip(_u8L("Auto orient objects on current plate"));
             }
             else
                 render_icon_texture(m_orient_icon.model, m_partplate_list->m_orient_texture);
 
             if (hover_id == 3) {
                 render_icon_texture(m_arrange_icon.model, m_partplate_list->m_arrange_hovered_texture);
-                show_tooltip(_u8L("Arrange objects on current plate"));
+                set_hover_tooltip(_u8L("Arrange objects on current plate"));
             }
             else
                 render_icon_texture(m_arrange_icon.model, m_partplate_list->m_arrange_texture);
@@ -1008,12 +2085,12 @@ void PartPlate::render_icons(bool bottom, bool only_name, int hover_id)
                 if (this->is_locked()) {
                     render_icon_texture(m_lock_icon.model,
                                         m_partplate_list->m_locked_hovered_texture);
-                    show_tooltip(_u8L("Unlock current plate"));
+                    set_hover_tooltip(_u8L("Unlock current plate"));
                 }
                 else {
                     render_icon_texture(m_lock_icon.model,
                                         m_partplate_list->m_lockopen_hovered_texture);
-                    show_tooltip(_u8L("Lock current plate"));
+                    set_hover_tooltip(_u8L("Lock current plate"));
                 }
             } else {
                 if (this->is_locked())
@@ -1022,19 +2099,93 @@ void PartPlate::render_icons(bool bottom, bool only_name, int hover_id)
                     render_icon_texture(m_lock_icon.model, m_partplate_list->m_lockopen_texture);
             }
 
+            PresetBundle* preset = wxGetApp().preset_bundle;
+            bool dual_bbl = (preset->is_bbl_vendor() && preset->get_printer_extruder_count() == 2);
+            if (dual_bbl) {
+                if (hover_id == PLATE_FILAMENT_MAP_ID){
+                    render_icon_texture(m_plate_filament_map_icon.model, m_partplate_list->m_plate_set_filament_map_hovered_texture);
+                    set_hover_tooltip(_u8L("Filament grouping"));
+                } else
+                    render_icon_texture(m_plate_filament_map_icon.model, m_partplate_list->m_plate_set_filament_map_texture);
+            }
+
 			if (hover_id == 6) {
                 render_icon_texture(m_plate_name_edit_icon.model, m_partplate_list->m_plate_name_edit_hovered_texture);
-                show_tooltip(_u8L("Edit current plate name"));
+                set_hover_tooltip(_u8L("Edit current plate name"));
 			}
 			else
                 render_icon_texture(m_plate_name_edit_icon.model, m_partplate_list->m_plate_name_edit_texture);
 
 			if (hover_id == 7) {
                 render_icon_texture(m_move_front_icon.model, m_partplate_list->m_move_front_hovered_texture);
-                show_tooltip(_u8L("Move plate to the front"));
+                set_hover_tooltip(_u8L("Move plate to the front"));
             } else
                 render_icon_texture(m_move_front_icon.model, m_partplate_list->m_move_front_texture);
 
+            // IDEX/IQEX mode icon — only when is_imex is active
+            {
+                PresetBundle* pb = wxGetApp().preset_bundle;
+                auto* is_imex_opt = pb ? pb->printers.get_edited_preset().config.option<ConfigOptionBool>("is_imex") : nullptr;
+                if (is_imex_opt && is_imex_opt->value) {
+                    // The icon shows the mode the plate slices as, the one its ghosts follow.
+                    std::string  active_tools;
+                    int          primary_phys = -1;
+                    const size_t kind = size_t(resolve_active_mode_tools(active_tools, primary_phys) ?
+                                                   imex_mode_kind(active_tools) :
+                                                   ImexModeKind::Primary);
+                    // Both the mode name and the conflict warning describe the same hovered icon,
+                    // and set_hover_tooltip records one string per frame, so they are composed here.
+                    std::string hover_tip;
+                    if (hover_id == (int)PLATE_IMEX_MODE_ID) {
+                        render_icon_texture(m_imex_mode_icon.model, m_partplate_list->m_imex_mode_hovered_textures[kind]);
+                        // The stored value, not the resolved one: this line carries the click
+                        // affordances, and the menu checkmark and the left-click cycle both act
+                        // on what the plate stores. Reporting the inherited mode here would leave
+                        // one control saying three different things. Where they differ -- a plate
+                        // on Primary under a process preset that names a mode, which is what
+                        // actually slices -- the inherited mode is named after it, so the tooltip
+                        // still tells the user what this plate will print as.
+                        std::string cur = get_imex_mode();
+                        const std::string effective = get_effective_imex_mode();
+                        if (cur == kImexPrimaryMode) cur = _u8L("Primary");
+                        // One format string, not two catalog fragments concatenated around a
+                        // runtime value: translators need to move the mode name within the
+                        // sentence, and the space-padded fragments were untranslatable alone.
+                        //
+                        // Guarded because this runs on the paint path: boost::format throws if a
+                        // TRANSLATED string drops or malforms %1%, and an exception escaping here
+                        // would take down the frame rather than show a wrong tooltip. The English
+                        // literal is the fallback and cannot itself throw.
+                        if (effective != get_imex_mode()) {
+                            try {
+                                // TRN Plate icon tooltip. %1% is the plate's IDEX/IQEX mode, %2% the mode its process preset sets.
+                                hover_tip = (boost::format(_u8L("IDEX/IQEX mode: %1% (process preset: %2%) (left-click to cycle, right-click for menu)")) % cur % effective).str();
+                            } catch (const std::exception&) {
+                                hover_tip = (boost::format("IDEX/IQEX mode: %1% (process preset: %2%) (left-click to cycle, right-click for menu)") % cur % effective).str();
+                            }
+                        } else {
+                            try {
+                                hover_tip = (boost::format(_u8L("IDEX/IQEX mode: %1% (left-click to cycle, right-click for menu)")) % cur).str();
+                            } catch (const std::exception&) {
+                                hover_tip = (boost::format("IDEX/IQEX mode: %1% (left-click to cycle, right-click for menu)") % cur).str();
+                            }
+                        }
+                    } else {
+                        render_icon_texture(m_imex_mode_icon.model, m_partplate_list->m_imex_mode_textures[kind]);
+                    }
+                    // Warning badge: IMEX parallel mode active alongside multi-material objects
+                    if (has_imex_multimaterial_conflict()) {
+                        render_icon_texture(m_imex_warn_icon, m_partplate_list->m_imex_warn_texture);
+                        // The warning joins the mode line rather than replacing it: one hover
+                        // records one string, and the mode name carries the click affordances.
+                        if (hover_id == (int)PLATE_IMEX_MODE_ID)
+                            hover_tip += (hover_tip.empty() ? "" : "\n\n") +
+                                         _u8L("Warning: this plate uses a parallel IDEX/IQEX mode with multi-material objects. Proceed with caution — verify your G-code handles this combination correctly.");
+                    }
+                    if (!hover_tip.empty())
+                        set_hover_tooltip(hover_tip);
+                }
+            }
 
 			if (m_partplate_list->render_plate_settings) {
 				bool has_plate_settings = get_bed_type() != BedType::btDefault || get_print_seq() != PrintSequence::ByDefault || !get_first_layer_print_sequence().empty() || !get_other_layers_print_sequence().empty() || has_spiral_mode_config();
@@ -1044,7 +2195,7 @@ void PartPlate::render_icons(bool bottom, bool only_name, int hover_id)
                     else
                         render_icon_texture(m_plate_settings_icon.model, m_partplate_list->m_plate_settings_changed_hovered_texture);
 
-                    show_tooltip(_u8L("Customize current plate"));
+                    set_hover_tooltip(_u8L("Customize current plate"));
                 } else {
                     if (!has_plate_settings)
                         render_icon_texture(m_plate_settings_icon.model, m_partplate_list->m_plate_settings_texture);
@@ -1322,6 +2473,9 @@ void PartPlate::render_right_arrow(const ColorRGBA render_color, bool use_lighti
 
 static void register_model_for_picking(GLCanvas3D &canvas, PickingModel &model, int id)
 {
+	if (model.mesh_raycaster == nullptr)
+		return;
+
     canvas.add_raycaster_for_picking(SceneRaycaster::EType::Bed, id, *model.mesh_raycaster, Transform3d::Identity());
 }
 
@@ -1336,8 +2490,24 @@ void PartPlate::register_raycasters_for_picking(GLCanvas3D &canvas)
         register_model_for_picking(canvas, m_plate_settings_icon, picking_id_component(5));
 
     canvas.remove_raycasters_for_picking(SceneRaycaster::EType::Bed, picking_id_component(6));
-    register_model_for_picking(canvas, m_plate_name_edit_icon, picking_id_component(6));
+	// Plate-name edit picking is built lazily together with the plate-name texture.
+	// During reset / reload_scene the icon may not have a raycaster yet, which is valid.
+	if (m_plate_name_edit_icon.mesh_raycaster != nullptr)
+		register_model_for_picking(canvas, m_plate_name_edit_icon, picking_id_component(6));
     register_model_for_picking(canvas, m_move_front_icon, picking_id_component(7));
+
+    // Only register filament map button for H2D (dual-extruder Bambu Lab) printers
+    PresetBundle* preset = wxGetApp().preset_bundle;
+    bool dual_bbl = (preset && preset->is_bbl_vendor() && preset->get_printer_extruder_count() == 2);
+    if (dual_bbl)
+        register_model_for_picking(canvas, m_plate_filament_map_icon, picking_id_component(PLATE_FILAMENT_MAP_ID));
+
+    // Register IDEX/IQEX mode icon only when IDEX/IQEX is active and geometry is initialized.
+    if (preset) {
+        auto* is_imex_opt = preset->printers.get_edited_preset().config.option<ConfigOptionBool>("is_imex");
+        if (is_imex_opt && is_imex_opt->value && m_imex_mode_icon.mesh_raycaster)
+            register_model_for_picking(canvas, m_imex_mode_icon, picking_id_component(PLATE_IMEX_MODE_ID));
+    }
 }
 
 int PartPlate::picking_id_component(int idx) const
@@ -1345,39 +2515,48 @@ int PartPlate::picking_id_component(int idx) const
     return this->m_plate_index * GRABBER_COUNT + idx;
 }
 
-
-static void expand_plate_extruders(std::vector<int>& ids)
-{
-	const size_t num_physical = static_cast<size_t>(std::max(wxGetApp().filaments_cnt(), 0));
-	if (num_physical > 0) {
-		wxGetApp().preset_bundle->mixed_filaments.expand_virtual_extruder_ids(ids, num_physical);
-		std::sort(ids.begin(), ids.end());
-		ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
-	}
-}
-std::vector<int> PartPlate::get_extruders(bool conside_custom_gcode) const
+std::vector<int> PartPlate::get_extruders(bool conside_custom_gcode, bool expand_mixed_slots) const
 {
 	std::vector<int> plate_extruders;
-	// if gcode.3mf file
+    if (check_objects_empty_and_gcode3mf(plate_extruders)) {
+        return plate_extruders;
+    }
+	return get_extruders(conside_custom_gcode, wxGetApp().preset_bundle->prints.get_edited_preset().config, wxGetApp().preset_bundle->project_config, expand_mixed_slots);
+}
+
+// The plate's filaments, with the global keys read from the given configs rather than the
+// application's presets: the wipe tower estimate is also called under the CLI, which has no
+// application object. get_extruders(bool) passes the edited presets; a full config serves both.
+std::vector<int> PartPlate::get_extruders(bool conside_custom_gcode, const DynamicPrintConfig& glb_config, const DynamicPrintConfig& project_config, bool expand_mixed_slots) const
+{
+	std::vector<int> plate_extruders;
+	// A plate from a sliced .gcode.3mf holds no objects, so report the filaments the G-code
+	// used. check_objects_empty_and_gcode3mf does this for get_extruders(bool), but reaches
+	// the plater, which the CLI has none of; slice_filaments_info is only filled for such a plate.
 	if (m_model->objects.empty()) {
-		for (int i = 0; i < slice_filaments_info.size(); i++) {
-			plate_extruders.push_back(slice_filaments_info[i].id + 1);
-		}
+		for (const FilamentInfo &info : slice_filaments_info)
+			plate_extruders.push_back(info.id + 1);
 		return plate_extruders;
 	}
-
-	// if 3mf file
-	const DynamicPrintConfig& glb_config = wxGetApp().preset_bundle->prints.get_edited_preset().config;
 	int glb_support_intf_extr = glb_config.opt_int("support_interface_filament");
 	int glb_support_extr = glb_config.opt_int("support_filament");
-	int glb_wall_extr = glb_config.opt_int("wall_filament");
-	int glb_sparse_infill_extr = glb_config.opt_int("sparse_infill_filament");
-	int glb_solid_infill_extr = glb_config.opt_int("solid_infill_filament");
+	int glb_outer_wall_extr = glb_config.opt_int("outer_wall_filament_id");
+	int glb_inner_wall_extr = glb_config.opt_int("inner_wall_filament_id");
+	if (glb_outer_wall_extr == 0) glb_outer_wall_extr = glb_inner_wall_extr;
+	if (glb_inner_wall_extr == 0) glb_inner_wall_extr = glb_outer_wall_extr;
+	int glb_sparse_infill_extr = glb_config.opt_int("sparse_infill_filament_id");
+	int glb_internal_solid_extr = glb_config.opt_int("internal_solid_filament_id");
+	int glb_top_surface_extr = glb_config.opt_int("top_surface_filament_id");
+	int glb_bottom_surface_extr = glb_config.opt_int("bottom_surface_filament_id");
+	if (glb_top_surface_extr == 0) glb_top_surface_extr = glb_internal_solid_extr;
+	if (glb_bottom_surface_extr == 0) glb_bottom_surface_extr = glb_internal_solid_extr;
 	bool glb_support = glb_config.opt_bool("enable_support");
     glb_support |= glb_config.opt_int("raft_layers") > 0;
 
 	for (int obj_idx = 0; obj_idx < m_model->objects.size(); obj_idx++) {
-		if (!contain_instance_totally(obj_idx, 0))
+		// Any instance on the plate counts, as PrintApply does: after an arrange, instance 0
+		// can sit on a different plate.
+		if (!contain_any_instance_totally(obj_idx))
 			continue;
 
 		ModelObject* mo = m_model->objects[obj_idx];
@@ -1426,37 +2605,75 @@ std::vector<int> PartPlate::get_extruders(bool conside_custom_gcode) const
                 plate_extruders.push_back(glb_support_extr);
         }
 
-        int obj_wall_extr = glb_wall_extr;
-		const ConfigOption* wall_opt = mo->config.option("wall_filament");
-		if (wall_opt != nullptr)
-			obj_wall_extr = wall_opt->getInt();
-		if (obj_wall_extr != 1)
-			plate_extruders.push_back(obj_wall_extr);
+		int obj_outer_wall_extr = 0;
+		if (const ConfigOption* wall_opt = mo->config.option("outer_wall_filament_id"); wall_opt != nullptr)
+			obj_outer_wall_extr = wall_opt->getInt();
+		if (obj_outer_wall_extr == 0)
+			if (const ConfigOption* wall_opt = mo->config.option("inner_wall_filament_id"); wall_opt != nullptr)
+				obj_outer_wall_extr = wall_opt->getInt();
+		if (obj_outer_wall_extr != 0)
+			plate_extruders.push_back(obj_outer_wall_extr);
+		else if (glb_outer_wall_extr != 0)
+			plate_extruders.push_back(glb_outer_wall_extr);
 
-		const int object_sparse_infill_extr = resolve_sparse_infill_filament(mo->config, glb_sparse_infill_extr);
-		if (object_sparse_infill_extr != 1)
-			plate_extruders.push_back(object_sparse_infill_extr);
+		int obj_inner_wall_extr = 0;
+		if (const ConfigOption* wall_opt = mo->config.option("inner_wall_filament_id"); wall_opt != nullptr)
+			obj_inner_wall_extr = wall_opt->getInt();
+		if (obj_inner_wall_extr == 0)
+			if (const ConfigOption* wall_opt = mo->config.option("outer_wall_filament_id"); wall_opt != nullptr)
+				obj_inner_wall_extr = wall_opt->getInt();
+		if (obj_inner_wall_extr != 0)
+			plate_extruders.push_back(obj_inner_wall_extr);
+		else if (glb_inner_wall_extr != 0)
+			plate_extruders.push_back(glb_inner_wall_extr);
 
-		int obj_solid_infill_extr = 1;
-		const ConfigOption* solid_infill_opt = mo->config.option("solid_infill_filament");
-		if (solid_infill_opt != nullptr)
-			obj_solid_infill_extr = solid_infill_opt->getInt();
-		if (obj_solid_infill_extr != 1)
-			plate_extruders.push_back(obj_solid_infill_extr);
-		else if (glb_solid_infill_extr != 1)
-			plate_extruders.push_back(glb_solid_infill_extr);
+		int obj_sparse_infill_extr = 0;
+		const ConfigOption* sparse_infill_opt = mo->config.option("sparse_infill_filament_id");
+		if (sparse_infill_opt != nullptr)
+			obj_sparse_infill_extr = sparse_infill_opt->getInt();
+		if (obj_sparse_infill_extr != 0)
+			plate_extruders.push_back(obj_sparse_infill_extr);
+		else if (glb_sparse_infill_extr != 0)
+			plate_extruders.push_back(glb_sparse_infill_extr);
+
+		int obj_internal_solid_extr = 0;
+		if (const ConfigOption* solid_opt = mo->config.option("internal_solid_filament_id"); solid_opt != nullptr)
+			obj_internal_solid_extr = solid_opt->getInt();
+		if (obj_internal_solid_extr != 0)
+			plate_extruders.push_back(obj_internal_solid_extr);
+		else if (glb_internal_solid_extr != 0)
+			plate_extruders.push_back(glb_internal_solid_extr);
+
+		int obj_top_surface_extr = 0;
+		if (const ConfigOption* top_opt = mo->config.option("top_surface_filament_id"); top_opt != nullptr)
+			obj_top_surface_extr = top_opt->getInt();
+		if (obj_top_surface_extr == 0)
+			obj_top_surface_extr = obj_internal_solid_extr;
+		if (obj_top_surface_extr != 0)
+			plate_extruders.push_back(obj_top_surface_extr);
+		else if (glb_top_surface_extr != 0)
+			plate_extruders.push_back(glb_top_surface_extr);
+
+		int obj_bottom_surface_extr = 0;
+		if (const ConfigOption* bottom_opt = mo->config.option("bottom_surface_filament_id"); bottom_opt != nullptr)
+			obj_bottom_surface_extr = bottom_opt->getInt();
+		if (obj_bottom_surface_extr == 0)
+			obj_bottom_surface_extr = obj_internal_solid_extr;
+		if (obj_bottom_surface_extr != 0)
+			plate_extruders.push_back(obj_bottom_surface_extr);
+		else if (glb_bottom_surface_extr != 0)
+			plate_extruders.push_back(glb_bottom_surface_extr);
 
 	}
 
 	if (conside_custom_gcode) {
 		//BBS
         int nums_extruders = 0;
-        if (const ConfigOptionStrings *color_option = dynamic_cast<const ConfigOptionStrings *>(wxGetApp().preset_bundle->project_config.option("filament_colour"))) {
+        if (const ConfigOptionStrings *color_option = dynamic_cast<const ConfigOptionStrings *>(project_config.option("filament_colour"))) {
             nums_extruders = color_option->values.size();
-            const size_t total_filaments = wxGetApp().preset_bundle->mixed_filaments.total_filaments(size_t(nums_extruders));
 			if (m_model->plates_custom_gcodes.find(m_plate_index) != m_model->plates_custom_gcodes.end()) {
 				for (auto item : m_model->plates_custom_gcodes.at(m_plate_index).gcodes) {
-					if (item.type == CustomGCode::Type::ToolChange && item.extruder <= int(total_filaments))
+					if (item.type == CustomGCode::Type::ToolChange && item.extruder <= nums_extruders)
 						plate_extruders.push_back(item.extruder);
 				}
 			}
@@ -1467,26 +2684,43 @@ std::vector<int> PartPlate::get_extruders(bool conside_custom_gcode) const
 	auto it_end = std::unique(plate_extruders.begin(), plate_extruders.end());
 	plate_extruders.resize(std::distance(plate_extruders.begin(), it_end));
 
-		expand_plate_extruders(plate_extruders);
-
+	// Expand mixed filament slots to their physical components. A mixed slot is virtual and
+	// is never loaded into a tray, so callers (AMS mapping, filament checks) must see the
+	// physical filaments it resolves to instead.
+	{
+		const auto* is_mixed_opt = project_config.option<ConfigOptionBools>("filament_is_mixed");
+		const auto* comp_strs_opt = project_config.option<ConfigOptionStrings>("filament_mixed_components");
+		if (expand_mixed_slots && is_mixed_opt && comp_strs_opt && has_any_mixed_filament(is_mixed_opt->values)) {
+			std::vector<unsigned int> ext_0based;
+			for (int e : plate_extruders)
+				if (e >= 1) ext_0based.push_back((unsigned int)(e - 1));
+			auto expanded = expand_mixed_filaments(ext_0based, is_mixed_opt->values, comp_strs_opt->values);
+			plate_extruders.clear();
+			for (unsigned int e : expanded)
+				plate_extruders.push_back((int)(e + 1));
+		}
+	}
 
 	return plate_extruders;
 }
 
-std::vector<int> PartPlate::get_extruders_under_cli(bool conside_custom_gcode, DynamicPrintConfig& full_config) const
+std::vector<int> PartPlate::get_extruders_under_cli(bool conside_custom_gcode, DynamicPrintConfig& full_config, bool expand_mixed_slots) const
 {
     std::vector<int> plate_extruders;
-    BOOST_LOG_TRIVIAL(debug) << "PartPlate::get_extruders_under_cli begin"
-                             << " plate=" << m_plate_index
-                             << " obj_to_instance_count=" << obj_to_instance_set.size()
-                             << " consider_custom_gcode=" << conside_custom_gcode;
 
     // if 3mf file
     int glb_support_intf_extr = full_config.opt_int("support_interface_filament");
-	int glb_support_extr = full_config.opt_int("support_filament");
-	int glb_wall_extr = full_config.opt_int("wall_filament");
-	int glb_sparse_infill_extr = full_config.opt_int("sparse_infill_filament");
-	int glb_solid_infill_extr = full_config.opt_int("solid_infill_filament");
+    int glb_support_extr = full_config.opt_int("support_filament");
+	int glb_outer_wall_extr = full_config.opt_int("outer_wall_filament_id");
+	int glb_inner_wall_extr = full_config.opt_int("inner_wall_filament_id");
+	if (glb_outer_wall_extr == 0) glb_outer_wall_extr = glb_inner_wall_extr;
+	if (glb_inner_wall_extr == 0) glb_inner_wall_extr = glb_outer_wall_extr;
+	int glb_sparse_infill_extr = full_config.opt_int("sparse_infill_filament_id");
+	int glb_internal_solid_extr = full_config.opt_int("internal_solid_filament_id");
+	int glb_top_surface_extr = full_config.opt_int("top_surface_filament_id");
+	int glb_bottom_surface_extr = full_config.opt_int("bottom_surface_filament_id");
+	if (glb_top_surface_extr == 0) glb_top_surface_extr = glb_internal_solid_extr;
+	if (glb_bottom_surface_extr == 0) glb_bottom_surface_extr = glb_internal_solid_extr;
 
     bool glb_support = full_config.opt_bool("enable_support");
     glb_support |= full_config.opt_int("raft_layers") > 0;
@@ -1496,30 +2730,10 @@ std::vector<int> PartPlate::get_extruders_under_cli(bool conside_custom_gcode, D
         int obj_id = it->first;
         int instance_id = it->second;
 
-        if ((obj_id >= 0) && (obj_id < m_model->objects.size()))
+        if (valid_instance(obj_id, instance_id))
         {
             ModelObject* object = m_model->objects[obj_id];
-            if (object == nullptr) {
-                BOOST_LOG_TRIVIAL(error) << "PartPlate::get_extruders_under_cli encountered null model object"
-                                         << " plate=" << m_plate_index
-                                         << " obj_id=" << obj_id;
-                continue;
-            }
-            if (instance_id < 0 || instance_id >= object->instances.size()) {
-                BOOST_LOG_TRIVIAL(error) << "PartPlate::get_extruders_under_cli encountered invalid instance index"
-                                         << " plate=" << m_plate_index
-                                         << " obj_id=" << obj_id
-                                         << " instance_id=" << instance_id
-                                         << " instance_count=" << object->instances.size();
-                continue;
-            }
             ModelInstance* instance = object->instances[instance_id];
-            BOOST_LOG_TRIVIAL(debug) << "PartPlate::get_extruders_under_cli object"
-                                     << " plate=" << m_plate_index
-                                     << " obj_id=" << obj_id
-                                     << " instance_id=" << instance_id
-                                     << " volume_count=" << object->volumes.size()
-                                     << " printable=" << instance->printable;
 
             if (!instance->printable)
                 continue;
@@ -1549,86 +2763,149 @@ std::vector<int> PartPlate::get_extruders_under_cli(bool conside_custom_gcode, D
             else
                 obj_support = glb_support;
 
-            if (!obj_support)
-                continue;
+            if (obj_support) {
+                int obj_support_intf_extr = 0;
+                const ConfigOption* support_intf_extr_opt = object->config.option("support_interface_filament");
+                if (support_intf_extr_opt != nullptr)
+                    obj_support_intf_extr = support_intf_extr_opt->getInt();
+                if (obj_support_intf_extr != 0)
+                    plate_extruders.push_back(obj_support_intf_extr);
+                else if (glb_support_intf_extr != 0)
+                    plate_extruders.push_back(glb_support_intf_extr);
 
-            int obj_support_intf_extr = 0;
-            const ConfigOption* support_intf_extr_opt = object->config.option("support_interface_filament");
-            if (support_intf_extr_opt != nullptr)
-                obj_support_intf_extr = support_intf_extr_opt->getInt();
-            if (obj_support_intf_extr != 0)
-                plate_extruders.push_back(obj_support_intf_extr);
-            else if (glb_support_intf_extr != 0)
-                plate_extruders.push_back(glb_support_intf_extr);
+                int obj_support_extr = 0;
+                const ConfigOption* support_extr_opt = object->config.option("support_filament");
+                if (support_extr_opt != nullptr)
+                    obj_support_extr = support_extr_opt->getInt();
+                if (obj_support_extr != 0)
+                    plate_extruders.push_back(obj_support_extr);
+                else if (glb_support_extr != 0)
+                    plate_extruders.push_back(glb_support_extr);
+            }
 
-            int obj_support_extr = 0;
-            const ConfigOption* support_extr_opt = object->config.option("support_filament");
-            if (support_extr_opt != nullptr)
-                obj_support_extr = support_extr_opt->getInt();
-            if (obj_support_extr != 0)
-                plate_extruders.push_back(obj_support_extr);
-            else if (glb_support_extr != 0)
-                plate_extruders.push_back(glb_support_extr);
+			int obj_outer_wall_extr = 0;
+			if (const ConfigOption* wall_opt = object->config.option("outer_wall_filament_id"); wall_opt != nullptr)
+				obj_outer_wall_extr = wall_opt->getInt();
+			if (obj_outer_wall_extr == 0)
+				if (const ConfigOption* wall_opt = object->config.option("inner_wall_filament_id"); wall_opt != nullptr)
+					obj_outer_wall_extr = wall_opt->getInt();
+			if (obj_outer_wall_extr != 0)
+				plate_extruders.push_back(obj_outer_wall_extr);
+			else if (glb_outer_wall_extr != 0)
+				plate_extruders.push_back(glb_outer_wall_extr);
 
-			int obj_wall_extr = glb_wall_extr;
-			const ConfigOption* wall_opt = object->config.option("wall_filament");
-			if (wall_opt != nullptr)
-				obj_wall_extr = wall_opt->getInt();
-			if (obj_wall_extr != 1)
-				plate_extruders.push_back(obj_wall_extr);
+			int obj_inner_wall_extr = 0;
+			if (const ConfigOption* wall_opt = object->config.option("inner_wall_filament_id"); wall_opt != nullptr)
+				obj_inner_wall_extr = wall_opt->getInt();
+			if (obj_inner_wall_extr == 0)
+				if (const ConfigOption* wall_opt = object->config.option("outer_wall_filament_id"); wall_opt != nullptr)
+					obj_inner_wall_extr = wall_opt->getInt();
+			if (obj_inner_wall_extr != 0)
+				plate_extruders.push_back(obj_inner_wall_extr);
+			else if (glb_inner_wall_extr != 0)
+				plate_extruders.push_back(glb_inner_wall_extr);
 
-			const int object_sparse_infill_extr = resolve_sparse_infill_filament(object->config, glb_sparse_infill_extr);
-			if (object_sparse_infill_extr != 1)
-				plate_extruders.push_back(object_sparse_infill_extr);
+			int obj_sparse_infill_extr = 0;
+			const ConfigOption* sparse_infill_opt = object->config.option("sparse_infill_filament_id");
+			if (sparse_infill_opt != nullptr)
+				obj_sparse_infill_extr = sparse_infill_opt->getInt();
+			if (obj_sparse_infill_extr != 0)
+				plate_extruders.push_back(obj_sparse_infill_extr);
+			else if (glb_sparse_infill_extr != 0)
+				plate_extruders.push_back(glb_sparse_infill_extr);
 
-			int obj_solid_infill_extr = 1;
-			const ConfigOption* solid_infill_opt = object->config.option("solid_infill_filament");
-			if (solid_infill_opt != nullptr)
-				obj_solid_infill_extr = solid_infill_opt->getInt();
-			if (obj_solid_infill_extr != 1)
-				plate_extruders.push_back(obj_solid_infill_extr);
-			else if (glb_solid_infill_extr != 1)
-				plate_extruders.push_back(glb_solid_infill_extr);
+			int obj_internal_solid_extr = 0;
+			if (const ConfigOption* solid_opt = object->config.option("internal_solid_filament_id"); solid_opt != nullptr)
+				obj_internal_solid_extr = solid_opt->getInt();
+			if (obj_internal_solid_extr != 0)
+				plate_extruders.push_back(obj_internal_solid_extr);
+			else if (glb_internal_solid_extr != 0)
+				plate_extruders.push_back(glb_internal_solid_extr);
+
+			int obj_top_surface_extr = 0;
+			if (const ConfigOption* top_opt = object->config.option("top_surface_filament_id"); top_opt != nullptr)
+				obj_top_surface_extr = top_opt->getInt();
+			if (obj_top_surface_extr == 0)
+				obj_top_surface_extr = obj_internal_solid_extr;
+			if (obj_top_surface_extr != 0)
+				plate_extruders.push_back(obj_top_surface_extr);
+			else if (glb_top_surface_extr != 0)
+				plate_extruders.push_back(glb_top_surface_extr);
+
+			int obj_bottom_surface_extr = 0;
+			if (const ConfigOption* bottom_opt = object->config.option("bottom_surface_filament_id"); bottom_opt != nullptr)
+				obj_bottom_surface_extr = bottom_opt->getInt();
+			if (obj_bottom_surface_extr == 0)
+				obj_bottom_surface_extr = obj_internal_solid_extr;
+			if (obj_bottom_surface_extr != 0)
+				plate_extruders.push_back(obj_bottom_surface_extr);
+			else if (glb_bottom_surface_extr != 0)
+				plate_extruders.push_back(glb_bottom_surface_extr);
         }
     }
 
     if (conside_custom_gcode) {
-        BOOST_LOG_TRIVIAL(debug) << "PartPlate::get_extruders_under_cli skipping custom gcode scan in CLI path"
-                                 << " plate=" << m_plate_index;
+        //BBS
+        int nums_extruders = 0;
+        if (const ConfigOptionStrings *color_option = dynamic_cast<const ConfigOptionStrings *>(full_config.option("filament_colour"))) {
+            nums_extruders = color_option->values.size();
+            if (m_model->plates_custom_gcodes.find(m_plate_index) != m_model->plates_custom_gcodes.end()) {
+                for (auto item : m_model->plates_custom_gcodes.at(m_plate_index).gcodes) {
+                    if (item.type == CustomGCode::Type::ToolChange && item.extruder <= nums_extruders)
+                        plate_extruders.push_back(item.extruder);
+                }
+            }
+        }
     }
 
     std::sort(plate_extruders.begin(), plate_extruders.end());
     auto it_end = std::unique(plate_extruders.begin(), plate_extruders.end());
     plate_extruders.resize(std::distance(plate_extruders.begin(), it_end));
-    expand_plate_extruders(plate_extruders);
-    std::ostringstream extruders_list;
-    for (size_t i = 0; i < plate_extruders.size(); ++i) {
-        if (i != 0)
-            extruders_list << ",";
-        extruders_list << plate_extruders[i];
+
+    // Expand mixed filament slots to their physical components. A mixed slot is virtual and
+    // is never loaded into a tray, so callers (AMS mapping, filament checks) must see the
+    // physical filaments it resolves to instead.
+    if (expand_mixed_slots) {
+        auto* is_mixed_opt = full_config.option<ConfigOptionBools>("filament_is_mixed");
+        auto* comp_strs_opt = full_config.option<ConfigOptionStrings>("filament_mixed_components");
+        if (is_mixed_opt && comp_strs_opt && has_any_mixed_filament(is_mixed_opt->values)) {
+            std::vector<unsigned int> ext_0based;
+            for (int e : plate_extruders)
+                if (e >= 1) ext_0based.push_back((unsigned int)(e - 1));
+            auto expanded = expand_mixed_filaments(ext_0based, is_mixed_opt->values, comp_strs_opt->values);
+            plate_extruders.clear();
+            for (unsigned int e : expanded)
+                plate_extruders.push_back((int)(e + 1));
+        }
     }
-    BOOST_LOG_TRIVIAL(debug) << "PartPlate::get_extruders_under_cli result"
-                             << " plate=" << m_plate_index
-                             << " extruders=[" << extruders_list.str() << "]";
+
     return plate_extruders;
+}
+
+bool PartPlate::check_objects_empty_and_gcode3mf(std::vector<int> &result) const
+{
+    if (m_model->objects.empty()) {//objects is empty
+        if (wxGetApp().plater()->is_gcode_3mf()) { // if gcode.3mf file
+            for (int i = 0; i < slice_filaments_info.size(); i++) {
+                result.push_back(slice_filaments_info[i].id + 1);
+            }
+        }
+        return true;
+    }
+    return false;
 }
 
 std::vector<int> PartPlate::get_extruders_without_support(bool conside_custom_gcode) const
 {
 	std::vector<int> plate_extruders;
-	// if gcode.3mf file
-	if (m_model->objects.empty()) {
-		for (int i = 0; i < slice_filaments_info.size(); i++) {
-			plate_extruders.push_back(slice_filaments_info[i].id + 1);
-		}
-		return plate_extruders;
-	}
-
+    if (check_objects_empty_and_gcode3mf(plate_extruders)) {
+        return plate_extruders;
+    }
 	// if 3mf file
 	const DynamicPrintConfig& glb_config = wxGetApp().preset_bundle->prints.get_edited_preset().config;
 
 	for (int obj_idx = 0; obj_idx < m_model->objects.size(); obj_idx++) {
-		if (!contain_instance_totally(obj_idx, 0))
+		if (!contain_any_instance_totally(obj_idx))
 			continue;
 
 		ModelObject* mo = m_model->objects[obj_idx];
@@ -1643,10 +2920,9 @@ std::vector<int> PartPlate::get_extruders_without_support(bool conside_custom_gc
 		int nums_extruders = 0;
 		if (const ConfigOptionStrings* color_option = dynamic_cast<const ConfigOptionStrings*>(wxGetApp().preset_bundle->project_config.option("filament_colour"))) {
 			nums_extruders = color_option->values.size();
-            const size_t total_filaments = wxGetApp().preset_bundle->mixed_filaments.total_filaments(size_t(nums_extruders));
 			if (m_model->plates_custom_gcodes.find(m_plate_index) != m_model->plates_custom_gcodes.end()) {
 				for (auto item : m_model->plates_custom_gcodes.at(m_plate_index).gcodes) {
-					if (item.type == CustomGCode::Type::ToolChange && item.extruder <= int(total_filaments))
+					if (item.type == CustomGCode::Type::ToolChange && item.extruder <= nums_extruders)
 						plate_extruders.push_back(item.extruder);
 				}
 			}
@@ -1657,24 +2933,75 @@ std::vector<int> PartPlate::get_extruders_without_support(bool conside_custom_gc
 	auto it_end = std::unique(plate_extruders.begin(), plate_extruders.end());
 	plate_extruders.resize(std::distance(plate_extruders.begin(), it_end));
 
-	expand_plate_extruders(plate_extruders);
+	// Expand mixed filament slots to their physical components. A mixed slot is virtual and
+	// is never loaded into a tray, so callers (AMS mapping, filament checks) must see the
+	// physical filaments it resolves to instead.
+	{
+		auto& project_config = wxGetApp().preset_bundle->project_config;
+		auto* is_mixed_opt = project_config.option<ConfigOptionBools>("filament_is_mixed");
+		auto* comp_strs_opt = project_config.option<ConfigOptionStrings>("filament_mixed_components");
+		if (is_mixed_opt && comp_strs_opt && has_any_mixed_filament(is_mixed_opt->values)) {
+			std::vector<unsigned int> ext_0based;
+			for (int e : plate_extruders)
+				if (e >= 1) ext_0based.push_back((unsigned int)(e - 1));
+			auto expanded = expand_mixed_filaments(ext_0based, is_mixed_opt->values, comp_strs_opt->values);
+			plate_extruders.clear();
+			for (unsigned int e : expanded)
+				plate_extruders.push_back((int)(e + 1));
+		}
+	}
+
 	return plate_extruders;
 }
 
-std::vector<int> PartPlate::get_used_extruders()
+/* -1 is invalid, return physical extruder idx*/
+
+/* machine has 1 extruder*/
+/* logical extruder: 1-unique*/
+/* physical extruder: 0-unique*/
+
+/* machine have 2 extruders*/
+/* logical extruder: 1-left, 2-right*/
+/* physical extruder: 0-right, 1-left*/
+int PartPlate::get_physical_extruder_by_filament_id(const DynamicConfig& g_config, int idx) const
 {
-	std::vector<int> used_extruders;
-	// if gcode.3mf file
-	if (m_model->objects.empty()) {
-		for (int i = 0; i < slice_filaments_info.size(); i++) {
-			used_extruders.push_back(slice_filaments_info[i].id + 1);
-		}
-		return used_extruders;
+	const std::vector<int>& filament_map = get_real_filament_maps(g_config);
+	if (filament_map.size() < idx)
+	{
+		return -1;
 	}
+
+	const auto the_map = g_config.option<ConfigOptionInts>("physical_extruder_map");
+	if (!the_map)
+	{
+		return -1;
+	}
+
+	int zero_base_logical_idx = filament_map[idx - 1] - 1;
+	return the_map->values[zero_base_logical_idx];
+}
+
+int PartPlate::get_logical_extruder_by_filament_id(const DynamicConfig& g_config, int idx) const
+{
+	const std::vector<int>& filament_map = get_real_filament_maps(g_config);
+	if (idx <= 0 || idx > (int)filament_map.size())
+	{
+		return -1;
+	}
+
+	return filament_map[idx - 1] - 1;
+}
+
+std::vector<int> PartPlate::get_used_filaments()
+{
+	std::vector<int> used_filaments;
+    if (check_objects_empty_and_gcode3mf(used_filaments)) {
+        return used_filaments;
+    }
 
 	GCodeProcessorResult* result = get_slice_result();
 	if (!result)
-		return used_extruders;
+		return used_filaments;
 
 	std::set<int> used_extruders_set;
 	PrintEstimatedStatistics& ps = result->print_statistics;
@@ -1684,100 +3011,407 @@ std::vector<int> PartPlate::get_used_extruders()
 	return std::vector(used_extruders_set.begin(), used_extruders_set.end());
 }
 
-Vec3d PartPlate::estimate_wipe_tower_size(const DynamicPrintConfig & config, const double w, const double d, int plate_extruder_size, bool use_global_objects) const
+bool PartPlate::check_filament_printable(const DynamicPrintConfig &config, wxString& error_message)
 {
-	Vec3d wipe_tower_size;
+    error_message.clear();
+    FilamentMapMode mode = this->get_real_filament_map_mode(config);
+    // only check printablity if we have explicit map result
+    if (mode != fmmManual)
+        return true;
 
-	double layer_height = 0.08f; // hard code layer height
-	double max_height = 0.f;
-	wipe_tower_size.setZero();
-	wipe_tower_size(0) = w;
-
-	const ConfigOption* layer_height_opt = config.option("layer_height");
-	if (layer_height_opt)
-		layer_height = layer_height_opt->getFloat();
-
-	// empty plate
-	if (plate_extruder_size == 0)
-    {
-        std::vector<int> plate_extruders = get_extruders(true);
-        plate_extruder_size = plate_extruders.size();
+    std::vector<int> used_filaments = get_extruders(true);  // 1 base
+    if (!used_filaments.empty()) {
+        const std::vector<std::string>& filament_types      = config.option<ConfigOptionStrings>("filament_type")->values;
+        const std::vector<int>&         filament_printables = config.option<ConfigOptionInts>("filament_printable")->values;
+        const std::vector<int>&         filament_map        = get_real_filament_maps(config);
+        // This runs synchronously mid printer-switch (load_current_preset -> reload_scene), before the
+        // filament-count reconciliation clears stale per-object assignments, so the plate objects can
+        // still reference filament indices beyond the freshly selected printer config. Skip those to
+        // avoid an out-of-range access. Matches BambuStudio's guards in the same function.
+        const int filament_count = std::min({(int) filament_types.size(), (int) filament_printables.size(), (int) filament_map.size()});
+        for (auto filament_idx : used_filaments) {
+            int filament_id = filament_idx - 1;
+            if (filament_id < 0 || filament_id >= filament_count)
+                continue;
+            std::string filament_type = filament_types[filament_id];
+            int filament_printable_status = filament_printables[filament_id];
+            int extruder_idx = filament_map[filament_id] - 1;
+            if (!(filament_printable_status >> extruder_idx & 1)) {
+                error_message = wxString::Format(extruder_idx == 0 ? _L("The left nozzle cannot print %s.") : _L("The right nozzle cannot print %s."),
+                                                 filament_type);
+                return false;
+            }
+        }
     }
-	if (plate_extruder_size == 0)
-		return wipe_tower_size;
-
-	for (int obj_idx = 0; obj_idx < m_model->objects.size(); obj_idx++) {
-		if (!use_global_objects && !contain_instance_totally(obj_idx, 0))
-			continue;
-
-		BoundingBoxf3 bbox = m_model->objects[obj_idx]->bounding_box_exact();
-		max_height = std::max(bbox.size().z(), max_height);
-	}
-	wipe_tower_size(2) = max_height;
-
-	//const DynamicPrintConfig &dconfig = wxGetApp().preset_bundle->prints.get_edited_preset().config;
-    auto timelapse_type    = config.option<ConfigOptionEnum<TimelapseType>>("timelapse_type");
-    bool timelapse_enabled = timelapse_type ? (timelapse_type->value == TimelapseType::tlSmooth) : false;
-
-    double depth = plate_extruder_size == 1 ? 0 : d;
-    if (timelapse_enabled || depth > EPSILON) {
-		float min_wipe_tower_depth = 0.f;
-		auto iter = WipeTower::min_depth_per_height.begin();
-		while (iter != WipeTower::min_depth_per_height.end()) {
-			auto curr_height_to_depth = *iter;
-
-			// This is the case that wipe tower height is lower than the first min_depth_to_height member.
-			if (curr_height_to_depth.first >= max_height) {
-				min_wipe_tower_depth = curr_height_to_depth.second;
-				break;
-			}
-
-			iter++;
-
-			// If curr_height_to_depth is the last member, use its min_depth.
-			if (iter == WipeTower::min_depth_per_height.end()) {
-				min_wipe_tower_depth = curr_height_to_depth.second;
-				break;
-			}
-
-			// If wipe tower height is between the current and next member, set the min_depth as linear interpolation between them
-			auto next_height_to_depth = *iter;
-			if (next_height_to_depth.first > max_height) {
-				float height_base = curr_height_to_depth.first;
-				float height_diff = next_height_to_depth.first - curr_height_to_depth.first;
-				float min_depth_base = curr_height_to_depth.second;
-				float depth_diff = next_height_to_depth.second - curr_height_to_depth.second;
-
-				min_wipe_tower_depth = min_depth_base + (max_height - curr_height_to_depth.first) / height_diff * depth_diff;
-				break;
-			}
-		}
-		depth = std::max((double)min_wipe_tower_depth, depth);
-	}
-	wipe_tower_size(1) = depth;
-	return wipe_tower_size;
+    return true;
 }
 
-arrangement::ArrangePolygon PartPlate::estimate_wipe_tower_polygon(const DynamicPrintConfig& config, int plate_index, int plate_extruder_size, bool use_global_objects) const
+bool PartPlate::check_tpu_printable_status(const DynamicPrintConfig & config, const std::vector<int> &tpu_filaments)
+{
+	// do not limit the num of tpu filament in slicing
+	return true;
+}
+
+// A mixed-color filament alternates between its components constantly. On a single-nozzle
+// printer every one of those switches is a full filament change plus a purge, so warn before
+// slicing. Multi-nozzle printers keep the components loaded at once and are not affected.
+bool PartPlate::check_single_extruder_mixed_filament_risk(const DynamicPrintConfig &config, std::string &warning_text) const
+{
+    warning_text.clear();
+
+    auto *nozzle_diameter_opt = config.option<ConfigOptionFloatsNullable>("nozzle_diameter");
+    if (!nozzle_diameter_opt || nozzle_diameter_opt->values.size() > 1)
+        return false;
+
+    auto *is_mixed_opt = wxGetApp().preset_bundle->project_config.option<ConfigOptionBools>("filament_is_mixed");
+    if (!is_mixed_opt || !has_any_mixed_filament(is_mixed_opt->values))
+        return false;
+
+    auto is_mixed_slot = [&](int extruder_1based) {
+        size_t idx = (size_t)(extruder_1based - 1);
+        return idx < is_mixed_opt->values.size() && is_mixed_opt->values[idx];
+    };
+
+    const std::string mixed_warn_msg = _u8L("Printing mixed-color filament on a single-extruder printer requires frequent filament changes and flushing, "
+                                            "which may significantly increase waste and the risk of nozzle / waste-chute clogging.");
+
+    for (int obj_idx = 0; obj_idx < (int)m_model->objects.size(); ++obj_idx) {
+        if (!contain_any_instance_totally(obj_idx))
+            continue;
+        ModelObject *mo = m_model->objects[obj_idx];
+        int obj_ext = mo->config.has("extruder") ? mo->config.extruder() : 1;
+        if (is_mixed_slot(obj_ext)) {
+            warning_text = mixed_warn_msg;
+            return true;
+        }
+        for (ModelVolume *mv : mo->volumes) {
+            int vol_ext = mv->config.has("extruder") ? mv->config.extruder() : obj_ext;
+            if (is_mixed_slot(vol_ext)) {
+                warning_text = mixed_warn_msg;
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+bool PartPlate::check_mixture_of_pla_and_petg(const DynamicPrintConfig &config)
+{
+    bool has_pla = false;
+    bool has_petg = false;
+
+    // On a toolchanger (machine_tool_change_time > 0) each filament slot maps to a
+    // separate physical nozzle: only one nozzle is ever mounted or heated at a time, so
+    // there is no cross-nozzle contamination between PLA and PETG.  Track which physical
+    // nozzle each material is on; warn only when PLA and PETG would pass through the
+    // *same* nozzle.
+    //
+    // NOTE: if MMU-on-toolchanger support is added (#10586), the nozzle-mapping logic
+    // will need to be revisited because multiple filaments may then share one tool slot.
+    bool is_toolchanger = false;
+    auto *tool_change_time = config.option<ConfigOptionFloat>("machine_tool_change_time");
+    if (tool_change_time && tool_change_time->value > 0)
+        is_toolchanger = true;
+
+    // nozzle index → whether it carries PLA / PETG
+    std::map<int, bool> nozzle_has_pla;
+    std::map<int, bool> nozzle_has_petg;
+
+    std::vector<int> used_filaments = get_extruders(true); // 1-based
+    if (!used_filaments.empty()) {
+        const auto *filament_types = config.option<ConfigOptionStrings>("filament_type");
+        for (auto filament_idx : used_filaments) {
+            int filament_id = filament_idx - 1;
+            if (filament_id < (int)filament_types->values.size()) {
+                const std::string &filament_type = filament_types->values[filament_id];
+                if (filament_type == "PLA") {
+                    has_pla = true;
+                    nozzle_has_pla[filament_id] = true;
+                }
+                if (filament_type == "PETG") {
+                    has_petg = true;
+                    nozzle_has_petg[filament_id] = true;
+                }
+            } else {
+                BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << " check error:array bound";
+            }
+        }
+    }
+
+    if (!has_pla || !has_petg)
+        return true; // no mixture — no warning
+
+    if (is_toolchanger) {
+        // Warn only if any single nozzle slot carries both PLA and PETG (e.g. future MMU
+        // on toolchanger).  On a pure toolchanger each slot is independent, so this loop
+        // will never fire and the warning is correctly suppressed. (#12073)
+        for (const auto &kv : nozzle_has_pla) {
+            if (nozzle_has_petg.count(kv.first))
+                return false; // same nozzle → warn
+        }
+        return true; // different nozzles → safe, no warning
+    }
+
+    return false; // non-toolchanger with both PLA and PETG → warn
+}
+
+bool PartPlate::check_mixture_filament_compatible(const DynamicPrintConfig &config, std::string &error_msg)
+{
+    static std::unordered_map<std::string, std::unordered_set<std::string>> incompatible_filament_pairs;
+
+    auto add_incompatibility = [&](std::string filament_type1, std::string filament_type2) {
+        incompatible_filament_pairs[filament_type1].insert(filament_type2);
+        incompatible_filament_pairs[filament_type2].insert(filament_type1);
+    };
+
+    if (incompatible_filament_pairs.empty()) { add_incompatibility("PVA", "PETG"); }
+
+    std::vector<int>         used_filaments = get_extruders(true); // 1 based idx
+    std::vector<std::string> filament_types;
+    auto                     filament_type_opt = config.option<ConfigOptionStrings>("filament_type");
+    for (auto filament : used_filaments) {
+        int filament_idx = filament - 1;
+        if (filament_idx >= filament_type_opt->values.size()) filament_idx = 0;
+        filament_types.push_back(filament_type_opt->values[filament_idx]);
+    };
+
+    {
+        std::unordered_set<std::string> seen;
+        filament_types.erase(std::remove_if(filament_types.begin(), filament_types.end(), [&](const std::string &s) { return !seen.insert(s).second; }), filament_types.end());
+    }
+
+    std::vector<std::pair<std::string, std::string>> conflicts;
+
+    for (size_t i = 0; i < filament_types.size(); i++) {
+        auto it = incompatible_filament_pairs.find(filament_types[i]);
+        if (it == incompatible_filament_pairs.end()) continue;
+        for (size_t j = i + 1; j < filament_types.size(); ++j) {
+            if (it->second.count(filament_types[j])) { conflicts.emplace_back(filament_types[i], filament_types[j]); }
+        }
+    }
+
+    if (!conflicts.empty()) {
+        // TODO: add the full text if has multi conflict
+        auto conflict = conflicts.front();
+        error_msg     = GUI::format(_L("Mixing %1% with %2% in printing is not recommended.\n"), conflict.first, conflict.second);
+    }
+    return conflicts.empty();
+}
+
+bool PartPlate::check_compatible_of_nozzle_and_filament(const DynamicPrintConfig &config, const std::vector<std::string> &filament_presets, std::string &error_msg)
+{
+    float nozzle_diameter = config.option<ConfigOptionFloats>("nozzle_diameter")->values[0];
+    auto  volume_type_opt = config.option<ConfigOptionEnumsGeneric>("nozzle_volume_type");
+
+    auto get_filament_alias = [](std::string preset_name) -> std::string {
+        size_t      at_pos = preset_name.find('@');
+        std::string alias  = preset_name.substr(0, at_pos);
+        size_t      first  = alias.find_first_not_of(' ');
+        if (first == std::string::npos) return "";
+        size_t last = alias.find_last_not_of(' ');
+        return alias.substr(first, last - first + 1);
+    };
+
+    bool with_same_volume_type = std::all_of(volume_type_opt->values.begin(), volume_type_opt->values.end(),
+                                             [first_value = volume_type_opt->values[0]](int value) { return value == first_value; });
+
+    std::set<std::string> selected_filament_alias;
+    for (auto &filament_preset : filament_presets) { selected_filament_alias.insert(get_filament_alias(filament_preset)); }
+
+    auto get_incompatible_selected = [&](const NozzleVolumeType volume_type) -> std::set<std::string> {
+        std::vector<std::string> incompatible_filaments = Print::get_incompatible_filaments_by_nozzle(nozzle_diameter, volume_type);
+        std::set<std::string>    ret;
+        for (auto &filament : selected_filament_alias) {
+            if (std::find(incompatible_filaments.begin(), incompatible_filaments.end(), filament) != incompatible_filaments.end()) ret.insert(filament);
+        }
+        return ret;
+    };
+
+    auto get_nozzle_msg = [](const float nozzle_diameter, const NozzleVolumeType volume_type) -> std::string {
+        std::ostringstream oss;
+        oss << std::fixed << std::setprecision(1) << nozzle_diameter;
+        // TRN %1% is the nozzle diameter, %2% the nozzle volume type, for example "Standard" or "High Flow".
+        return Slic3r::format(_u8L("%1%mm %2% nozzle"), oss.str(), _u8L(get_nozzle_volume_type_string(volume_type)));
+    };
+
+    auto get_incompatible_filament_msg = [](const std::set<std::string> &incompatible_selected_filaments) -> std::string {
+        std::string filament_str;
+        size_t      idx = 0;
+        for (const auto &filament : incompatible_selected_filaments) {
+            if (idx > 0) filament_str += ',';
+            filament_str += filament;
+            ++idx;
+        }
+        return filament_str;
+    };
+
+    error_msg.clear();
+
+    std::set<int>                                     nozzle_volumes(volume_type_opt->values.begin(), volume_type_opt->values.end());
+    std::map<NozzleVolumeType, std::set<std::string>> incompatible_selected_map;
+
+    for (auto volume_type_value : nozzle_volumes) {
+        NozzleVolumeType volume_type           = static_cast<NozzleVolumeType>(volume_type_value);
+        auto             incompatible_selected = get_incompatible_selected(volume_type);
+        if (!incompatible_selected.empty()) incompatible_selected_map[volume_type] = incompatible_selected;
+    }
+
+    if (incompatible_selected_map.empty()) return true;
+
+    if (incompatible_selected_map.size() == 1) {
+        auto             elem                  = incompatible_selected_map.begin();
+        NozzleVolumeType volume_type           = elem->first;
+        auto             incompatible_selected = elem->second;
+        error_msg = GUI::format(_L_PLURAL("It is not recommended to print the following filament with %1%: %2%\n",
+                                          "It is not recommended to print the following filaments with %1%: %2%\n", incompatible_selected.size()),
+                                get_nozzle_msg(nozzle_diameter, volume_type),
+                                get_incompatible_filament_msg(incompatible_selected));
+    } else {
+        std::string warning_msg = _u8L("It is not recommended to use the following nozzle and filament combinations:\n");
+        for (auto &elem : incompatible_selected_map) {
+            NozzleVolumeType volume_type           = elem.first;
+            auto             incompatible_selected = elem.second;
+            warning_msg += GUI::format(_L("%1% with %2%\n"),get_nozzle_msg(nozzle_diameter, volume_type), get_incompatible_filament_msg(incompatible_selected));
+        }
+        error_msg = warning_msg;
+    }
+    return false;
+}
+
+/*Vec3d PartPlate::calculate_wipe_tower_size(const DynamicPrintConfig &config, const double w, const double wipe_volume, int plate_extruder_size, bool use_global_objects) const
+{
+    Vec3d  wipe_tower_size;
+    double layer_height = 0.08f; // hard code layer height
+    double max_height   = 0.f;
+    wipe_tower_size.setZero();
+
+    const ConfigOption *layer_height_opt = config.option("layer_height");
+    if (layer_height_opt)
+        layer_height = layer_height_opt->getFloat();
+
+    std::vector<int> plate_extruders = get_extruders(true);
+	plate_extruder_size = plate_extruders.size();
+    if (plate_extruder_size == 0)
+        return wipe_tower_size;
+
+    for (int obj_idx = 0; obj_idx < m_model->objects.size(); obj_idx++) {
+        if (!use_global_objects && !contain_any_instance_totally(obj_idx))
+            continue;
+
+        BoundingBoxf3 bbox = m_model->objects[obj_idx]->bounding_box();
+        max_height         = std::max(bbox.size().z(), max_height);
+    }
+    wipe_tower_size(2) = max_height;
+
+    auto timelapse_type    = config.option<ConfigOptionEnum<TimelapseType>>("timelapse_type");
+    bool timelapse_enabled = timelapse_type ? (timelapse_type->value == TimelapseType::tlSmooth) : false;
+    int nozzle_nums = wxGetApp().preset_bundle->get_printer_extruder_count();
+    double extra_spacing     = config.option("prime_tower_infill_gap")->getFloat() / 100.;
+    double depth             = std::sqrt(wipe_volume * (nozzle_nums == 2 ? plate_extruder_size : (plate_extruder_size - 1)) / layer_height * extra_spacing);
+    if (timelapse_enabled || plate_extruder_size > 1) {
+        float min_wipe_tower_depth = WipeTower::get_limit_depth_by_height(max_height);
+        depth = std::max((double) min_wipe_tower_depth, depth);
+        wipe_tower_size(0) = wipe_tower_size(1) = depth;
+    }
+
+    return wipe_tower_size;
+}*/
+
+WipeTowerFootprint PartPlate::estimate_wipe_tower_footprint(const DynamicPrintConfig &config, int plate_extruder_size, bool use_global_objects) const
+{
+    // The CLI calls this too, so the plate's filaments are derived from the passed config:
+    // get_extruders(bool) reads the same keys off wxGetApp()'s presets, which the CLI has none of.
+    // An explicit count is a floor: init-time and arrange estimates size an empty plate for that
+    // many generic filaments, the lowest ids not already on the plate.
+    std::vector<int> plate_extruders = get_extruders(true, config, config);
+    for (int id = 1; int(plate_extruders.size()) < plate_extruder_size; ++id)
+        if (std::find(plate_extruders.begin(), plate_extruders.end(), id) == plate_extruders.end())
+            plate_extruders.push_back(id);
+    // The wipe tower filament joins the tool ordering even when unused (Print::extruders), so
+    // validation counts it - but only where there is a tower to join, which is the
+    // has_wipe_tower() half of that guard.
+    const ConfigOption *wipe_tower_filament_opt = config.option("wipe_tower_filament");
+    const ConfigOption *enable_prime_tower_opt  = config.option("enable_prime_tower");
+    const int           wipe_tower_filament     = wipe_tower_filament_opt != nullptr ? wipe_tower_filament_opt->getInt() : 0;
+    if (enable_prime_tower_opt != nullptr && enable_prime_tower_opt->getBool() && plate_extruders.size() > 1 && wipe_tower_filament > 0 &&
+        std::find(plate_extruders.begin(), plate_extruders.end(), wipe_tower_filament) == plate_extruders.end())
+        plate_extruders.push_back(wipe_tower_filament);
+    if (plate_extruders.empty())
+        return WipeTowerFootprint();
+
+    // Tallest object on this plate and the thinnest layer it is sliced at, resolved per object
+    // as PrintObject resolves them (override, else preset) and over this plate's objects only -
+    // seeding from the global value, or folding in an off-plate override, diverges from Print.
+    const ConfigOption *layer_height_opt    = config.option("layer_height");
+    const double        global_layer_height = layer_height_opt != nullptr ? layer_height_opt->getFloat() : 0.08;
+    double              max_height          = 0.;
+    double              layer_height        = std::numeric_limits<double>::max();
+    for (int obj_idx = 0; obj_idx < int(m_model->objects.size()); ++obj_idx) {
+        const ModelObject *object = m_model->objects[obj_idx];
+        if (!use_global_objects && !contain_any_instance_totally(obj_idx))
+            continue;
+        // Per instance, to match PrintObject::size(); the union over instances differs once
+        // they are rotated apart. The cached convex hull has the mesh's z extent and is cheap
+        // enough for every scene reload.
+        for (int inst_idx = 0; inst_idx < int(object->instances.size()); ++inst_idx) {
+            if (!use_global_objects && !contain_instance_totally(obj_idx, inst_idx))
+                continue;
+            max_height = std::max(max_height, object->instance_convex_hull_bounding_box(inst_idx, true).size().z());
+        }
+        const ConfigOption *object_layer_height = object->config.option("layer_height");
+        layer_height = std::min(layer_height, object_layer_height != nullptr ? object_layer_height->getFloat() : global_layer_height);
+    }
+    if (layer_height == std::numeric_limits<double>::max())
+        layer_height = global_layer_height;
+
+    std::vector<unsigned int> filament_ids;
+    for (int id : plate_extruders)
+        if (id > 0)
+            filament_ids.push_back(static_cast<unsigned int>(id - 1));
+    return Slic3r::estimate_wipe_tower_footprint(config, resolve_wipe_tower_type(config), filament_ids, layer_height, max_height);
+}
+
+arrangement::ArrangePolygon PartPlate::estimate_wipe_tower_polygon(const DynamicPrintConfig& config, int plate_index, Vec3d& wt_pos, Vec3d& wt_size, int plate_extruder_size, bool use_global_objects) const
 {
 	float x = dynamic_cast<const ConfigOptionFloats*>(config.option("wipe_tower_x"))->get_at(plate_index);
 	float y = dynamic_cast<const ConfigOptionFloats*>(config.option("wipe_tower_y"))->get_at(plate_index);
-	float w = dynamic_cast<const ConfigOptionFloat*>(config.option("prime_tower_width"))->value;
 	//float a = dynamic_cast<const ConfigOptionFloat*>(config.option("wipe_tower_rotation_angle"))->value;
-	float v = dynamic_cast<const ConfigOptionFloat*>(config.option("prime_volume"))->value;
-    float tower_brim_width = dynamic_cast<const ConfigOptionFloat*>(config.option("prime_tower_brim_width"))->value;
-    Vec3d wipe_tower_size = estimate_wipe_tower_size(config, w, v, plate_extruder_size, use_global_objects);
+	const WipeTowerFootprint footprint = estimate_wipe_tower_footprint(config, plate_extruder_size, use_global_objects);
+	wt_size = Vec3d(footprint.width, footprint.depth, footprint.height);
 	int plate_width=m_width, plate_depth=m_depth;
-	float depth = wipe_tower_size(1);
-	float margin = WIPE_TOWER_MARGIN + tower_brim_width, wp_brim_width = 0.f;
-	const ConfigOption* wipe_tower_brim_width_opt = config.option("prime_tower_brim_width");
-	if (wipe_tower_brim_width_opt) {
-		wp_brim_width = wipe_tower_brim_width_opt->getFloat();
-		BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << boost::format("arrange wipe_tower: wp_brim_width %1%") % wp_brim_width;
-	}
-
-	x = std::clamp(x, margin, (float)plate_width - w - margin - wp_brim_width);
-	y = std::clamp(y, margin, (float)plate_depth - depth - margin - wp_brim_width);
+	float w = wt_size(0); // effective width; differs from prime_tower_width when the rib wall squares the tower
+	float depth = wt_size(1);
+	// Resolved brim, not the raw option: "Auto" (-1) would yield a margin of 0 and let the
+	// clamp put the brim off the bed. Matches set_default_wipe_tower_pos_for_plate.
+	float wp_brim_width = float(footprint.brim_width);
+	// A Type2 stabilization cone bulges past the body box like a brim does - fold its worst-axis
+	// bulge into the same margin.
+	const BoundingBox outline = get_extents(estimate_wipe_tower_first_layer_outline(config, resolve_wipe_tower_type(config), w, depth, wt_size.z()));
+	wp_brim_width += float(std::max({0., unscaled(outline.max.x()) - w, unscaled(outline.max.y()) - depth, -unscaled(outline.min.x()), -unscaled(outline.min.y())}));
+	// A position valid by WIPE_TOWER_MARGIN is the user's choice and stays untouched; an
+	// invalid one is re-placed with the comfort margin (falling back to the validity bounds
+	// on cramped plates). std::clamp is UB if lo > hi, so keep every hi >= lo.
+	const float margin = WIPE_TOWER_MARGIN + wp_brim_width;
+	BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << boost::format("arrange wipe_tower: wp_brim_width %1%") % wp_brim_width;
+	const float x_hi   = std::max(margin, (float) plate_width - w - margin);
+	const float y_hi   = std::max(margin, (float) plate_depth - depth - margin);
+	const float margin_c = (float) WIPE_TOWER_AUTO_MARGIN + wp_brim_width;
+	float x_lo_c = margin_c, x_hi_c = (float) plate_width - w - margin_c;
+	if (x_lo_c > x_hi_c) { x_lo_c = margin; x_hi_c = x_hi; }
+	float y_lo_c = margin_c, y_hi_c = (float) plate_depth - depth - margin_c;
+	if (y_lo_c > y_hi_c) { y_lo_c = margin; y_hi_c = y_hi; }
+	// Drag clamps reach this limit through the volume's bounding box (post-slice: the real
+	// mesh, a couple of mm inside this reserved estimate), so a drop can land slightly out
+	// of bounds — snap it onto the bound; only far-out positions get the comfort re-place.
+	const float tol = 5.f;
+	if (x < margin - tol || x > x_hi + tol) x = std::clamp(x, x_lo_c, x_hi_c);
+	else                                    x = std::clamp(x, margin, x_hi);
+	if (y < margin - tol || y > y_hi + tol) y = std::clamp(y, y_lo_c, y_hi_c);
+	else                                    y = std::clamp(y, margin, y_hi);
+    wt_pos(0) = x;
+    wt_pos(1) = y;
+    wt_pos(2) = 0.f;
 
 	arrangement::ArrangePolygon wipe_tower_ap;
 	Polygon ap({
@@ -1823,13 +3457,13 @@ void PartPlate::clear(bool clear_sliced_result)
 		m_ready_for_slice = true;
 		update_slice_result_valid_state(false);
 	}
-	m_name_texture.reset();
+	invalidate_plate_name_texture();
 	return;
 }
 
 /* size and position related functions*/
 //set position and size
-void PartPlate::set_pos_and_size(Vec3d& origin, int width, int depth, int height, bool with_instance_move, bool do_clear)
+void PartPlate::set_pos_and_size(Vec3d& origin, int width, int depth, double height, bool with_instance_move, bool do_clear)
 {
 	bool size_changed = false; //size changed means the machine changed
 	bool pos_changed = false;
@@ -1852,6 +3486,9 @@ void PartPlate::set_pos_and_size(Vec3d& origin, int width, int depth, int height
 		for (std::set<std::pair<int, int>>::iterator it = obj_to_instance_set.begin(); it != obj_to_instance_set.end(); ++it) {
 			int obj_id = it->first;
 			int instance_id = it->second;
+			if (!valid_instance(obj_id, instance_id))
+				continue;
+
 			ModelObject* object = m_model->objects[obj_id];
 			ModelInstance* instance = object->instances[instance_id];
 
@@ -1896,6 +3533,9 @@ void PartPlate::set_pos_and_size(Vec3d& origin, int width, int depth, int height
 	m_depth = depth;
 	m_height = height;
 
+	if (with_instance_move && m_plater)
+		m_plater->mark_plate_toolbar_image_dirty();
+
 	return;
 }
 
@@ -1913,6 +3553,10 @@ Vec3d PartPlate::get_center_origin()
 
 void PartPlate::generate_plate_name_texture()
 {
+	auto canvas = this->m_partplate_list->m_plater->get_view3D_canvas3D();
+	if (canvas == nullptr)
+		return;
+
     m_plate_name_icon.reset();
 
 	// generate m_name_texture texture from m_name with generate_from_text_string
@@ -1925,13 +3569,15 @@ void PartPlate::generate_plate_name_texture()
     wxFont* font = &l;
 
 	wxColour foreground(0xf2, 0x75, 0x4e, 0xff);
-    if (!m_name_texture.generate_from_text_string(text.ToUTF8().data(), *font, *wxBLACK, foreground))
+	if (!m_name_texture.generate_from_text_string(text.ToUTF8().data(), *font, *wxBLACK, foreground)) {
 		BOOST_LOG_TRIVIAL(error) << "PartPlate::generate_plate_name_texture(): generate_from_text_string() failed";
+		return;
+	}
 
     ExPolygon poly;
     auto  bed_ext  = get_extents(m_shape);
     Vec2d p        = bed_ext[3];
-    float factor   = bed_ext.size()(1) / 200.0;
+    float factor   = icon_scale_factor();
     float icon_sz  = factor * PARTPLATE_EDIT_PLATE_NAME_ICON_SIZE;
     float width    = icon_sz * m_name_texture.get_width() / m_name_texture.get_height(); // icon size * text_bb_ratio
     float height   = icon_sz; // scale with icon size to preserve ratio while system scaling
@@ -1950,22 +3596,42 @@ void PartPlate::generate_plate_name_texture()
     if (!init_model_from_poly(m_plate_name_icon, poly, GROUND_Z))
         BOOST_LOG_TRIVIAL(error) << __FUNCTION__ << "Unable to generate geometry buffers for icons\n";
 
-	auto canvas = this->m_partplate_list->m_plater->get_view3D_canvas3D();
     canvas->remove_raycasters_for_picking(SceneRaycaster::EType::Bed, picking_id_component(6));
     calc_vertex_for_plate_name_edit_icon(&m_name_texture, 0, m_plate_name_edit_icon);
     register_model_for_picking(*canvas, m_plate_name_edit_icon, picking_id_component(6));
 }
+
+void PartPlate::invalidate_plate_name_texture()
+{
+	m_plate_name_edit_icon.mesh_raycaster.reset();
+
+	auto canvas = (m_plater != nullptr) ? m_plater->get_view3D_canvas3D() : nullptr;
+	if (canvas != nullptr) {
+		canvas->remove_raycasters_for_picking(SceneRaycaster::EType::Bed, picking_id_component(6));
+		canvas->set_as_dirty();
+	}
+}
+
 void PartPlate::set_plate_name(const std::string& name) 
 { 
 	// compare if name equal to m_name, case sensitive
     if (boost::equals(m_name, name))
         return;
 
+	const std::string previous_name = m_name;
 	m_name = name;
     if (m_print != nullptr)
         m_print->set_plate_name(name);
 
-	generate_plate_name_texture();
+	invalidate_plate_name_texture();
+
+    if (m_plater != nullptr && !m_plater->is_loading_project()) {
+        LifecycleEventContext ctx;
+        ctx.name = name;
+        ctx.previous_name = previous_name;
+        ctx.index = m_plate_index;
+        fire_lifecycle_event(LifecycleEvent::PlateRenamed, ctx);
+    }
 }
 
 //get the print's object, result and index
@@ -2019,7 +3685,7 @@ bool PartPlate::is_valid_gcode_file()
 	return true;
 }
 
-ModelObjectPtrs PartPlate::get_objects_on_this_plate() const {
+ModelObjectPtrs PartPlate::get_objects_on_this_plate() {
     ModelObjectPtrs objects_ptr;
     int obj_id;
     for (auto it = obj_to_instance_set.begin(); it != obj_to_instance_set.end(); it++) {
@@ -2089,9 +3755,26 @@ bool PartPlate::contain_instance_totally(int obj_id, int instance_id) const
 	return result;
 }
 
+//judge whether any of the object's instances is totally included in plate or not
+bool PartPlate::contain_any_instance_totally(int obj_id) const
+{
+	if (obj_id < 0 || obj_id >= int(m_model->objects.size()))
+		return false;
+
+	const ModelObject *object = m_model->objects[obj_id];
+	for (int instance_id = 0; instance_id < int(object->instances.size()); ++instance_id)
+		if (contain_instance_totally(obj_id, instance_id))
+			return true;
+
+	return false;
+}
+
 //check whether instance is outside the plate or not
 bool PartPlate::check_outside(int obj_id, int instance_id, BoundingBoxf3* bounding_box)
 {
+	// Ensure IDEX/IQEX zone geometry is current before any placement check.
+	ensure_imex_zones();
+
 	bool outside = true;
 
 	ModelObject* object = m_model->objects[obj_id];
@@ -2100,14 +3783,16 @@ bool PartPlate::check_outside(int obj_id, int instance_id, BoundingBoxf3* boundi
 	BoundingBoxf3 instance_box = bounding_box? *bounding_box: object->instance_convex_hull_bounding_box(instance_id);
 	Polygon hull = instance->convex_hull_2d();
 	BoundingBoxf3 plate_box = get_plate_box();
+	this->open_belt_y(plate_box);
 	if (instance_box.max.z() > plate_box.min.z())
 		plate_box.min.z() += instance_box.min.z(); // not considering outsize if sinking
 
 	if (instance_box.min.z() < SINKING_Z_THRESHOLD) {
 		// Orca: For sinking object, we use a more expensive algorithm so part below build plate won't be considered
+		// m_height mirrors the printer's printable height and is set in CLI mode too, unlike m_plater.
 		if (plate_box.intersects(instance_box)) {
 			// TODO: FIXME: this does not take exclusion area into account
-			const BuildVolume build_volume(get_shape(), m_plater->build_volume().printable_height());
+			const BuildVolume build_volume(get_shape(), m_height, m_extruder_areas, m_extruder_heights);
 			const auto state = instance->calc_print_volume_state(build_volume);
 			outside = state == ModelInstancePVS_Partly_Outside;
 		}
@@ -2134,6 +3819,16 @@ bool PartPlate::check_outside(int obj_id, int instance_id, BoundingBoxf3* boundi
 		else
 			outside = false;
 	}
+
+    // IDEX/IQEX placement check (prepare-mode bounding-box test).
+    // Block objects that overlap secondary (copy/mirror) zones or the carriage
+    // danger strip at the primary zone boundary.  Reuses the existing
+    // outside=true → instance_outside_set → update_states() → blocks slicing path.
+    // Reuse the hull computed above: ModelInstance::convex_hull_2d() is NOT cached
+    // (Model.cpp has the validity guard commented out), so recomputing it here would
+    // cost every user a per-instance hull rebuild, including on non-IMEX printers.
+    if (!outside && imex_hull_violates(hull))
+        outside = true;
 
 	return outside;
 }
@@ -2226,6 +3921,8 @@ int PartPlate::add_instance(int obj_id, int instance_id, bool move_position, Bou
 	}
 
 	BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << boost::format(": plate %1% , m_ready_for_slice changes to %2%") % m_plate_index %m_ready_for_slice;
+	if (m_plater)
+		m_plater->mark_plate_toolbar_image_dirty();
 	return 0;
 }
 
@@ -2309,7 +4006,7 @@ void PartPlate::duplicate_all_instance(unsigned int dup_count, bool need_skip, s
         int obj_id = it->first;
         int instance_id = it->second;
 
-        if ((obj_id >= 0) && (obj_id < m_model->objects.size()))
+        if (valid_instance(obj_id, instance_id))
         {
             ModelObject* object = m_model->objects[obj_id];
             ModelInstance* instance = object->instances[instance_id];
@@ -2342,7 +4039,7 @@ void PartPlate::duplicate_all_instance(unsigned int dup_count, bool need_skip, s
         int obj_id = it->first;
         int instance_id = it->second;
 
-        if ((obj_id >= 0) && (obj_id < m_model->objects.size()))
+        if (valid_instance(obj_id, instance_id))
         {
             ModelObject* object = m_model->objects[obj_id];
             ModelInstance* instance = object->instances[instance_id];
@@ -2435,8 +4132,7 @@ void PartPlate::set_vase_mode_related_object_config(int obj_id) {
 	new_conf.set_key_value("detect_thin_wall", new ConfigOptionBool(false));
 	new_conf.set_key_value("timelapse_type", new ConfigOptionEnum<TimelapseType>(tlTraditional));
 	new_conf.set_key_value("overhang_reverse", new ConfigOptionBool(false));
-	new_conf.set_key_value("wall_direction", new ConfigOptionEnum<WallDirection>(WallDirection::Auto));
-	auto applying_keys = global_config->diff(new_conf);
+	const auto applying_keys = global_config->diff(new_conf);
 
 	for (ModelObject* object : obj_ptrs) {
 		ModelConfigObject& config = object->config;
@@ -2445,8 +4141,8 @@ void PartPlate::set_vase_mode_related_object_config(int obj_id) {
 			config.set_key_value(opt_key, new_conf.option(opt_key)->clone());
 		}
 
-		applying_keys = config.get().diff(new_conf);
-		for (auto opt_key : applying_keys) {
+		const auto object_keys = config.get().diff(new_conf);
+		for (auto opt_key : object_keys) {
 			config.set_key_value(opt_key, new_conf.option(opt_key)->clone());
 		}
 	}
@@ -2460,8 +4156,8 @@ int PartPlate::printable_instance_size()
         int obj_id      = it->first;
         int instance_id = it->second;
 
-        if (obj_id >= m_model->objects.size())
-			continue;
+        if (!valid_instance(obj_id, instance_id))
+            continue;
 
         ModelObject *  object   = m_model->objects[obj_id];
         ModelInstance *instance = object->instances[instance_id];
@@ -2483,7 +4179,7 @@ bool PartPlate::has_printable_instances()
 		int obj_id = it->first;
 		int instance_id = it->second;
 
-		if (obj_id >= m_model->objects.size())
+		if (!valid_instance(obj_id, instance_id))
 			continue;
 
 		ModelObject* object = m_model->objects[obj_id];
@@ -2507,7 +4203,8 @@ bool PartPlate::is_all_instances_unprintable()
         int obj_id      = it->first;
         int instance_id = it->second;
 
-        if (obj_id >= m_model->objects.size()) continue;
+        if (!valid_instance(obj_id, instance_id))
+            continue;
 
         ModelObject *  object   = m_model->objects[obj_id];
         ModelInstance *instance = object->instances[instance_id];
@@ -2654,9 +4351,10 @@ void PartPlate::generate_exclude_polygon(ExPolygon &exclude_polygon)
 	exclude_polygon.contour.make_counter_clockwise();
 }
 
-bool PartPlate::set_shape(const Pointfs& shape, const Pointfs& exclude_areas, Vec2d position, float height_to_lid, float height_to_rod)
+bool PartPlate::set_shape(const Pointfs& shape, const Pointfs& exclude_areas, const std::vector<Pointfs>& extruder_areas, const std::vector<double>& extruder_heights, Vec2d position, float height_to_lid, float height_to_rod)
 {
 	Pointfs new_shape, new_exclude_areas;
+	m_extruder_heights = extruder_heights;
 	for (const Vec2d& p : shape) {
 		new_shape.push_back(Vec2d(p.x() + position.x(), p.y() + position.y()));
 	}
@@ -2664,6 +4362,18 @@ bool PartPlate::set_shape(const Pointfs& shape, const Pointfs& exclude_areas, Ve
 	for (const Vec2d& p : exclude_areas) {
 		new_exclude_areas.push_back(Vec2d(p.x() + position.x(), p.y() + position.y()));
 	}
+
+	std::vector<Pointfs> new_extruder_areas;
+	for (const Pointfs& shape : extruder_areas) {
+		Pointfs new_extruder_area;
+		for (const Vec2d& p : shape) {
+			Vec2d point(p(0) + position.x(), p(1) + position.y());
+			new_extruder_area.push_back(point);
+		}
+		new_extruder_areas.push_back(new_extruder_area);
+	}
+	m_extruder_areas = std::move(new_extruder_areas);
+
 	if ((m_shape == new_shape)&&(m_exclude_area == new_exclude_areas)
 		&&(m_height_to_lid == height_to_lid)&&(m_height_to_rod == height_to_rod)) {
 		BOOST_LOG_TRIVIAL(info) << "PartPlate same shape, skip directly";
@@ -2689,45 +4399,54 @@ bool PartPlate::set_shape(const Pointfs& shape, const Pointfs& exclude_areas, Ve
 
 		calc_bounding_boxes();
 
-		ExPolygon logo_poly;
-		generate_logo_polygon(logo_poly);
-		m_logo_triangles.reset();
-		if (!init_model_from_poly(m_logo_triangles, logo_poly, GROUND_Z + 0.02f))
-			BOOST_LOG_TRIVIAL(error) << __FUNCTION__ << ":Unable to create logo triangles\n";
+		if (m_plater != nullptr) { // render data, skip in CLI mode where m_plater is null
+			ExPolygon logo_poly;
+			generate_logo_polygon(logo_poly);
+			m_logo_triangles.reset();
+			if (!init_model_from_poly(m_logo_triangles, logo_poly, GROUND_Z + 0.02f))
+				BOOST_LOG_TRIVIAL(error) << __FUNCTION__ << ":Unable to create logo triangles\n";
 
-		ExPolygon poly;
-		/*for (const Vec2d& p : m_shape) {
-			poly.contour.append({ scale_(p(0)), scale_(p(1)) });
-		}*/
-		generate_print_polygon(poly);
-		calc_triangles(poly);
-        init_raycaster_from_model(m_triangles);
+			ExPolygon poly;
+			generate_print_polygon(poly);
+			calc_triangles(poly);
 
-		ExPolygon exclude_poly;
-		/*for (const Vec2d& p : m_exclude_area) {
-			exclude_poly.contour.append({ scale_(p(0)), scale_(p(1)) });
-		}*/
-		generate_exclude_polygon(exclude_poly);
-		calc_exclude_triangles(exclude_poly);
+			// reset m_wrapping_detection_triangles when change printer
+			m_print_polygon = poly;
+			m_wrapping_detection_triangles.reset();
+			init_raycaster_from_model(m_triangles);
 
-		const BoundingBox& pp_bbox = poly.contour.bounding_box();
-		calc_gridlines(poly, pp_bbox);
+			ExPolygon exclude_poly;
+			generate_exclude_polygon(exclude_poly);
+			calc_exclude_triangles(exclude_poly);
 
-		//calc_vertex_for_icons_background(5, m_del_and_background_icon);
-		//calc_vertex_for_icons(4, m_del_icon);
-		calc_vertex_for_icons(0, m_del_icon);
-        calc_vertex_for_icons(1, m_orient_icon);
-        calc_vertex_for_icons(2, m_arrange_icon);
-        calc_vertex_for_icons(3, m_lock_icon);
-        calc_vertex_for_icons(4, m_plate_settings_icon);
-        calc_vertex_for_icons(5, m_move_front_icon);
-        // ORCA also change bed_icon_count number in calc_vertex_for_icons() after adding or removing icons for circular shaped beds that uses vertical alingment for icons
+			const BoundingBox& pp_bbox = poly.contour.bounding_box();
+			calc_gridlines(poly, pp_bbox);
+			m_imex_zones_mode_cache = "\x01"; // force rebuild on next render
+			calc_imex_zones();
 
-		//calc_vertex_for_number(0, (m_plate_index < 9), m_plate_idx_icon);
-		calc_vertex_for_number(0, false, m_plate_idx_icon);
-		if (m_plater) {
+			calc_vertex_for_icons(0, m_del_icon);
+			calc_vertex_for_icons(1, m_orient_icon);
+			calc_vertex_for_icons(2, m_arrange_icon);
+			calc_vertex_for_icons(3, m_lock_icon);
+			calc_vertex_for_icons(4, m_plate_settings_icon);
+			// ORCA also change bed_icon_count number in calc_vertex_for_icons() after adding or removing icons for circular shaped beds that uses vertical alingment for icons
+			bool dual_bbl = false;
+			PresetBundle* preset = wxGetApp().preset_bundle;
+			dual_bbl = (preset->is_bbl_vendor() && preset->get_printer_extruder_count() == 2);
+			calc_vertex_for_icons(dual_bbl ? 5 : 6, m_plate_filament_map_icon);
+			calc_vertex_for_icons(dual_bbl ? 6 : 5, m_move_front_icon);
+			{
+				auto* is_imex_opt = preset->printers.get_edited_preset().config.option<ConfigOptionBool>("is_imex");
+				if (is_imex_opt && is_imex_opt->value) {
+					int imex_slot = dual_bbl ? 7 : 6;
+					calc_vertex_for_icons(imex_slot, m_imex_mode_icon);
+					calc_vertex_for_imex_warn_badge(imex_slot, m_imex_warn_icon);
+				}
+			}
+
+			calc_vertex_for_number(0, false, m_plate_idx_icon);
 			// calc vertex for plate name
-			generate_plate_name_texture();
+			invalidate_plate_name_texture();
 		}
 	}
 
@@ -2741,6 +4460,45 @@ const BoundingBox PartPlate::get_bounding_box_crd()
 	const auto plate_shape = Slic3r::Polygon::new_scale(m_shape);
 
 	return plate_shape.bounding_box();
+}
+
+BoundingBoxf3 PartPlate::get_build_volume(bool use_share)
+{
+    auto  eps=Slic3r::BuildVolume::SceneEpsilon;
+	Vec3d up_point;
+	Vec3d low_point;
+	if (use_share && !m_extruder_areas.empty()) {
+		Polygon bed_poly = get_shared_poly(m_extruder_areas);
+		BoundingBox bbox = bed_poly.bounding_box();
+
+		up_point = Vec3d(unscale_(bbox.max.x()) + eps,  unscale_(bbox.max.y()) + eps, m_origin.z() + m_height + eps);
+		low_point = Vec3d(unscale_(bbox.min.x()) - eps, unscale_(bbox.min.y()) - eps, m_origin.z() - eps);
+	}
+	else {
+		// Orca: support non-rectangular bed
+		up_point  = m_bounding_box.max + Vec3d(eps, eps, m_origin.z() + m_height + eps);
+		low_point = m_bounding_box.min + Vec3d(-eps, -eps, m_origin.z() - eps);
+	}
+    BoundingBoxf3 plate_box(low_point, up_point);
+    return plate_box;
+}
+
+Polygon PartPlate::get_shared_printable_polygon() const
+{
+	return m_extruder_areas.empty() ? Polygon::new_scale(m_shape) : get_shared_poly(m_extruder_areas);
+}
+
+
+bool PartPlate::belt_open_y() const
+{
+	// Headless (CLI) plates have no plater and no wxApp behind wxGetApp(); the CLI's own belt
+	// handling lives in Print::validate().
+	if (m_plater == nullptr || wxGetApp().preset_bundle == nullptr)
+		return false;
+	const DynamicPrintConfig &printer = wxGetApp().preset_bundle->printers.get_edited_preset().config;
+	const auto *belt       = printer.option<ConfigOptionBool>("belt_printer");
+	const auto *infinite_y = printer.option<ConfigOptionBool>("belt_printer_infinite_y");
+	return belt != nullptr && belt->value && infinite_y != nullptr && infinite_y->value;
 }
 
 bool PartPlate::contains(const Vec3d& point) const
@@ -2762,6 +4520,7 @@ bool PartPlate::contains(const BoundingBoxf3& bb) const
 	print_volume.min(1) -= Slic3r::BuildVolume::BedEpsilon;
 	print_volume.max(0) += Slic3r::BuildVolume::BedEpsilon;
 	print_volume.max(1) += Slic3r::BuildVolume::BedEpsilon;
+	this->open_belt_y(print_volume);
 	return print_volume.contains(bb);
 }
 
@@ -2774,10 +4533,11 @@ bool PartPlate::intersects(const BoundingBoxf3& bb) const
 	print_volume.min(1) -= Slic3r::BuildVolume::BedEpsilon;
 	print_volume.max(0) += Slic3r::BuildVolume::BedEpsilon;
 	print_volume.max(1) += Slic3r::BuildVolume::BedEpsilon;
+	this->open_belt_y(print_volume);
 	return print_volume.intersects(bb);
 }
 
-void PartPlate::render(const Transform3d& view_matrix, const Transform3d& projection_matrix, bool bottom, bool only_body, bool force_background_color, HeightLimitMode mode, int hover_id, bool render_cali, bool show_grid)
+void PartPlate::render(const Transform3d& view_matrix, const Transform3d& projection_matrix, bool bottom, bool only_body, bool force_background_color, HeightLimitMode mode, int hover_id, bool render_cali, bool show_grid, bool hide_chrome)
 {
     glsafe(::glEnable(GL_DEPTH_TEST));
 
@@ -2795,10 +4555,25 @@ void PartPlate::render(const Transform3d& view_matrix, const Transform3d& projec
             render_background(force_background_color);
 
             render_exclude_area(force_background_color);
+            render_imex_zones(force_background_color);
+            if(m_selected && wxGetApp().plater()->get_enable_wrapping_detection()){
+                if(!m_wrapping_detection_triangles.is_initialized()){
+                    auto points = get_plate_wrapping_detection_area();
+                    if (points.size() > 0) {//wrapping_detection_area
+                        ExPolygon temp_poly;
+                        for (const Vec2d &p : points) {
+                            temp_poly.contour.append({scale_(p(0)), scale_(p(1))});
+                        }
+                        auto      result = intersection(m_print_polygon, temp_poly);
+                        if (result.size() > 0) {
+                            ExPolygon wrapp_poly(result[0]);
+                            calc_triangles_from_polygon(wrapp_poly, m_wrapping_detection_triangles);
+                        }
+                    }
+                }
+                render_wrapping_detection_area(force_background_color);
+            }
         }
-
-        if (show_grid)
-            render_grid(bottom);
 
         render_height_limit(mode);
 
@@ -2811,16 +4586,24 @@ void PartPlate::render(const Transform3d& view_matrix, const Transform3d& projec
         shader->stop_using();
     }
 
-    if (!bottom && m_selected && !force_background_color) {
+    if (wxGetApp().show_plate_gridlines() && show_grid) {
+        glsafe(::glDepthMask(bottom ? GL_TRUE : GL_FALSE));
+        render_grid(bottom);
+        glsafe(::glDepthMask(GL_TRUE));
+    }
+
+    if (!hide_chrome && !bottom && m_selected && !force_background_color) {
         if (m_partplate_list)
             render_logo(bottom, m_partplate_list->render_cali_logo && render_cali);
         else
             render_logo(bottom);
     }
 
-    render_icons(bottom, only_body, hover_id);
-    if (!force_background_color) {
-        render_only_numbers(bottom);
+    if (!hide_chrome) {
+        render_icons(bottom, only_body, hover_id);
+        if (!force_background_color) {
+            render_only_numbers(bottom);
+        }
     }
 
     glsafe(::glDisable(GL_DEPTH_TEST));
@@ -2868,12 +4651,19 @@ void PartPlate::update_states()
 void PartPlate::update_slice_result_valid_state(bool valid)
 {
     BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << boost::format(": plate %1% , update slice result from %2% to %3%") % m_plate_index %m_slice_result_valid %valid;
+    const bool changed = (m_slice_result_valid != valid);
     m_slice_result_valid = valid;
     if (valid)
         m_slice_percent = 100.0f;
     else {
         m_slice_percent = -1.0f;
     }
+    // This flips the plate's slice-ready / IMEX blocked-plate state without a geometry change,
+    // so the plate-selector thumbnail/warning badge must be repainted explicitly. Upstream
+    // replaced the old per-idle unconditional toolbar refresh with this dirty flag, so nothing
+    // else repaints the naughty-plate icon otherwise.
+    if (changed && m_plater)
+        m_plater->mark_plate_toolbar_image_dirty();
 }
 
 //update current slice context into backgroud slicing process
@@ -2883,8 +4673,8 @@ void PartPlate::update_slice_context(BackgroundSlicingProcess & process)
 		Slic3r::SlicingStatusEvent *event = new Slic3r::SlicingStatusEvent(EVT_SLICING_UPDATE, 0, status);
 		//BBS: GUI refactor: add plate info befor message
 		if (status.message_type == Slic3r::PrintStateBase::SlicingDefaultNotification) {
-			auto temp = Slic3r::format(_u8L(" plate %1%:"), std::to_string(m_plate_index + 1));
-			event->status.text = temp + event->status.text;
+			// TRN Slicing progress. %1% is the plate number, %2% the current slicing step.
+			event->status.text = Slic3r::format(_u8L("Slicing plate %1%: %2%"), m_plate_index + 1, event->status.text);
 		}
 		wxQueueEvent(m_plater, event);
 	};
@@ -2929,12 +4719,21 @@ int PartPlate::load_gcode_from_file(const std::string& filename)
 	int ret = 0;
 
 	// process gcode
-	DynamicPrintConfig full_config = wxGetApp().preset_bundle->full_config();
+	auto& preset_bundle = wxGetApp().preset_bundle;
+	std::vector<int>   filament_maps = this->get_filament_maps();
+	// Inject the plate's volume map (or the per-extruder defaults) exactly like the apply-time
+	// composition, so the config applied over the loaded slice result matches the next
+	// background-process apply and does not invalidate the embedded g-code.
+	std::vector<int> f_volume_maps = this->get_filament_volume_maps();
+	if (f_volume_maps.empty()) {
+		f_volume_maps = preset_bundle->get_default_nozzle_volume_types_for_filaments(filament_maps);
+	}
+	DynamicPrintConfig full_config   = preset_bundle->full_config(false, filament_maps, f_volume_maps);
 	full_config.apply(m_config, true);
-	m_print->apply(*m_model, full_config);
+	m_print->apply(*m_model, full_config, false);
 	//BBS: need to apply two times, for after the first apply, the m_print got its object,
 	//which will affect the config when new_full_config.normalize_fdm(used_filaments);
-	m_print->apply(*m_model, full_config);
+	m_print->apply(*m_model, full_config, false);
 
 	// BBS: use backup path to save temp gcode
     // auto path = get_tmp_gcode_path();
@@ -3136,6 +4935,37 @@ void PartPlate::update_first_layer_print_sequence(size_t filament_nums)
     }
 }
 
+void PartPlate::update_first_layer_print_sequence_when_delete_filament(size_t filament_id)
+{
+    auto other_layers_seqs = get_other_layers_print_sequence();
+    if (!other_layers_seqs.empty()) {
+        bool need_update_data = false;
+        for (auto &other_layers_seq : other_layers_seqs) {
+            std::vector<int> &orders = other_layers_seq.second;
+            orders.erase(std::remove_if(orders.begin(), orders.end(), [filament_id](int n) { return n == filament_id +1; }), orders.end());
+            for (auto &order : orders) {
+                order = order > filament_id ? order - 1 : order;
+            }
+            need_update_data = true;
+        }
+        if (need_update_data)
+            set_other_layers_print_sequence(other_layers_seqs);
+    }
+
+    ConfigOptionInts *op_print_sequence_1st = m_config.option<ConfigOptionInts>("first_layer_print_sequence");
+    if (!op_print_sequence_1st)
+        return;
+
+    std::vector<int> &print_sequence_1st = op_print_sequence_1st->values;
+    if (print_sequence_1st.size() == 0 || print_sequence_1st[0] == 0)
+        return;
+
+    print_sequence_1st.erase(std::remove_if(print_sequence_1st.begin(), print_sequence_1st.end(), [filament_id](int n) { return n == filament_id + 1; }), print_sequence_1st.end());
+    for (auto &order : print_sequence_1st) {
+        order = order > filament_id ? order - 1 : order;
+    }
+}
+
 void PartPlate::print() const
 {
 	unsigned int count=0;
@@ -3161,10 +4991,88 @@ void PartPlate::print() const
 	return;
 }
 
+FilamentMapMode PartPlate::get_filament_map_mode() const
+{
+    std::string key = "filament_map_mode";
+    if(m_config.has(key))
+        return m_config.option<ConfigOptionEnum<FilamentMapMode>>(key)->value;
+    return FilamentMapMode::fmmDefault;
+}
+
+void PartPlate::set_filament_map_mode(const FilamentMapMode& mode)
+{
+	const auto& proj_config = wxGetApp().preset_bundle->project_config;
+	FilamentMapMode global_mode = proj_config.option<ConfigOptionEnum<FilamentMapMode>>("filament_map_mode")->value;
+	FilamentMapMode old_mode = get_filament_map_mode();
+	FilamentMapMode old_real_mode = old_mode == fmmDefault ? global_mode : old_mode;
+	FilamentMapMode new_real_mode = mode == fmmDefault ? global_mode : mode;
+
+	if (old_real_mode != new_real_mode)
+		clear_filament_map();
+	if (mode == fmmDefault)
+		clear_filament_map_mode();
+	else
+		m_config.option<ConfigOptionEnum<FilamentMapMode>>("filament_map_mode", true)->value = mode;
+}
+
+std::vector<int> PartPlate::get_filament_maps() const
+{
+    std::string key = "filament_map";
+    if (m_config.has(key))
+        return m_config.option<ConfigOptionInts>(key)->values;
+
+    return {};
+}
+
+void PartPlate::set_filament_maps(const std::vector<int>& f_maps)
+{
+    m_config.option<ConfigOptionInts>("filament_map", true)->values = f_maps;
+}
+
 void PartPlate::clear_filament_map()
 {
     if (m_config.has("filament_map"))
         m_config.erase("filament_map");
+}
+
+std::vector<int> PartPlate::get_filament_volume_maps() const
+{
+    std::string key = "filament_volume_map";
+    if (m_config.has(key))
+        return m_config.option<ConfigOptionInts>(key)->values;
+
+    return {};
+}
+
+void PartPlate::set_filament_volume_maps(const std::vector<int>& f_maps)
+{
+    m_config.option<ConfigOptionInts>("filament_volume_map", true)->values = f_maps;
+}
+
+void PartPlate::clear_filament_volume_map()
+{
+    if (m_config.has("filament_volume_map"))
+        m_config.erase("filament_volume_map");
+}
+
+std::vector<int> PartPlate::get_filament_nozzle_maps() const
+{
+    std::string key = "filament_nozzle_map";
+    if (m_config.has(key))
+        return m_config.option<ConfigOptionInts>(key)->values;
+
+    return {};
+}
+
+void PartPlate::set_filament_nozzle_maps(const std::vector<int>& f_maps)
+{
+    m_config.option<ConfigOptionInts>("filament_nozzle_map", true)->values = f_maps;
+}
+
+void PartPlate::clear_filament_map_mode()
+{
+    if (m_config.has("filament_map_mode"))
+        m_config.erase("filament_map_mode");
 }
 
 void PartPlate::on_extruder_count_changed(int extruder_count)
@@ -3175,8 +5083,8 @@ void PartPlate::on_extruder_count_changed(int extruder_count)
         wxGetApp().plater()->set_global_filament_map(f_map);
         // clear filament map and mode in single extruder mode
         clear_filament_map();
-        // clear_filament_map_mode();
-        //  do not clear mode now, reset to default mode
+        //clear_filament_map_mode();
+        // do not clear mode now, reset to default mode
         m_config.option<ConfigOptionEnum<FilamentMapMode>>("filament_map_mode", true)->value = FilamentMapMode::fmmAutoForFlush;
     }
 }
@@ -3187,6 +5095,16 @@ void PartPlate::set_filament_count(int filament_count)
         std::vector<int>& filament_maps = m_config.option<ConfigOptionInts>("filament_map")->values;
         filament_maps.resize(filament_count, 1);
     }
+
+    if (m_config.has("filament_nozzle_map")) {
+        std::vector<int>& filament_nozzle_map = m_config.option<ConfigOptionInts>("filament_nozzle_map")->values;
+        filament_nozzle_map.resize(filament_count, 0);
+    }
+
+    if (m_config.has("filament_volume_map")) {
+        std::vector<int>& filament_volume_map = m_config.option<ConfigOptionInts>("filament_volume_map")->values;
+        filament_volume_map.resize(filament_count, static_cast<int>(NozzleVolumeType::nvtStandard));
+    }
 }
 
 void PartPlate::on_filament_added()
@@ -3195,38 +5113,26 @@ void PartPlate::on_filament_added()
         std::vector<int>& filament_maps = m_config.option<ConfigOptionInts>("filament_map")->values;
         filament_maps.push_back(1);
     }
-}
 
-void PartPlate::update_first_layer_print_sequence_when_delete_filament(size_t filament_id)
-{
-    auto other_layers_seqs = get_other_layers_print_sequence();
-    if (!other_layers_seqs.empty()) {
-        bool need_update_data = false;
-        for (auto& other_layers_seq : other_layers_seqs) {
-            std::vector<int>& orders = other_layers_seq.second;
-            orders.erase(std::remove_if(orders.begin(), orders.end(), [filament_id](int n) { return n == filament_id + 1; }), orders.end());
-            for (auto& order : orders) {
-                order = order > filament_id ? order - 1 : order;
-            }
-            need_update_data = true;
-        }
-        if (need_update_data)
-            set_other_layers_print_sequence(other_layers_seqs);
+    if (m_config.has("filament_nozzle_map")) {
+        std::vector<int>& filament_nozzle_map = m_config.option<ConfigOptionInts>("filament_nozzle_map")->values;
+        filament_nozzle_map.push_back(0);
     }
 
-    ConfigOptionInts* op_print_sequence_1st = m_config.option<ConfigOptionInts>("first_layer_print_sequence");
-    if (!op_print_sequence_1st)
-        return;
+    if (m_config.has("filament_volume_map")) {
+        std::vector<int>& filament_volume_map = m_config.option<ConfigOptionInts>("filament_volume_map")->values;
+        // A new filament defaults onto the first extruder, so seed its volume value from
+        // that extruder's flow type.
+        int volume_type = static_cast<int>(NozzleVolumeType::nvtStandard);
+        auto nozzle_volumes = wxGetApp().preset_bundle->project_config.option<ConfigOptionEnumsGeneric>("nozzle_volume_type");
+        if (nozzle_volumes && !nozzle_volumes->values.empty())
+            volume_type = nozzle_volumes->values[0];
+        // Orca: never store the Hybrid marker as a per-filament value; on a Hybrid extruder
+        // each filament still prints with a concrete flow, defaulting to Standard.
+        if (volume_type == static_cast<int>(NozzleVolumeType::nvtHybrid))
+            volume_type = static_cast<int>(NozzleVolumeType::nvtStandard);
 
-    std::vector<int>& print_sequence_1st = op_print_sequence_1st->values;
-    if (print_sequence_1st.size() == 0 || print_sequence_1st[0] == 0)
-        return;
-
-    print_sequence_1st.erase(std::remove_if(print_sequence_1st.begin(), print_sequence_1st.end(),
-                                            [filament_id](int n) { return n == filament_id + 1; }),
-                             print_sequence_1st.end());
-    for (auto& order : print_sequence_1st) {
-        order = order > filament_id ? order - 1 : order;
+        filament_volume_map.push_back(volume_type);
     }
 }
 
@@ -3234,13 +5140,31 @@ void PartPlate::on_filament_deleted(int filament_count, int filament_id)
 {
     if (m_config.has("filament_map")) {
         std::vector<int>& filament_maps = m_config.option<ConfigOptionInts>("filament_map")->values;
-        filament_maps.erase(filament_maps.begin() + filament_id);
+        // Guard against an out-of-range index: the per-plate filament_map can be out of sync
+        // with the global filament count, and erasing at/past end() triggers an out-of-bounds
+        // memmove (crash on macOS, see PartPlate::on_filament_deleted in crash reports).
+        if (filament_id >= 0 && filament_id < (int) filament_maps.size())
+            filament_maps.erase(filament_maps.begin() + filament_id);
     }
+
+    if (m_config.has("filament_nozzle_map")) {
+        std::vector<int>& filament_nozzle_map = m_config.option<ConfigOptionInts>("filament_nozzle_map")->values;
+        if (filament_id >= 0 && filament_id < (int) filament_nozzle_map.size())
+            filament_nozzle_map.erase(filament_nozzle_map.begin() + filament_id);
+    }
+
+    if (m_config.has("filament_volume_map")) {
+        std::vector<int>& filament_volume_map = m_config.option<ConfigOptionInts>("filament_volume_map")->values;
+        if (filament_id >= 0 && filament_id < (int) filament_volume_map.size())
+            filament_volume_map.erase(filament_volume_map.begin() + filament_id);
+    }
+
     update_first_layer_print_sequence_when_delete_filament(filament_id);
 }
 
+
 /* PartPlate List related functions*/
-PartPlateList::PartPlateList(int width, int depth, int height, Plater* platerObj, Model* modelObj, PrinterTechnology tech)
+PartPlateList::PartPlateList(int width, int depth, double height, Plater* platerObj, Model* modelObj, PrinterTechnology tech)
 	:m_plate_width(width), m_plate_depth(depth), m_plate_height(height), m_plater(platerObj), m_model(modelObj), printer_technology(tech),
 	unprintable_plate(this, Vec3d(0.0 + width * (1. + LOGICAL_PART_PLATE_GAP), 0.0, 0.0), width, depth, height, platerObj, modelObj, false, tech)
 {
@@ -3284,11 +5208,6 @@ void PartPlateList::init()
 	m_plate_count = 1;
 	m_plate_cols = 1;
 	m_current_plate = 0;
-
-	if (m_plater) {
-        // In GUI mode
-        set_default_wipe_tower_pos_for_plate(0);
-    }
 
 	select_plate(0);
 	unprintable_plate.set_index(1);
@@ -3351,6 +5270,7 @@ Vec2d PartPlateList::compute_shape_position(int index, int cols)
 //generate icon textures
 void PartPlateList::generate_icon_textures()
 {
+	m_icon_textures_dark = m_is_dark;
 	// use higher resolution images if graphic card and opengl version allow
 	GLint max_tex_size = OpenGLManager::get_gl_info().get_max_tex_size(), icon_size = max_tex_size / 8;
 	std::string path = resources_dir() + "/images/";
@@ -3463,6 +5383,20 @@ void PartPlateList::generate_icon_textures()
 		}
 	}
 
+	{
+        file_name = path + (m_is_dark ? "plate_set_filament_map_dark.svg" : "plate_set_filament_map.svg");
+        if (!m_plate_set_filament_map_texture.load_from_svg_file(file_name, true, false, false, icon_size)) {
+            BOOST_LOG_TRIVIAL(error) << __FUNCTION__ << boost::format(":load file %1% failed") % file_name;
+        }
+    }
+
+	{
+        file_name = path + (m_is_dark ? "plate_set_filament_map_hover_dark.svg" : "plate_set_filament_map_hover.svg");
+        if (!m_plate_set_filament_map_hovered_texture.load_from_svg_file(file_name, true, false, false, icon_size)) {
+            BOOST_LOG_TRIVIAL(error) << __FUNCTION__ << boost::format(":load file %1% failed") % file_name;
+        }
+    }
+
 	//if (m_bedtype_changed_texture.get_id() == 0)
 	{
 		file_name = path + (m_is_dark ? "plate_settings_changed_dark.svg" : "plate_settings_changed.svg");
@@ -3502,6 +5436,27 @@ void PartPlateList::generate_icon_textures()
 		}
 	}
 
+    // IMEX multi-material conflict warning badge
+    {
+        file_name = path + "obj_warning.svg";
+        if (!m_imex_warn_texture.load_from_svg_file(file_name, true, false, false, icon_size)) {
+            BOOST_LOG_TRIVIAL(warning) << __FUNCTION__ << boost::format(":load file %1% failed (IMEX warn badge)") % file_name;
+        }
+    }
+
+    // IDEX/IQEX mode icon textures, one per ImexModeKind (fall back gracefully if an SVG is missing)
+    {
+        static const char* kind_names[] = { "normal", "copy", "mirror", "custom" }; // the Primary kind shows "normal"
+        static_assert(std::size(kind_names) == kImexModeKindCount && std::tuple_size_v<decltype(m_imex_mode_textures)> == kImexModeKindCount);
+        for (size_t kind = 0; kind < kImexModeKindCount; ++kind)
+            for (const bool hovered : { false, true }) {
+                file_name = path + "plate_imex_" + kind_names[kind] + "_mode" + (hovered ? "_hover" : "") + (m_is_dark ? "_dark.svg" : ".svg");
+                GLTexture& texture = hovered ? m_imex_mode_hovered_textures[kind] : m_imex_mode_textures[kind];
+                if (!texture.load_from_svg_file(file_name, true, false, false, icon_size))
+                    BOOST_LOG_TRIVIAL(warning) << __FUNCTION__ << boost::format(":load file %1% failed (IDEX/IQEX mode icon)") % file_name;
+            }
+    }
+
 	std::string text_str = "01";
     // ORCA also scale font size to prevent low res texture
     int size = wxGetApp().em_unit() * PARTPLATE_ICON_SIZE;
@@ -3540,17 +5495,26 @@ void PartPlateList::release_icon_textures()
 	m_lockopen_texture.reset();
 	m_lockopen_hovered_texture.reset();
 	m_plate_settings_texture.reset();
-	m_plate_settings_texture.reset();
-	m_plate_settings_texture.reset();
 	m_plate_settings_hovered_texture.reset();
+    m_plate_set_filament_map_texture.reset();
+    m_plate_set_filament_map_hovered_texture.reset();
 	m_plate_name_edit_texture.reset();
 	m_plate_name_edit_hovered_texture.reset();
+    for (GLTexture& texture : m_imex_mode_textures)
+        texture.reset();
+    for (GLTexture& texture : m_imex_mode_hovered_textures)
+        texture.reset();
+    m_imex_warn_texture.reset();
 	for (int i = 0;i < MAX_PLATE_COUNT; i++) {
 		m_idx_textures[i].reset();
 	}
 	//reset
 	PartPlateList::is_load_bedtype_textures = false;
+    PartPlateList::is_load_extruder_only_area_textures = false;
 	PartPlateList::is_load_cali_texture = false;
+	m_next_bedtype_texture = 0;
+	m_next_extruder_only_area_texture = 0;
+	m_next_cali_texture = 0;
 	for (int i = 0; i < btCount; i++) {
 		for (auto& part: bed_texture_info[i].parts) {
 			if (part.texture) {
@@ -3562,9 +5526,18 @@ void PartPlateList::release_icon_textures()
 			}
 		}
 	}
+    for (int i = 0; i < (unsigned char)ExtruderOnlyAreaType::btAreaCount; i++) {
+        for (auto &part : extruder_only_area_info[i].parts) {
+            if (part.texture) {
+                part.texture->reset();
+                delete part.texture;
+            }
+            if (part.buffer) { delete part.buffer; }
+        }
+    }
 }
 
-void PartPlateList::set_default_wipe_tower_pos_for_plate(int plate_idx)
+void PartPlateList::set_default_wipe_tower_pos_for_plate(int plate_idx, bool init_pos)
 {
     DynamicConfig &     proj_cfg     = wxGetApp().preset_bundle->project_config;
     ConfigOptionFloats *wipe_tower_x = proj_cfg.opt<ConfigOptionFloats>("wipe_tower_x");
@@ -3574,21 +5547,90 @@ void PartPlateList::set_default_wipe_tower_pos_for_plate(int plate_idx)
 
     auto printer_structure_opt = wxGetApp().preset_bundle->printers.get_edited_preset().config.option<ConfigOptionEnum<PrinterStructure>>("printer_structure");
     // set the default position, the same with print config(left top)
-    ConfigOptionFloat wt_x_opt(WIPE_TOWER_DEFAULT_X_POS);
-    ConfigOptionFloat wt_y_opt(WIPE_TOWER_DEFAULT_Y_POS);
+    float x = WIPE_TOWER_DEFAULT_X_POS;
+    float y = WIPE_TOWER_DEFAULT_Y_POS;
     if (printer_structure_opt && printer_structure_opt->value == PrinterStructure::psI3) {
-        wt_x_opt = ConfigOptionFloat(I3_WIPE_TOWER_DEFAULT_X_POS);
-        wt_y_opt = ConfigOptionFloat(I3_WIPE_TOWER_DEFAULT_Y_POS);
+        x = I3_WIPE_TOWER_DEFAULT_X_POS;
+        y = I3_WIPE_TOWER_DEFAULT_Y_POS;
     }
+
+    std::string printer_type = wxGetApp().preset_bundle->printers.get_edited_preset().get_printer_type(wxGetApp().preset_bundle);
+    // Note: printer_type == "N9" and printer_structure_opt->value == PrinterStructure::psI3 can both be true
+    if (printer_type == "N9") {
+        y = N9_WIPE_TOWER_DEFAULT_Y_POS;
+    }
+
+    PartPlate *part_plate = get_plate(plate_idx);
+    Vec3d plate_origin = part_plate->get_origin();
+    BoundingBoxf3 plate_bbox = part_plate->get_bounding_box();
+    BoundingBoxf plate_bbox_2d(Vec2d(plate_bbox.min(0), plate_bbox.min(1)), Vec2d(plate_bbox.max(0), plate_bbox.max(1)));
+    const std::vector<Pointfs> &extruder_areas = part_plate->get_extruder_areas();
+    for (const Pointfs &points : extruder_areas) {
+        BoundingBoxf bboxf(points);
+        plate_bbox_2d.min = plate_bbox_2d.min(0) >= bboxf.min(0) ? plate_bbox_2d.min : bboxf.min;
+        plate_bbox_2d.max = plate_bbox_2d.max(0) <= bboxf.max(0) ? plate_bbox_2d.max : bboxf.max;
+    }
+
+    coordf_t plate_bbox_x_min_local_coord = plate_bbox_2d.min(0) - plate_origin(0);
+    coordf_t plate_bbox_x_max_local_coord = plate_bbox_2d.max(0) - plate_origin(0);
+    coordf_t plate_bbox_y_max_local_coord = plate_bbox_2d.max(1) - plate_origin(1);
+
+    std::vector<int> filament_maps = part_plate->get_real_filament_maps(proj_cfg);
+    // Keep this composition consistent with the apply-time injection (plate volume map, else
+    // per-extruder defaults); the config below currently only feeds scalar reads, but a
+    // divergent volume map would silently mis-resolve any future per-filament read here.
+    std::vector<int> f_volume_maps = part_plate->get_filament_volume_maps();
+    if (f_volume_maps.empty()) {
+        f_volume_maps = wxGetApp().preset_bundle->get_default_nozzle_volume_types_for_filaments(filament_maps);
+    }
+    DynamicPrintConfig full_config = wxGetApp().preset_bundle->full_config(false, filament_maps, f_volume_maps);
+    WipeTowerFootprint footprint = part_plate->estimate_wipe_tower_footprint(full_config, init_pos ? 2 : 0);
+
+    if (!init_pos && (is_approx(footprint.width, 0.0) || is_approx(footprint.depth, 0.0))) {
+        footprint = part_plate->estimate_wipe_tower_footprint(full_config, 2);
+    }
+    Vec3d wipe_tower_size(footprint.width, footprint.depth, footprint.height);
+
+    // Brim-aware margin: the brim extends outward from the tower position.
+    const float brim_width = float(footprint.brim_width);
+    const float margin     = WIPE_TOWER_AUTO_MARGIN + brim_width;
+
+    // clamp wipe tower position within plate boundaries
+    {
+        if (x + margin + wipe_tower_size(0) > plate_bbox_x_max_local_coord) {
+            x = plate_bbox_x_max_local_coord - wipe_tower_size(0) - margin;
+        } else if (x < margin + plate_bbox_x_min_local_coord) {
+            x = margin + plate_bbox_x_min_local_coord;
+        }
+
+        if (y + margin + wipe_tower_size(1) > plate_bbox_y_max_local_coord) {
+            y = plate_bbox_y_max_local_coord - wipe_tower_size(1) - margin;
+        } else if (y < margin) {
+            y = margin;
+        }
+    }
+
+    // The bounding box above still allows a corner a delta or hexagonal bed does not have, and the
+    // prime tower is validated against the real outline — pull it onto the bed before storing.
+    {
+        Polygons bed{part_plate->get_shared_printable_polygon()};
+        bed.front().translate(Point(-scaled(plate_origin.x()), -scaled(plate_origin.y()))); // into the frame x/y live in
+        const BoundingBox tower(Point::new_scale(x, y),
+                                Point::new_scale(x + wipe_tower_size(0), y + wipe_tower_size(1)));
+        const Vec2f move = WipeTower::move_box_inside_polygon(tower, bed, scaled<coord_t>(margin));
+        x += move.x();
+        y += move.y();
+    }
+
+    ConfigOptionFloat wt_x_opt(x);
+    ConfigOptionFloat wt_y_opt(y);
     dynamic_cast<ConfigOptionFloats *>(proj_cfg.option("wipe_tower_x"))->set_at(&wt_x_opt, plate_idx, 0);
     dynamic_cast<ConfigOptionFloats *>(proj_cfg.option("wipe_tower_y"))->set_at(&wt_y_opt, plate_idx, 0);
 }
 
 //this may be happened after machine changed
-void PartPlateList::reset_size(int width, int depth, int height, bool reload_objects, bool update_shapes)
+void PartPlateList::reset_size(int width, int depth, double height, bool reload_objects, bool update_shapes)
 {
-	Vec3d origin1, origin2;
-
 	BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << boost::format(":before size: plate_width %1%, plate_depth %2%, plate_height %3%") % m_plate_width % m_plate_depth % m_plate_height;
 	BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << boost::format(":after size: plate_width %1%, plate_depth %2%, plate_height %3%") % width % depth % height;
 	if ((m_plate_width != width) || (m_plate_depth != depth) || (m_plate_height != height))
@@ -3598,7 +5640,7 @@ void PartPlateList::reset_size(int width, int depth, int height, bool reload_obj
 		m_plate_height = height;
 		update_all_plates_pos_and_size(false, false, true);
 		if (update_shapes) {
-			set_shapes(m_shape, m_exclude_areas, m_logo_texture_filename, m_height_to_lid, m_height_to_rod);
+			set_shapes(m_shape, m_exclude_areas, m_wrapping_exclude_areas, m_extruder_areas, m_extruder_heights, m_logo_texture_filename, m_height_to_lid, m_height_to_rod);
 		}
 		if (reload_objects)
 			reload_all_objects();
@@ -3665,10 +5707,9 @@ void PartPlateList::reset(bool do_init)
 	//m_plate_list.clear();
 
 	if (do_init) {
-        init();
-        m_plate_list[0]->set_filament_count(m_filament_count);
-	}
 		init();
+		m_plate_list[0]->set_filament_count(m_filament_count);
+	}
 
 	return;
 }
@@ -3684,12 +5725,17 @@ void PartPlateList::reinit()
 
 	//reset plate 0's position
 	Vec2d pos = compute_shape_position(0, m_plate_cols);
-	m_plate_list[0]->set_shape(m_shape, m_exclude_areas, pos, m_height_to_lid, m_height_to_rod);
+	m_plate_list[0]->set_shape(m_shape, m_exclude_areas, m_extruder_areas, m_extruder_heights, pos, m_height_to_lid, m_height_to_rod);
 	//reset unprintable plate's position
 	Vec3d origin2 = compute_origin_for_unprintable();
 	unprintable_plate.set_pos_and_size(origin2, m_plate_width, m_plate_depth, m_plate_height, false);
 	//re-calc the bounding boxes
 	calc_bounding_boxes();
+
+	if (m_plater) {
+        // In GUI mode
+        set_default_wipe_tower_pos_for_plate(0, true);
+    }
 
 	return;
 }
@@ -3701,7 +5747,7 @@ void PartPlateList::reinit()
 void PartPlateList::update_plates()
 {
     update_all_plates_pos_and_size(true, false);
-    set_shapes(m_shape, m_exclude_areas, m_logo_texture_filename, m_height_to_lid, m_height_to_rod);
+    set_shapes(m_shape, m_exclude_areas, m_wrapping_exclude_areas, m_extruder_areas, m_extruder_heights, m_logo_texture_filename, m_height_to_lid, m_height_to_rod);
 }
 
 int PartPlateList::create_plate(bool adjust_position)
@@ -3715,6 +5761,9 @@ int PartPlateList::create_plate(bool adjust_position)
 		return -1;
 	int cols = compute_colum_count(new_index + 1);
 	int old_cols = compute_colum_count(new_index);
+	// Orca: Rebuild plate membership before moving instances during a grid reflow.
+	if (adjust_position && old_cols != cols)
+		reload_all_objects();
 
 	origin = compute_origin(new_index, cols);
 	plate = new PartPlate(this, origin, m_plate_width, m_plate_depth, m_plate_height, m_plater, m_model, true, printer_technology);
@@ -3734,7 +5783,7 @@ int PartPlateList::create_plate(bool adjust_position)
 
 	plate->set_index(new_index);
 	Vec2d pos = compute_shape_position(new_index, cols);
-	plate->set_shape(m_shape, m_exclude_areas, pos, m_height_to_lid, m_height_to_rod);
+	plate->set_shape(m_shape, m_exclude_areas, m_extruder_areas, m_extruder_heights, pos, m_height_to_lid, m_height_to_rod);
 	m_plate_list.emplace_back(plate);
 	update_plate_cols();
 	if (old_cols != cols)
@@ -3742,7 +5791,7 @@ int PartPlateList::create_plate(bool adjust_position)
 		BOOST_LOG_TRIVIAL(debug) << __FUNCTION__ << boost::format(":old_cols %1% -> new_cols %2%") % old_cols % cols;
 		//update the origin of each plate
 		update_all_plates_pos_and_size(adjust_position, false);
-		set_shapes(m_shape, m_exclude_areas, m_logo_texture_filename, m_height_to_lid, m_height_to_rod);
+		set_shapes(m_shape, m_exclude_areas, m_wrapping_exclude_areas, m_extruder_areas, m_extruder_heights, m_logo_texture_filename, m_height_to_lid, m_height_to_rod);
 
 		if (m_plater) {
 			Vec2d pos = compute_shape_position(m_current_plate, cols);
@@ -3762,7 +5811,7 @@ int PartPlateList::create_plate(bool adjust_position)
 	// update wipe tower config
 	if (m_plater) {
 		// In GUI mode
-        set_default_wipe_tower_pos_for_plate(new_index);
+        set_default_wipe_tower_pos_for_plate(new_index, true);
 	}
 
 	unprintable_plate.set_index(new_index+1);
@@ -3773,8 +5822,15 @@ int PartPlateList::create_plate(bool adjust_position)
 
 	if (m_plater) {
 		// In GUI mode
-		wxGetApp().obj_list()->on_plate_added(plate);
+        wxGetApp().obj_list()->on_plate_added(plate);
 	}
+
+    if (m_plater != nullptr && m_intialized && !m_plater->is_loading_project()) {
+        LifecycleEventContext ctx;
+        ctx.name = plate->get_plate_name();
+        ctx.index = new_index;
+        fire_lifecycle_event(LifecycleEvent::PlateCreated, ctx);
+    }
 
 	BOOST_LOG_TRIVIAL(debug) << __FUNCTION__ << boost::format(":created a new plate %1%") % new_index;
 	return new_index;
@@ -3874,6 +5930,7 @@ int PartPlateList::delete_plate(int index)
 		BOOST_LOG_TRIVIAL(warning) << __FUNCTION__ << boost::format(":plate %1%, has an invalid index %2%") % index % plate->get_index();
 		return -1;
 	}
+	const std::string plate_name = plate->get_plate_name();
 
 	if (m_plater) {
 		// In GUI mode
@@ -3913,7 +5970,7 @@ int PartPlateList::delete_plate(int index)
 
 		//update render shapes
 		Vec2d pos = compute_shape_position(i, m_plate_cols);
-		plate->set_shape(m_shape, m_exclude_areas, pos, m_height_to_lid, m_height_to_rod);
+		plate->set_shape(m_shape, m_exclude_areas, m_extruder_areas, m_extruder_heights, pos, m_height_to_lid, m_height_to_rod);
 	}
 
 	//update current_plate if delete current
@@ -3936,7 +5993,7 @@ int PartPlateList::delete_plate(int index)
 	{
 		//update the origin of each plate
 		update_all_plates_pos_and_size();
-		set_shapes(m_shape, m_exclude_areas, m_logo_texture_filename, m_height_to_lid, m_height_to_rod);
+		set_shapes(m_shape, m_exclude_areas, m_wrapping_exclude_areas, m_extruder_areas, m_extruder_heights, m_logo_texture_filename, m_height_to_lid, m_height_to_rod);
 	}
 	else
 	{
@@ -3956,6 +6013,13 @@ int PartPlateList::delete_plate(int index)
 
 	delete plate;
 
+    if (m_plater != nullptr && m_intialized && !m_plater->is_loading_project()) {
+        LifecycleEventContext ctx;
+        ctx.name = plate_name;
+        ctx.index = index;
+        fire_lifecycle_event(LifecycleEvent::PlateDeleted, ctx);
+    }
+
     // FIX: context of BackgroundSliceProcess and gcode preview need to be updated before ObjectList::reload_all_plates().
 #if 0
 	if (m_plater != nullptr) {
@@ -3971,12 +6035,38 @@ void PartPlateList::delete_selected_plate()
 	delete_plate(m_current_plate);
 }
 
+bool PartPlateList::check_all_plate_local_bed_type(const std::vector<BedType> &cur_bed_types)
+{
+    std::string bed_type_key = "curr_bed_type";
+    bool        is_ok        = true;
+    for (int i = 0; i < m_plate_list.size(); i++) {
+        PartPlate *plate = m_plate_list[i];
+        if (plate->config()  && plate->config()->has(bed_type_key)) {
+            BedType bed_type = plate->config()->opt_enum<BedType>(bed_type_key);
+            if (bed_type == BedType::btDefault)
+                continue;
+            bool    find     = false;
+            for (auto tmp_type : cur_bed_types) {
+                if (bed_type == tmp_type) {
+                    find = true;
+                    break;
+                }
+            }
+            if (!find) {
+                plate->set_bed_type(BedType::btDefault);
+                is_ok = false;
+            }
+        }
+    }
+    return is_ok;
+}
+
 //get a plate pointer by index
 PartPlate* PartPlateList::get_plate(int index)
 {
 	PartPlate* plate = NULL;
 
-	if (index >= m_plate_list.size())
+	if (index >= m_plate_list.size() || index < 0)
 	{
 		BOOST_LOG_TRIVIAL(warning) << __FUNCTION__ << boost::format(":can not find index %1%, size %2%") % index % m_plate_list.size();
 		return NULL;
@@ -3986,16 +6076,6 @@ PartPlate* PartPlateList::get_plate(int index)
 	assert(plate != NULL);
 
 	return plate;
-}
-
-const PartPlate* PartPlateList::get_plate(int index) const
-{
-	if (index >= (int) m_plate_list.size())
-	{
-		BOOST_LOG_TRIVIAL(warning) << __FUNCTION__ << boost::format(":can not find index %1%, size %2%") % index % m_plate_list.size();
-		return nullptr;
-	}
-	return m_plate_list[index];
 }
 
 PartPlate* PartPlateList::get_selected_plate()
@@ -4048,8 +6128,7 @@ int PartPlateList::select_plate(int index)
 	if (m_plate_list.empty() || index >= m_plate_list.size()) {
 		return -1;
 	}
-
-        const int old_plate_index = m_current_plate;
+	const int previous_index = m_current_plate;
 
 	// BBS: erase unnecessary snapshot
 	if (get_curr_plate_index() != index && m_intialized) {
@@ -4064,8 +6143,6 @@ int PartPlateList::select_plate(int index)
 
 	m_current_plate = index;
 	m_plate_list[m_current_plate]->set_selected();
-        if (old_plate_index != m_current_plate && wxGetApp().plater())
-            wxGetApp().plater()->notify_filament_usage_changed();
 
 	//BBS
 	if(m_model)
@@ -4077,6 +6154,21 @@ int PartPlateList::select_plate(int index)
         m_plater->set_bed_position(pos);
 		//wxQueueEvent(m_plater, new SimpleEvent(EVT_GLCANVAS_PLATE_SELECT));
 	}
+
+	// With the other plates hidden, the view follows the selected plate.
+	if (previous_index != index && m_intialized && m_plater != nullptr && m_plater->is_view3D_shown() && wxGetApp().focus_mode()) {
+		Camera& camera = m_plater->get_camera();
+		Vec3d   target = camera.get_target();
+		target.head<2>() = m_plate_list[index]->get_bounding_box().center().head<2>();
+		camera.set_target(target);
+	}
+
+    if (previous_index != index && m_intialized && m_plater != nullptr && !m_plater->is_loading_project()) {
+        LifecycleEventContext ctx;
+        ctx.name = m_plate_list[index]->get_plate_name();
+        ctx.index = index;
+        fire_lifecycle_event(LifecycleEvent::PlateSelected, ctx);
+    }
 
 	return 0;
 }
@@ -4147,6 +6239,12 @@ int PartPlateList::get_plate_count() const
 	return ret;
 }
 
+void PartPlateList::invalidate_all_imex_ghosts()
+{
+    for (PartPlate* p : m_plate_list)
+        if (p) p->invalidate_imex_ghosts();
+}
+
 //update the plate cols due to plate count change
 void PartPlateList::update_plate_cols()
 {
@@ -4170,7 +6268,7 @@ void PartPlateList::update_all_plates_pos_and_size(bool adjust_position, bool wi
 		plate->set_pos_and_size(origin1, m_plate_width, m_plate_depth, m_plate_height, adjust_position, do_clear);
 
 		// set default wipe pos when switch plate
-        if (switch_plate_type && m_plater && plate->get_used_extruders().size() <= 0) {
+        if (switch_plate_type && m_plater/* && plate->get_used_extruders().size() <= 0*/) {
 			set_default_wipe_tower_pos_for_plate(i);
 		}
 	}
@@ -4191,6 +6289,9 @@ int PartPlateList::move_plate_to_index(int old_index, int new_index)
 		BOOST_LOG_TRIVIAL(warning) << __FUNCTION__ << boost::format(":should not happen, the same index %1%") % old_index;
 		return -1;
 	}
+
+	// Orca: Rebuild plate membership before moving the plates.
+	reload_all_objects();
 
 	if (old_index < new_index)
 	{
@@ -4501,6 +6602,9 @@ int PartPlateList::notify_instance_removed(int obj_id, int instance_id)
 		unprintable_plate.update_object_index(obj_id, m_model->objects.size());
 	}
 
+	if (m_plater)
+		m_plater->mark_plate_toolbar_image_dirty();
+
 	return 0;
 }
 
@@ -4540,8 +6644,6 @@ int PartPlateList::add_to_plate(int obj_id, int instance_id, int plate_id)
 		return -1;
 	}
 	ret = plate->add_instance(obj_id, instance_id, true);
-
-    wxGetApp().plater()->notify_filament_usage_changed();
 
 	return ret;
 }
@@ -4741,10 +6843,40 @@ bool PartPlateList::preprocess_arrange_polygon_other_locked(int obj_index, int i
 	return locked;
 }
 
-bool PartPlateList::preprocess_exclude_areas(arrangement::ArrangePolygons& unselected, int num_plates, float inflation)
+bool PartPlateList::preprocess_exclude_areas(arrangement::ArrangePolygons &unselected, bool enable_wrapping_detect, int num_plates, float inflation)
 {
 	bool added = false;
 
+	// wrapping detection area
+    if (enable_wrapping_detect)
+	{
+        if (!m_wrapping_exclude_areas.empty())
+		{
+			Polygon ap{};
+            for (const Vec2d &p : m_wrapping_exclude_areas)
+			{
+                ap.append({scale_(p(0)), scale_(p(1))});
+            }
+
+			for(int j = 0; j < num_plates; j++)
+			{
+				arrangement::ArrangePolygon ret;
+				ret.poly.contour = ap;
+				ret.translation  = Vec2crd(0, 0);
+				ret.rotation     = 0.0f;
+				ret.is_virt_object = true;
+				ret.bed_idx      = j;
+				ret.height      = 1;
+				ret.name = "WrappingRegion";
+				ret.inflation = inflation;
+
+				unselected.emplace_back(std::move(ret));
+			}
+		}
+		added = true;
+	}
+
+	// excluded area
 	if (m_exclude_areas.size() > 0)
 	{
 		//has exclude areas
@@ -4940,7 +7072,7 @@ void PartPlateList::postprocess_arrange_polygon(arrangement::ArrangePolygon& arr
 
 /*rendering related functions*/
 //render
-void PartPlateList::render(const Transform3d& view_matrix, const Transform3d& projection_matrix, bool bottom, bool only_current, bool only_body, int hover_id, bool render_cali, bool show_grid)
+void PartPlateList::render(const Transform3d& view_matrix, const Transform3d& projection_matrix, bool bottom, bool only_current, bool only_body, int hover_id, bool render_cali, bool show_grid, bool hide_chrome, bool hide_inactive)
 {
 	const std::lock_guard<std::mutex> local_lock(m_plates_mutex);
 	std::vector<PartPlate*>::iterator it = m_plate_list.begin();
@@ -4952,30 +7084,43 @@ void PartPlateList::render(const Transform3d& view_matrix, const Transform3d& pr
 		plate_hover_action = hover_id % PartPlate::GRABBER_COUNT;
 	}
 
-	static bool last_dark_mode_status = m_is_dark;
-	if (m_is_dark != last_dark_mode_status) {
-		last_dark_mode_status = m_is_dark;
-		generate_icon_textures();
-	} else if(m_del_texture.get_id() == 0)
-		generate_icon_textures();
+	load_icon_textures();
 	for (it = m_plate_list.begin(); it != m_plate_list.end(); it++) {
 		int current_index = (*it)->get_index();
-		if (only_current && (current_index != m_current_plate))
+		if ((only_current || hide_inactive) && (current_index != m_current_plate))
 			continue;
 		if (current_index == m_current_plate) {
 			PartPlate::HeightLimitMode height_mode = (only_current)?PartPlate::HEIGHT_LIMIT_NONE:m_height_limit_mode;
 			if (plate_hover_index == current_index)
-                (*it)->render(view_matrix, projection_matrix, bottom, only_body, false, height_mode, plate_hover_action, render_cali, show_grid);
+                (*it)->render(view_matrix, projection_matrix, bottom, only_body, false, height_mode, plate_hover_action, render_cali, show_grid, hide_chrome);
 			else
-                (*it)->render(view_matrix, projection_matrix, bottom, only_body, false, height_mode, -1, render_cali, show_grid);
+                (*it)->render(view_matrix, projection_matrix, bottom, only_body, false, height_mode, -1, render_cali, show_grid, hide_chrome);
 		}
 		else {
 			if (plate_hover_index == current_index)
-				(*it)->render(view_matrix, projection_matrix, bottom, only_body, false, PartPlate::HEIGHT_LIMIT_NONE, plate_hover_action, render_cali, show_grid);
+				(*it)->render(view_matrix, projection_matrix, bottom, only_body, false, PartPlate::HEIGHT_LIMIT_NONE, plate_hover_action, render_cali, show_grid, hide_chrome);
 			else
-                (*it)->render(view_matrix, projection_matrix, bottom, only_body, false, PartPlate::HEIGHT_LIMIT_NONE, -1, render_cali, show_grid);
+                (*it)->render(view_matrix, projection_matrix, bottom, only_body, false, PartPlate::HEIGHT_LIMIT_NONE, -1, render_cali, show_grid, hide_chrome);
 		}
 	}
+}
+
+void PartPlateList::render_hover_tooltip() const
+{
+    if (m_hover_tooltip.empty())
+        return;
+
+    const auto scale = m_plater->get_current_canvas3D()->get_scale();
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {6 * scale, 3 * scale});
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 3 * scale);
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, ImGuiWrapper::COL_WINDOW_BACKGROUND);
+    ImGui::PushStyleColor(ImGuiCol_Border, {0, 0, 0, 0});
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.00f, 1.00f, 1.00f, 1.00f));
+    ImGui::BeginTooltip();
+    ImGui::TextUnformatted(m_hover_tooltip.c_str());
+    ImGui::EndTooltip();
+    ImGui::PopStyleColor(3);
+    ImGui::PopStyleVar(2);
 }
 
 /*int PartPlateList::select_plate_by_hover_id(int hover_id)
@@ -5049,11 +7194,21 @@ void PartPlateList::select_plate_view()
 	m_plater->get_camera().select_view("topfront");
 }
 
-bool PartPlateList::set_shapes(const Pointfs& shape, const Pointfs& exclude_areas, const std::string& texture_filename, float height_to_lid, float height_to_rod)
+bool PartPlateList::set_shapes(const Pointfs              &shape,
+                               const Pointfs              &exclude_areas,
+                               const Pointfs              &wrapping_exclude_areas,
+                               const std::vector<Pointfs> &extruder_areas,
+                               const std::vector<double>  &extruder_heights,
+                               const std::string          &texture_filename,
+                               float                       height_to_lid,
+                               float                       height_to_rod)
 {
 	const std::lock_guard<std::mutex> local_lock(m_plates_mutex);
 	m_shape = shape;
 	m_exclude_areas = exclude_areas;
+    m_wrapping_exclude_areas = wrapping_exclude_areas;
+	m_extruder_areas = extruder_areas;
+	m_extruder_heights = extruder_heights;
 	m_height_to_lid = height_to_lid;
 	m_height_to_rod = height_to_rod;
 
@@ -5067,9 +7222,12 @@ bool PartPlateList::set_shapes(const Pointfs& shape, const Pointfs& exclude_area
 		Vec2d pos;
 
 		pos = compute_shape_position(i, m_plate_cols);
-		plate->set_shape(shape, exclude_areas, pos, height_to_lid, height_to_rod);
+		plate->set_shape(shape, exclude_areas, extruder_areas, extruder_heights, pos, height_to_lid, height_to_rod);
 	}
-	is_load_bedtype_textures = false;//reload textures
+	is_load_bedtype_textures = false; //reload textures
+    is_load_extruder_only_area_textures = false; // reload textures
+	m_next_bedtype_texture = 0;
+	m_next_extruder_only_area_texture = 0;
 	calc_bounding_boxes();
 
 	update_logo_texture_filename(texture_filename);
@@ -5086,8 +7244,10 @@ void PartPlateList::update_logo_texture_filename(const std::string &texture_file
     if (!texture_filename.empty() && !check_texture(texture_filename)) {
 		m_logo_texture_filename = "";
         BOOST_LOG_TRIVIAL(error) << "Unable to load bed texture: " << texture_filename;
-    } else
+    } else {
         m_logo_texture_filename = texture_filename;
+        Utils::slash_to_back_slash(m_logo_texture_filename);
+    }
 }
 
 /*slice related functions*/
@@ -5246,7 +7406,7 @@ int PartPlateList::rebuild_plates_after_deserialize(std::vector<bool>& previous_
     }
 	update_plate_cols();
 	update_all_plates_pos_and_size(false, false, false, false);
-	set_shapes(m_shape, m_exclude_areas, m_logo_texture_filename, m_height_to_lid, m_height_to_rod);
+	set_shapes(m_shape, m_exclude_areas, m_wrapping_exclude_areas, m_extruder_areas, m_extruder_heights, m_logo_texture_filename, m_height_to_lid, m_height_to_rod);
 	for (unsigned int i = 0; i < (unsigned int)m_plate_list.size(); ++i)
 	{
 		bool need_reset_print = false;
@@ -5292,42 +7452,14 @@ int PartPlateList::rebuild_plates_after_deserialize(std::vector<bool>& previous_
 			}
 		}
 
-		//can not find, create a new one using an unused print index.
-		while (m_print_list.count(m_print_index) > 0 || m_gcode_result_list.count(m_print_index) > 0)
-		{
-			++m_print_index;
-		}
-
-		const int new_print_index = m_print_index++;
-
+		//can not find, create a new one
 		Print* print = new Print();
 		GCodeResult* gcode = new GCodeResult();
-
-		auto print_result = m_print_list.emplace(new_print_index, print);
-		auto gcode_result = m_gcode_result_list.emplace(new_print_index, gcode);
-
-		if (!print_result.second || !gcode_result.second)
-		{
-			BOOST_LOG_TRIVIAL(error) << __FUNCTION__ << ": failed to insert Print/GCodeResult, index=" << new_print_index;
-
-			if (print_result.second)
-				m_print_list.erase(print_result.first);
-
-			if (gcode_result.second)
-				m_gcode_result_list.erase(gcode_result.first);
-
-			delete print;
-			print = nullptr;
-			delete gcode;
-			gcode = nullptr;
-
-			ret = -1;
-			continue;
-		}
-
-		m_plate_list[i]->set_print(print, gcode, new_print_index);
-
+		m_print_list.emplace(m_print_index, print);
+		m_gcode_result_list.emplace(m_print_index, gcode);
+		m_plate_list[i]->set_print(print, gcode, m_print_index);
 		print->set_plate_index(i);
+		m_print_index++;
 	}
 
 	//go through the print list, and delete the one not used by plate
@@ -5409,11 +7541,14 @@ int PartPlateList::rebuild_plates_after_arrangement(bool recycle_plates, bool ex
 	}
 #endif
 
+	if (m_plater)
+		m_plater->mark_plate_toolbar_image_dirty();
+
 	BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << boost::format(":after rebuild, plates count %1%") % m_plate_list.size();
 	return ret;
 }
 
-int PartPlateList::store_to_3mf_structure(PlateDataPtrs& plate_data_list, bool with_slice_info, int plate_idx)
+int PartPlateList::store_to_3mf_structure(PlateDataPtrs& plate_data_list, bool with_slice_info, int plate_idx, bool with_statistics)
 {
 	int ret = 0;
 
@@ -5422,9 +7557,11 @@ int PartPlateList::store_to_3mf_structure(PlateDataPtrs& plate_data_list, bool w
 	for (unsigned int i = 0; i < (unsigned int)m_plate_list.size(); ++i)
 	{
 		PlateData* plate_data_item = new PlateData();
+		// TODO: write if needed
+		plate_data_item->filament_maps = m_plate_list[i]->get_filament_maps();
 		plate_data_item->locked = m_plate_list[i]->m_locked;
 		plate_data_item->plate_index = m_plate_list[i]->m_plate_index;
-		plate_data_item->plate_name = m_plate_list[i]->get_plate_name();
+		plate_data_item->plate_name  = m_plate_list[i]->get_plate_name();
 		BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << boost::format(": plate %1% before load, width %2%, height %3%, size %4%!")
 			%(i+1) %m_plate_list[i]->thumbnail_data.width %m_plate_list[i]->thumbnail_data.height %m_plate_list[i]->thumbnail_data.pixels.size();
 		plate_data_item->plate_thumbnail.load_from(m_plate_list[i]->thumbnail_data);
@@ -5465,6 +7602,12 @@ int PartPlateList::store_to_3mf_structure(PlateDataPtrs& plate_data_list, bool w
                     plate_data_item->timelapse_warning_code = m_plate_list[i]->m_gcode_result->timelapse_warning_code;
                     m_plate_list[i]->set_timelapse_warning_code(plate_data_item->timelapse_warning_code);
 					plate_data_item->is_label_object_enabled = m_plate_list[i]->m_gcode_result->label_object_enabled;
+                    plate_data_item->limit_filament_maps = m_plate_list[i]->m_gcode_result->limit_filament_maps;
+                    plate_data_item->layer_filaments  = m_plate_list[i]->m_gcode_result->layer_filaments;
+                    plate_data_item->filament_change_sequence = m_plate_list[i]->m_gcode_result->filament_change_sequence;
+                    plate_data_item->nozzle_change_sequence = m_plate_list[i]->m_gcode_result->nozzle_change_sequence;
+                    plate_data_item->optimal_assignment = m_plate_list[i]->m_gcode_result->optimal_assignment;
+                    plate_data_item->first_layer_time = std::to_string(m_plate_list[i]->get_slice_result()->initial_layer_time);
 					Print *print                      = nullptr;
 					m_plate_list[i]->get_print((PrintBase **) &print, nullptr, nullptr);
 					if (print) {
@@ -5479,6 +7622,33 @@ int PartPlateList::store_to_3mf_structure(PlateDataPtrs& plate_data_list, bool w
 					}
 					//parse filament info
 					plate_data_item->parse_filament_info(m_plate_list[i]->get_slice_result());
+					if (with_statistics)
+						plate_data_item->statistics = gcode_statistics_json(*m_plate_list[i]->get_slice_result());
+
+					// Record mixed (virtual) filaments actually used on this plate.
+					// Source is ToolOrdering::used_mixed_filaments (slots that appeared in
+					// layer tools before resolve), persisted on GCodeProcessorResult / Print —
+					// not print->extruders() which only reflects assignment.
+					{
+						std::vector<unsigned int> used_mixed;
+						if (auto *slice_result = m_plate_list[i]->get_slice_result())
+							used_mixed = slice_result->used_mixed_filaments;
+						if (used_mixed.empty() && print)
+							used_mixed = print->get_slice_used_mixed_filaments();
+						if (!used_mixed.empty() && print) {
+							const auto &fila_types  = print->config().filament_type.values;
+							const auto &fila_colors = print->config().filament_colour.values;
+							const auto &fila_comps  = print->config().filament_mixed_components.values;
+							for (unsigned int fid : used_mixed) {
+								PlateMixedFilamentInfo mixed_info;
+								mixed_info.id = (int) fid + 1;
+								if (fid < fila_types.size())  mixed_info.type       = fila_types[fid];
+								if (fid < fila_colors.size()) mixed_info.color      = fila_colors[fid];
+								if (fid < fila_comps.size())  mixed_info.components = fila_comps[fid];
+								plate_data_item->mixed_filaments_info.push_back(mixed_info);
+							}
+						}
+					}
 				} else {
 					BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << "slice result = " << m_plate_list[i]->get_slice_result()
 										<< ", result valid = " << m_plate_list[i]->is_slice_result_valid();
@@ -5493,7 +7663,7 @@ int PartPlateList::store_to_3mf_structure(PlateDataPtrs& plate_data_list, bool w
 	return ret;
 }
 
-int PartPlateList::load_from_3mf_structure(PlateDataPtrs& plate_data_list)
+int PartPlateList::load_from_3mf_structure(PlateDataPtrs& plate_data_list, int filament_count)
 {
 	int ret = 0;
 
@@ -5503,6 +7673,7 @@ int PartPlateList::load_from_3mf_structure(PlateDataPtrs& plate_data_list)
 		return -1;
 	}
 	clear(true, true);
+	set_filament_count(filament_count);
 	for (unsigned int i = 0; i < (unsigned int)plate_data_list.size(); ++i)
 	{
 		int index = create_plate(false);
@@ -5538,8 +7709,71 @@ int PartPlateList::load_from_3mf_structure(PlateDataPtrs& plate_data_list)
 		gcode_result->label_object_enabled = plate_data_list[i]->is_label_object_enabled;
         gcode_result->timelapse_warning_code = plate_data_list[i]->timelapse_warning_code;
         m_plate_list[index]->set_timelapse_warning_code(plate_data_list[i]->timelapse_warning_code);
+        gcode_result->filament_change_sequence = plate_data_list[i]->filament_change_sequence;
+        gcode_result->nozzle_change_sequence = plate_data_list[i]->nozzle_change_sequence;
+        gcode_result->optimal_assignment = plate_data_list[i]->optimal_assignment;
 		m_plate_list[index]->slice_filaments_info = plate_data_list[i]->slice_filaments_info;
 		gcode_result->warnings = plate_data_list[i]->warnings;
+        gcode_result->filament_maps = plate_data_list[i]->filament_maps;
+		gcode_result->used_mixed_filaments.clear();
+		for (const auto &mixed_info : plate_data_list[i]->mixed_filaments_info) {
+			if (mixed_info.id > 0)
+				gcode_result->used_mixed_filaments.push_back(static_cast<unsigned int>(mixed_info.id - 1));
+		}
+		if (Print *print = dynamic_cast<Print*>(fff_print))
+			print->set_slice_used_mixed_filaments(gcode_result->used_mixed_filaments);
+
+        // Reconstruct the device-side nozzle grouping from the loaded 3mf so
+        // the monitor/preview can map filaments to physical nozzles.
+        // load_nozzle_infos_with_compatibility handles older single-nozzle 3mf (no <nozzle> tags) by
+        // falling back to the per-filament group_id, then to the extruder volume types / nozzle diameters.
+        {
+            // nozzle_volume_types is space-separated ints; nozzle_diameters is comma/space-separated floats.
+            auto parse_int_tokens = [](const std::string& str) -> std::vector<int> {
+                std::vector<int> out;
+                std::istringstream iss(str);
+                std::string tok;
+                while (iss >> tok) { try { out.push_back(std::stoi(tok)); } catch (...) {} }
+                return out;
+            };
+            auto parse_double_tokens = [](const std::string& str) -> std::vector<double> {
+                std::vector<double> out;
+                std::string s = str;
+                std::replace(s.begin(), s.end(), ',', ' ');
+                std::istringstream iss(s);
+                std::string tok;
+                while (iss >> tok) { try { out.push_back(std::stod(tok)); } catch (...) {} }
+                return out;
+            };
+
+            std::vector<int>    nozzle_volume_type_values = parse_int_tokens(plate_data_list[i]->nozzle_volume_types);
+            std::vector<double> nozzle_diameter_values    = parse_double_tokens(plate_data_list[i]->nozzle_diameters);
+
+            std::vector<NozzleVolumeType> extruder_volume_types(nozzle_volume_type_values.size(), NozzleVolumeType::nvtStandard);
+            for (size_t idx = 0; idx < nozzle_volume_type_values.size(); ++idx)
+                if (nozzle_volume_type_values[idx] >= 0 && nozzle_volume_type_values[idx] <= nvtMaxNozzleVolumeType)
+                    extruder_volume_types[idx] = static_cast<NozzleVolumeType>(nozzle_volume_type_values[idx]);
+
+            auto nozzle_infos = MultiNozzleUtils::load_nozzle_infos_with_compatibility(
+                plate_data_list[i]->nozzles_info,
+                plate_data_list[i]->slice_filaments_info,
+                plate_data_list[i]->filament_maps,
+                extruder_volume_types,
+                nozzle_diameter_values);
+
+            std::vector<int> fil_seq(plate_data_list[i]->filament_change_sequence.begin(), plate_data_list[i]->filament_change_sequence.end());
+            std::vector<int> noz_seq(plate_data_list[i]->nozzle_change_sequence.begin(), plate_data_list[i]->nozzle_change_sequence.end());
+            bool enable_filament_dynamic_map = false;
+            if (plate_data_list[i]->config.has("enable_filament_dynamic_map"))
+                enable_filament_dynamic_map = plate_data_list[i]->config.option<ConfigOptionBool>("enable_filament_dynamic_map")->value;
+
+            auto group_result = MultiNozzleUtils::StaticNozzleGroupResult::create(
+                plate_data_list[i]->slice_filaments_info, nozzle_infos, fil_seq, noz_seq, enable_filament_dynamic_map);
+            if (group_result)
+                gcode_result->nozzle_group_result = std::make_shared<MultiNozzleUtils::StaticNozzleGroupResult>(group_result.value());
+            else
+                gcode_result->nozzle_group_result = nullptr;
+        }
 		if (m_plater && !plate_data_list[i]->thumbnail_file.empty()) {
 			BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << boost::format(": plate %1%, load thumbnail from %2%.")%(i+1) %plate_data_list[i]->thumbnail_file;
 			if (boost::filesystem::exists(plate_data_list[i]->thumbnail_file)) {
@@ -5604,7 +7838,7 @@ int PartPlateList::load_gcode_files()
 			//BoundingBoxf3   print_volume = m_plate_list[i]->get_bounding_box(false);
 			//print_volume.max(2) = this->m_plate_height;
 			//print_volume.min(2) = -1e10;
-			m_model->update_print_volume_state({m_plate_list[i]->get_shape(), (double)this->m_plate_height });
+			m_model->update_print_volume_state({m_plate_list[i]->get_shape(), this->m_plate_height, m_plate_list[i]->get_extruder_areas(), m_plate_list[i]->get_extruder_heights() });
 
 			if (!m_plate_list[i]->load_gcode_from_file(m_plate_list[i]->m_gcode_path_from_3mf))
 				ret ++;
@@ -5633,7 +7867,8 @@ void PartPlateList::print() const
 }
 
 bool PartPlateList::is_load_bedtype_textures = false;
-bool PartPlateList::is_load_cali_texture = false;
+bool PartPlateList::is_load_extruder_only_area_textures = false;
+bool PartPlateList::is_load_cali_texture     = false;
 
 void PartPlateList::BedTextureInfo::TexturePart::update_buffer()
 {
@@ -5685,8 +7920,8 @@ void PartPlateList::BedTextureInfo::reset()
 void PartPlateList::init_bed_type_info()
 {
 	BedTextureInfo::TexturePart pct_part_left(10, 130,  10, 110, "orca_bed_pct_left.svg");
-  BedTextureInfo::TexturePart st_part1(9, 70, 12.5, 170, "bbl_bed_st_left.svg");
-  BedTextureInfo::TexturePart st_part2(74, -10, 148, 12, "bbl_bed_st_bottom.svg");
+    BedTextureInfo::TexturePart st_part1(9, 70, 12.5, 170, "bbl_bed_st_left.svg");
+    BedTextureInfo::TexturePart st_part2(74, -10, 148, 12, "bbl_bed_st_bottom.svg");
 	BedTextureInfo::TexturePart pc_part1(10, 130, 10, 110, "bbl_bed_pc_left.svg");
 	BedTextureInfo::TexturePart pc_part2(74, -10, 148, 12, "bbl_bed_pc_bottom.svg");
 	BedTextureInfo::TexturePart ep_part1(7.5, 90, 12.5, 150, "bbl_bed_ep_left.svg");
@@ -5695,6 +7930,119 @@ void PartPlateList::init_bed_type_info()
 	BedTextureInfo::TexturePart pei_part2(74, -10, 148, 12, "bbl_bed_pei_bottom.svg");
 	BedTextureInfo::TexturePart pte_part1(10, 80, 10, 160, "bbl_bed_pte_left.svg");
 	BedTextureInfo::TexturePart pte_part2(74, -10, 148,  12, "bbl_bed_pte_bottom.svg");
+    auto bed_texture_maps        = wxGetApp().plater()->get_bed_texture_maps();
+    std::string bottom_texture_end_name = bed_texture_maps.find("bottom_texture_end_name") != bed_texture_maps.end() ? bed_texture_maps["bottom_texture_end_name"] : "";
+    std::string bottom_texture_rect_str = bed_texture_maps.find("bottom_texture_rect") != bed_texture_maps.end() ? bed_texture_maps["bottom_texture_rect"] : "";
+    std::string bottom_texture_rect_longer_str = bed_texture_maps.find("bottom_texture_rect_longer") != bed_texture_maps.end() ? bed_texture_maps["bottom_texture_rect_longer"] : "";
+    std::string middle_texture_rect_str = bed_texture_maps.find("middle_texture_rect") != bed_texture_maps.end() ? bed_texture_maps["middle_texture_rect"] : "";
+    std::string use_double_extruder_default_texture = bed_texture_maps.find("use_double_extruder_default_texture") != bed_texture_maps.end() ? bed_texture_maps["use_double_extruder_default_texture"] : "";
+    std::array<float, 4>        bottom_texture_rect = {0, 0, 0, 0}, bottom_texture_rect_longer = {0, 0, 0, 0}, middle_texture_rect = {0, 0, 0, 0};
+    if (bottom_texture_rect_str.size() > 0) {
+        std::vector<std::string> items;
+        boost::algorithm::erase_all(bottom_texture_rect_str, " ");
+        boost::split(items, bottom_texture_rect_str, boost::is_any_of(","));
+        if (items.size() == 4) {
+            for (int i = 0; i < items.size(); i++) {
+                bottom_texture_rect[i] = std::atof(items[i].c_str());
+            }
+        }
+    }
+    if (bottom_texture_rect_longer_str.size() > 0) {
+        std::vector<std::string> items;
+        boost::algorithm::erase_all(bottom_texture_rect_longer_str, " ");
+        boost::split(items, bottom_texture_rect_longer_str, boost::is_any_of(","));
+        if (items.size() == 4) {
+            for (int i = 0; i < items.size(); i++) {
+                bottom_texture_rect_longer[i] = std::atof(items[i].c_str());
+            }
+        }
+    }
+    if (middle_texture_rect_str.size() > 0) {
+        std::vector<std::string> items;
+        boost::algorithm::erase_all(middle_texture_rect_str, " ");
+        boost::split(items, middle_texture_rect_str, boost::is_any_of(","));
+        if (items.size() == 4) {
+            for (int i = 0; i < items.size(); i++) {
+                middle_texture_rect[i] = std::atof(items[i].c_str());
+            }
+        }
+    }
+    auto is_single_extruder = wxGetApp().preset_bundle->get_printer_extruder_count() == 1;
+    bool use_double_extruder_texture = !is_single_extruder || use_double_extruder_default_texture == "true";
+    if (use_double_extruder_texture) {
+        pte_part1 = BedTextureInfo::TexturePart(57, 300, 236.12f, 10.f, "bbl_bed_pte_middle.svg");
+        auto &middle_rect = middle_texture_rect;
+        if (middle_rect[2] > 0.f) {
+            pte_part1 = BedTextureInfo::TexturePart(middle_rect[0], middle_rect[1], middle_rect[2], middle_rect[3], "bbl_bed_pte_middle.svg");
+        }
+        pte_part2 = BedTextureInfo::TexturePart(45, -14.5, 70, 8, "bbl_bed_pte_left_bottom.svg");
+        auto &bottom_rect = bottom_texture_rect;
+        auto &bottom_rect_longer = bottom_texture_rect_longer;
+        if (bottom_texture_end_name.size() > 0 && bottom_rect[2] > 0.f) {
+            std::string pte_part2_name = "bbl_bed_pte_bottom_" + bottom_texture_end_name + ".svg";
+            pte_part2 = BedTextureInfo::TexturePart(bottom_rect[0], bottom_rect[1], bottom_rect[2], bottom_rect[3], pte_part2_name);
+        }
+
+        pei_part1  = BedTextureInfo::TexturePart(57, 300, 236.12f, 10.f, "bbl_bed_pei_middle.svg");
+        if (middle_rect[2] > 0.f) {
+            pei_part1 = BedTextureInfo::TexturePart(middle_rect[0], middle_rect[1], middle_rect[2], middle_rect[3], "bbl_bed_pei_middle.svg");
+        }
+        pei_part2  = BedTextureInfo::TexturePart(45, -14.5, 70, 8, "bbl_bed_pei_left_bottom.svg");
+        if (bottom_texture_end_name.size() > 0 && bottom_rect[2] > 0.f) {
+            std::string pei_part2_name = "bbl_bed_pei_bottom_" + bottom_texture_end_name + ".svg";
+            pei_part2                  = BedTextureInfo::TexturePart(bottom_rect[0], bottom_rect[1], bottom_rect[2], bottom_rect[3], pei_part2_name);
+        }
+
+        st_part1 = BedTextureInfo::TexturePart(57, 300, 236.12f, 10.f, "bbl_bed_st_middle.svg");
+        if (middle_rect[2] > 0.f) {
+            st_part1 = BedTextureInfo::TexturePart(middle_rect[0], middle_rect[1], middle_rect[2], middle_rect[3], "bbl_bed_st_middle.svg");
+        }
+        st_part2 = BedTextureInfo::TexturePart(45, -14.5, 260, 8, "bbl_bed_st_left_bottom.svg");
+        if (bottom_texture_end_name.size() > 0 && bottom_rect[2] > 0.f) {
+            std::string st_part2_name = "bbl_bed_st_bottom_" + bottom_texture_end_name + ".svg";
+            st_part2                   = BedTextureInfo::TexturePart(bottom_rect[0], bottom_rect[1], bottom_rect[2], bottom_rect[3], st_part2_name);
+        } else if (bottom_rect_longer[2] > 0.f) {
+            // SuperTack bottom strip uses the wider "longer" rect.
+            st_part2.update_pos(bottom_rect_longer[0], bottom_rect_longer[1], bottom_rect_longer[2], bottom_rect_longer[3]);
+        }
+
+        ep_part1 = BedTextureInfo::TexturePart(57, 300, 236.12f, 10.f, "bbl_bed_ep_middle.svg");
+        if (middle_rect[2] > 0.f) {
+            ep_part1 = BedTextureInfo::TexturePart(middle_rect[0], middle_rect[1], middle_rect[2], middle_rect[3], "bbl_bed_ep_middle.svg");
+        }
+        ep_part2 = BedTextureInfo::TexturePart(45, -14.5, 260, 8, "bbl_bed_ep_left_bottom.svg");
+        if (bottom_texture_end_name.size() > 0 && bottom_rect[2] > 0.f) {
+            std::string ep_part2_name = "bbl_bed_ep_bottom_" + bottom_texture_end_name + ".svg";
+            ep_part2                   = BedTextureInfo::TexturePart(bottom_rect[0], bottom_rect[1], bottom_rect[2], bottom_rect[3], ep_part2_name);
+        } else if (bottom_rect_longer[2] > 0.f) {
+            // Engineering-plate bottom strip uses the wider "longer" rect.
+            ep_part2.update_pos(bottom_rect_longer[0], bottom_rect_longer[1], bottom_rect_longer[2], bottom_rect_longer[3]);
+        }
+
+        pc_part1 = BedTextureInfo::TexturePart(57, 300, 236.12f, 10.f, "bbl_bed_pc_middle.svg");
+        if (middle_rect[2] > 0.f) {
+            pc_part1 = BedTextureInfo::TexturePart(middle_rect[0], middle_rect[1], middle_rect[2], middle_rect[3], "bbl_bed_pc_middle.svg"); }
+        pc_part2 = BedTextureInfo::TexturePart(45, -14.5, 70, 8, "bbl_bed_pc_left_bottom.svg");
+        if (bottom_texture_end_name.size() > 0 && bottom_rect[2] > 0.f) {
+            std::string pc_part2_name = "bbl_bed_pc_bottom_" + bottom_texture_end_name + ".svg";
+            pc_part2                  = BedTextureInfo::TexturePart(bottom_rect[0], bottom_rect[1], bottom_rect[2], bottom_rect[3], pc_part2_name);
+        }
+
+        m_allow_bed_type_in_double_nozzle.clear();
+        auto bed_types = wxGetApp().plater()->sidebar().get_cur_combox_bed_types();
+        for (int i = 0; i < bed_types.size(); i++) {
+            m_allow_bed_type_in_double_nozzle[bed_types[i]] = true;
+        }
+    } else {
+        if (bottom_texture_end_name.size() > 0) {
+            st_part2.update_file("bbl_bed_st_bottom_" + bottom_texture_end_name + ".svg");
+            pc_part2.update_file("bbl_bed_pc_bottom_" + bottom_texture_end_name + ".svg");
+            ep_part2.update_file("bbl_bed_ep_bottom_" + bottom_texture_end_name + ".svg");
+            pei_part2.update_file("bbl_bed_pei_bottom_" + bottom_texture_end_name + ".svg");
+            pte_part2.update_file("bbl_bed_pte_bottom_" + bottom_texture_end_name + ".svg");
+        }
+    }
+
 	for (size_t i = 0; i < btCount; i++) {
 		bed_texture_info[i].reset();
 		bed_texture_info[i].parts.clear();
@@ -5715,42 +8063,227 @@ void PartPlateList::init_bed_type_info()
 	auto  bed_ext     = get_extents(m_shape);
 	int   bed_width   = bed_ext.size()(0);
 	int   bed_height  = bed_ext.size()(1);
-	float base_width  = 256;
-	float base_height = 256;
-	float x_rate      = bed_width / base_width;
-	float y_rate      = bed_height / base_height;
-	for (int i = 0; i < btCount; i++) {
+    float base_width  = 256;//standard 256*256 for single_extruder
+    float base_height = 256;
+    if (use_double_extruder_texture) { // standard 350*325 for double_extruder
+        base_width  = bed_width;
+        base_height = bed_height;
+    }
+    float x_rate      = bed_width / base_width;
+    float y_rate      = bed_height / base_height;
+    for (int i = 0; i < btCount; i++) {
 		for (int j = 0; j < bed_texture_info[i].parts.size(); j++) {
 			bed_texture_info[i].parts[j].x *= x_rate;
 			bed_texture_info[i].parts[j].y *= y_rate;
-			bed_texture_info[i].parts[j].w *= x_rate;
-			bed_texture_info[i].parts[j].h *= y_rate;
-			bed_texture_info[i].parts[j].update_buffer();
-		}
+            bed_texture_info[i].parts[j].w *= x_rate;
+            bed_texture_info[i].parts[j].h *= y_rate;
+            bed_texture_info[i].parts[j].update_buffer();
+        }
+    }
+}
+
+bool PartPlateList::calc_extruder_only_area(Rect &left_only_rect, Rect &right_only_rect)
+{
+    auto                convert_to_rect         = [](const Pointfs &pts, Rect &rect) {
+		rect.x = pts[0].x();
+        rect.y = pts[0].y();
+        rect.w = pts[1].x() - pts[0].x();
+        rect.h = pts[2].y() - pts[1].y();
+    };
+    auto is_single_extruder = wxGetApp().preset_bundle->get_printer_extruder_count() ==1;
+    if (is_single_extruder) {
+		return false;
 	}
+    if (m_extruder_areas.size() == 2) {
+        Rect printable_rect, left_extruder_printable_area, right_extruder_printable_area;
+        convert_to_rect(m_shape, printable_rect);
+        convert_to_rect(m_extruder_areas[0], left_extruder_printable_area);
+        convert_to_rect(m_extruder_areas[1], right_extruder_printable_area);
+        left_only_rect.x = left_extruder_printable_area.x;
+        left_only_rect.y = left_extruder_printable_area.y;
+        left_only_rect.w = printable_rect.w - right_extruder_printable_area.w;
+        left_only_rect.h = left_extruder_printable_area.h;
+
+        right_only_rect.x = left_extruder_printable_area.x + left_extruder_printable_area.w;
+        right_only_rect.y = right_extruder_printable_area.y;
+        right_only_rect.w = printable_rect.w - left_extruder_printable_area.w;
+        right_only_rect.h = right_extruder_printable_area.h;
+        if (left_only_rect.w < 0 || right_only_rect.w < 0) {
+			return false;
+		}
+        return true;
+	}
+    return false;
+}
+
+bool PartPlateList::init_extruder_only_area_info()
+{
+    Rect left_only_rect,  right_only_rect;
+    auto ok = calc_extruder_only_area(left_only_rect, right_only_rect);
+    if (!ok) { return false; }
+    float  base_width  = 25.f;
+    float  base_height = 320.f;
+    float  left_x_rate = left_only_rect.w / base_width;
+    float  left_y_rate = left_only_rect.h / base_height;
+    bool   is_zh       = wxGetApp().app_config->get("language") == "zh_CN";
+    Vec4f  base_left(-6.f, -75.f, 12.f, 150.f);
+    if (is_zh) {
+		base_left = Vec4f(-5.5f, -76.f, 12.f, 150.f);
+    }
+    base_left[0]   = base_left[0] * left_x_rate + left_only_rect.x + left_only_rect.w / 2.f;
+    base_left[1]   = base_left[1] * left_y_rate + left_only_rect.y + left_only_rect.h / 2.f;
+    base_left[2]   = base_left[2] * left_x_rate;
+    base_left[3]   = base_left[3] * left_y_rate;
+    Vec4f   base_right(-5.5f, -75.f, 12.f, 150.f);
+    if (is_zh) {
+        base_right = Vec4f(-4.5f, -76.f, 12.f, 150.f);
+    }
+    float right_x_rate = right_only_rect.w / base_width;
+    float right_y_rate = right_only_rect.h / base_height;
+    base_right[0]                   = base_right[0] * right_x_rate + right_only_rect.x + right_only_rect.w / 2.f;
+    base_right[1]                   = base_right[1] * right_y_rate + right_only_rect.y + right_only_rect.h / 2.f;
+    base_right[2]                   = base_right[2] * right_x_rate;
+    base_right[3]                   = base_right[3] * right_y_rate;
+    BedTextureInfo::TexturePart left_part(base_left[0], base_left[1], base_left[2], base_left[3], "left_extruder_only_area.svg");
+    BedTextureInfo::TexturePart left_ch_part(base_left[0], base_left[1], base_left[2], base_left[3], "left_extruder_only_area_ch.svg");
+    BedTextureInfo::TexturePart right_part(base_right[0], base_right[1], base_right[2], base_right[3], "right_extruder_only_area.svg");
+    BedTextureInfo::TexturePart right_ch_part(base_right[0], base_right[1], base_right[2], base_right[3], "right_extruder_only_area_ch.svg");
+
+    for (size_t i = 0; i < (unsigned char) ExtruderOnlyAreaType::btAreaCount; i++) {
+        extruder_only_area_info[i].reset();
+        extruder_only_area_info[i].parts.clear();
+    }
+    extruder_only_area_info[(unsigned char) ExtruderOnlyAreaType::Engilish].parts.push_back(left_part);
+    if (base_right[2]>5) {//width should >5
+        extruder_only_area_info[(unsigned char) ExtruderOnlyAreaType::Engilish].parts.push_back(right_part);
+    }
+    extruder_only_area_info[(unsigned char) ExtruderOnlyAreaType::Chinese].parts.push_back(left_ch_part);
+    if (base_right[2] > 5) { // width should >5
+        extruder_only_area_info[(unsigned char) ExtruderOnlyAreaType::Chinese].parts.push_back(right_ch_part);
+    }
+
+    for (int i = 0; i < (unsigned char) ExtruderOnlyAreaType::btAreaCount; i++) {
+        for (int j = 0; j < extruder_only_area_info[i].parts.size(); j++) {
+            extruder_only_area_info[i].parts[j].update_buffer();
+        }
+    }
+    return true;
+}
+
+static GLint logo_texture_size()
+{
+	return std::min<GLint>(OpenGLManager::get_gl_info().get_max_tex_size(), 2048);
+}
+
+// Loads the texture of the next untried part across the parts of `infos`, in order, advancing
+// `next`; false once every part has been tried.
+static bool load_next_part_texture(PartPlateList::BedTextureInfo* infos, size_t count, size_t& next, bool compress_and_filter)
+{
+	size_t k = next;
+	for (size_t i = 0; i < count; ++i) {
+		if (k >= infos[i].parts.size()) {
+			k -= infos[i].parts.size();
+			continue;
+		}
+		++next;
+		PartPlateList::BedTextureInfo::TexturePart& part = infos[i].parts[k];
+		const std::string filename = resources_dir() + "/images/" + part.filename;
+		if (boost::filesystem::exists(filename)) {
+			part.texture = new GLTexture();
+			if (!part.texture->load_from_svg_file(filename, true, compress_and_filter, compress_and_filter, logo_texture_size()))
+				BOOST_LOG_TRIVIAL(warning) << __FUNCTION__ << boost::format(": load texture from %1% failed!") % filename;
+		} else {
+			BOOST_LOG_TRIVIAL(warning) << __FUNCTION__ << boost::format(": load texture from %1% failed!") % filename;
+		}
+		return true;
+	}
+	return false;
 }
 
 void PartPlateList::load_bedtype_textures()
 {
-	if (PartPlateList::is_load_bedtype_textures) return;
+	while (load_next_bedtype_texture()) {}
+}
 
-	init_bed_type_info();
-	GLint max_tex_size = OpenGLManager::get_gl_info().get_max_tex_size();
-	GLint logo_tex_size = (max_tex_size < 2048) ? max_tex_size : 2048;
-	for (int i = 0; i < (unsigned int)btCount; ++i) {
-		for (int j = 0; j < bed_texture_info[i].parts.size(); j++) {
-			std::string filename = resources_dir() + "/images/" + bed_texture_info[i].parts[j].filename;
-			if (boost::filesystem::exists(filename)) {
-				PartPlateList::bed_texture_info[i].parts[j].texture = new GLTexture();
-				if (!PartPlateList::bed_texture_info[i].parts[j].texture->load_from_svg_file(filename, true, true, true, logo_tex_size)) {
-					BOOST_LOG_TRIVIAL(warning) << __FUNCTION__ << boost::format(": load logo texture from %1% failed!") % filename;
-				}
-			} else {
-				BOOST_LOG_TRIVIAL(warning) << __FUNCTION__ << boost::format(": load logo texture from %1% failed!") % filename;
-			}
+bool PartPlateList::load_next_bedtype_texture()
+{
+	if (PartPlateList::is_load_bedtype_textures)
+		return false;
+	if (m_next_bedtype_texture == 0)
+		init_bed_type_info();
+	if (load_next_part_texture(bed_texture_info, btCount, m_next_bedtype_texture, true))
+		return true;
+	PartPlateList::is_load_bedtype_textures = true;
+	return false;
+}
+
+bool PartPlateList::load_logo_texture()
+{
+	if (m_logo_texture_filename.empty()) {
+		m_logo_texture.reset();
+		return false;
+	}
+
+	if (m_logo_texture.get_id() != 0 && m_logo_texture.get_source() == m_logo_texture_filename) {
+		if (m_logo_texture.unsent_compressed_data_available())
+			// sends to gpu the already available compressed levels of the main texture
+			m_logo_texture.send_compressed_data_to_gpu();
+		return true;
+	}
+
+	m_logo_texture.reset();
+	// starts generating the main texture, compression will run asynchronously
+	if (boost::algorithm::iends_with(m_logo_texture_filename, ".svg")) {
+		if (!m_logo_texture.load_from_svg_file(m_logo_texture_filename, true, true, true, logo_texture_size())) {
+			BOOST_LOG_TRIVIAL(warning) << __FUNCTION__ << boost::format(": load logo texture from %1% failed!") % m_logo_texture_filename;
+			return false;
 		}
 	}
-	PartPlateList::is_load_bedtype_textures = true;
+	else if (boost::algorithm::iends_with(m_logo_texture_filename, ".png")) {
+		if (!m_logo_texture.load_from_file(m_logo_texture_filename, true, GLTexture::MultiThreaded, true)) {
+			BOOST_LOG_TRIVIAL(warning) << __FUNCTION__ << boost::format(": load logo texture from %1% failed!") % m_logo_texture_filename;
+			return false;
+		}
+	}
+	else {
+		BOOST_LOG_TRIVIAL(warning) << __FUNCTION__ << boost::format(": can not load logo texture from %1%, unsupported format") % m_logo_texture_filename;
+		return false;
+	}
+	return true;
+}
+
+void PartPlateList::load_icon_textures()
+{
+	if (!icon_textures_loaded())
+		generate_icon_textures();
+}
+
+bool PartPlateList::load_next_plate_texture()
+{
+	if (!render_bedtype_logo) {
+		load_logo_texture();
+		return false;
+	}
+	return load_next_bedtype_texture() || load_next_cali_texture() || load_next_extruder_only_area_texture();
+}
+
+void PartPlateList::load_extruder_only_area_textures()
+{
+    while (load_next_extruder_only_area_texture()) {}
+}
+
+bool PartPlateList::load_next_extruder_only_area_texture()
+{
+    if (PartPlateList::is_load_extruder_only_area_textures)
+        return false;
+    if (m_next_extruder_only_area_texture == 0 && !init_extruder_only_area_info()) {
+        PartPlateList::is_load_extruder_only_area_textures = true;
+        return false;
+    }
+    if (load_next_part_texture(extruder_only_area_info, (size_t) ExtruderOnlyAreaType::btAreaCount, m_next_extruder_only_area_texture, false))
+        return true;
+    PartPlateList::is_load_extruder_only_area_textures = true;
+    return false;
 }
 
 void PartPlateList::init_cali_texture_info()
@@ -5765,63 +8298,65 @@ void PartPlateList::init_cali_texture_info()
 
 void PartPlateList::load_cali_textures()
 {
-	if (PartPlateList::is_load_cali_texture) return;
-
-	init_cali_texture_info();
-	GLint max_tex_size = OpenGLManager::get_gl_info().get_max_tex_size();
-	GLint logo_tex_size = (max_tex_size < 2048) ? max_tex_size : 2048;
-	for (int i = 0; i < (unsigned int)btCount; ++i) {
-		for (int j = 0; j < cali_texture_info.parts.size(); j++) {
-			std::string filename = resources_dir() + "/images/" + cali_texture_info.parts[j].filename;
-			if (boost::filesystem::exists(filename)) {
-				PartPlateList::cali_texture_info.parts[j].texture = new GLTexture();
-				if (!PartPlateList::cali_texture_info.parts[j].texture->load_from_svg_file(filename, true, true, true, logo_tex_size)) {
-					BOOST_LOG_TRIVIAL(warning) << __FUNCTION__ << boost::format(": load cali texture from %1% failed!") % filename;
-				}
-			}
-			else {
-				BOOST_LOG_TRIVIAL(warning) << __FUNCTION__ << boost::format(": load cali texture from %1% failed!") % filename;
-			}
-		}
-	}
-	PartPlateList::is_load_cali_texture = true;
+	while (load_next_cali_texture()) {}
 }
 
-//void PartPlateList::on_extruder_count_changed(int extruder_count)
-//{
-//    for (unsigned int i = 0; i < (unsigned int) m_plate_list.size(); ++i) {
-//        m_plate_list[i]->on_extruder_count_changed(extruder_count);
-//    }
-//    BOOST_LOG_TRIVIAL(info) << boost::format("%1%: extruder_count=%2%") % __FUNCTION__ % extruder_count;
-//}
-//
-//void PartPlateList::set_filament_count(int filament_count)
-//{
-//    m_filament_count = filament_count;
-//    for (unsigned int i = 0; i < (unsigned int) m_plate_list.size(); ++i) {
-//        m_plate_list[i]->set_filament_count(filament_count);
-//    }
-//    BOOST_LOG_TRIVIAL(info) << boost::format("%1%: filament_count=%2%") % __FUNCTION__ % filament_count;
-//}
-//
-//void PartPlateList::on_filament_added(int filament_count)
-//{
-//    m_filament_count++;
-//    for (unsigned int i = 0; i < (unsigned int) m_plate_list.size(); ++i) {
-//        m_plate_list[i]->on_filament_added();
-//    }
-//    BOOST_LOG_TRIVIAL(info) << boost::format("%1%: filament_count=%2%") % __FUNCTION__ % filament_count;
-//}
+bool PartPlateList::load_next_cali_texture()
+{
+	if (PartPlateList::is_load_cali_texture)
+		return false;
+	if (m_next_cali_texture == 0)
+		init_cali_texture_info();
+	if (load_next_part_texture(&cali_texture_info, 1, m_next_cali_texture, true))
+		return true;
+	PartPlateList::is_load_cali_texture = true;
+	return false;
+}
+
+void PartPlateList::refresh_imex_icons()
+{
+    const std::lock_guard<std::mutex> local_lock(m_plates_mutex);
+    for (PartPlate* plate : m_plate_list)
+        plate->refresh_imex_icon();
+}
+
+void PartPlateList::on_extruder_count_changed(int extruder_count)
+{
+    for (unsigned int i = 0; i < (unsigned int) m_plate_list.size(); ++i) {
+        m_plate_list[i]->on_extruder_count_changed(extruder_count);
+    }
+    BOOST_LOG_TRIVIAL(info) << boost::format("%1%: extruder_count=%2%")% __FUNCTION__ %extruder_count;
+}
+
+void PartPlateList::set_filament_count(int filament_count)
+{
+    m_filament_count = filament_count;
+    for (unsigned int i = 0; i < (unsigned int)m_plate_list.size(); ++i)
+    {
+        m_plate_list[i]->set_filament_count(filament_count);
+    }
+    BOOST_LOG_TRIVIAL(info) << boost::format("%1%: filament_count=%2%")% __FUNCTION__ %filament_count;
+}
+
+void PartPlateList::on_filament_added(int filament_count)
+{
+    m_filament_count++;
+    for (unsigned int i = 0; i < (unsigned int)m_plate_list.size(); ++i)
+    {
+        m_plate_list[i]->on_filament_added();
+    }
+    BOOST_LOG_TRIVIAL(info) << boost::format("%1%: filament_count=%2%")% __FUNCTION__ %filament_count;
+}
 
 void PartPlateList::on_filament_deleted(int filament_count, int filament_id)
 {
     m_filament_count--;
-    for (unsigned int i = 0; i < (unsigned int) m_plate_list.size(); ++i) {
+    for (unsigned int i = 0; i < (unsigned int)m_plate_list.size(); ++i)
+    {
         m_plate_list[i]->on_filament_deleted(filament_count, filament_id);
     }
-    BOOST_LOG_TRIVIAL(info) << boost::format("%1%: filament_count=%2%, filament_id=%3%") % __FUNCTION__ % filament_count % filament_id;
+    BOOST_LOG_TRIVIAL(info) << boost::format("%1%: filament_count=%2%, filament_id=%3%")% __FUNCTION__ %filament_count %filament_id;
 }
-
 
 }//end namespace GUI
 }//end namespace slic3r

@@ -1,13 +1,17 @@
 #ifndef SLIC3R_GUI_BITMAP_CACHE_HPP
 #define SLIC3R_GUI_BITMAP_CACHE_HPP
 
+#include <cstddef>
 #include <map>
+#include <string>
 #include <vector>
 
+#include <wx/colour.h>
 #include <wx/wxprec.h>
 #ifndef WX_PRECOMP
     #include <wx/wx.h>
 #endif
+#include <imgui/imgui.h>
 
 #include "libslic3r/Color.hpp"
 struct NSVGimage;
@@ -54,6 +58,9 @@ public:
 	static bool     parse_color(const std::string& scolor, unsigned char* rgb_out);
 	static bool     parse_color4(const std::string& scolor, unsigned char* rgba_out);
 
+	static bool load_from_svg_file_change_color(const std::string &filename, unsigned width, unsigned height, ImTextureID &texture_id, const char *hexColor);
+
+
 private:
     std::map<std::string, wxBitmap*>	m_map;
     double	m_gs	= 0.2;	// value, used for image.ConvertToGreyscale(m_gs, m_gs, m_gs)
@@ -63,4 +70,4 @@ private:
 } // GUI
 } // Slic3r
 
-#endif /* SLIC3R_GUI_BITMAP_CACHE_HPP */
+#endif // SLIC3R_GUI_BITMAP_CACHE_HPP

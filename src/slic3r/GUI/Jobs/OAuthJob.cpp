@@ -5,7 +5,15 @@
 #include "slic3r/GUI/I18N.hpp"
 #include "nlohmann/json.hpp"
 #include <boost/algorithm/string.hpp>
+#include <string>
+#include <boost/log/trivial.hpp>
+#include <memory>
+#include <boost/algorithm/string/predicate.hpp>
+#include "slic3r/GUI/HttpServer.hpp"
+#include <chrono>
+#include <exception>
 #include <thread>
+#include <wx/event.h>
 
 namespace Slic3r {
 namespace GUI {
@@ -105,7 +113,7 @@ void OAuthJob::process(Ctl& ctl)
 
     // Handle timeout
     if (!received && ctl.was_canceled()) {
-        _data.result->error_message = _u8L("User cancelled.");
+        _data.result->error_message = _u8L("User canceled.");
     } else {
         // Wait a while to ensure the response has sent
         std::this_thread::sleep_for(std::chrono::milliseconds(1500));

@@ -8,7 +8,31 @@
 #include "slic3r/GUI/GUI_ObjectList.hpp"
 #include "libnest2d/common.hpp"
 
+#include <algorithm>
+#include <boost/log/trivial.hpp>
+#include "libslic3r/BoundingBox.hpp"
+#include <cstddef>
+#include "libslic3r/libslic3r.h"
+#include "libslic3r/PrintConfig.hpp"
+#include "libslic3r/Point.hpp"
+#include "libslic3r/Arrange.hpp"
+#include "libslic3r/ExPolygon.hpp"
+#include <exception>
+#include "libslic3r/LifecycleEvents.hpp"
 #include <numeric>
+#include "slic3r/GUI/Jobs/ArrangeJob.hpp"
+#include "slic3r/GUI/GUI_App.hpp"
+#include <utility>
+#include <string>
+#include <vector>
+#include "slic3r/GUI/Jobs/Job.hpp"
+#include "libslic3r/Config.hpp"
+#include "libslic3r/Polygon.hpp"
+#include "libslic3r/PresetBundle.hpp"
+#include "slic3r/GUI/I18N.hpp"
+#include "slic3r/GUI/format.hpp"
+#include "slic3r/GUI/PartPlate.hpp"
+#include "slic3r/GUI/Selection.hpp"
 
 namespace Slic3r {
 namespace GUI {
@@ -119,10 +143,11 @@ void FillBedJob::prepare()
 
     if (m_selected.empty()) return;
 
+    bool enable_wrapping = global_config.option<ConfigOptionBool>("enable_wrapping_detection")->value;
     //add the virtual object into unselect list if has
     double scaled_exclusion_gap = scale_(1);
-    plate_list.preprocess_exclude_areas(params.excluded_regions, 1, scaled_exclusion_gap);
-    plate_list.preprocess_exclude_areas(m_unselected);
+    plate_list.preprocess_exclude_areas(params.excluded_regions, enable_wrapping, 1, scaled_exclusion_gap);
+    plate_list.preprocess_exclude_areas(m_unselected, enable_wrapping);
 
     m_bedpts = get_bed_shape(*m_plater->config());
 
@@ -168,16 +193,35 @@ void FillBedJob::prepare()
     ModelInstance *mi = model_object->instances[sel_id];
     ArrangePolygon template_ap = get_instance_arrange_poly(mi, global_config);
 
-    for (int i = 0; i < needed_items; ++i) {
+    int obj_idx;
+    double offset_base, offset;
+    bool was_one_instance;
+    if (m_instances) {
+        obj_idx = m_plater->get_selected_object_idx();
+        offset_base = m_plater->canvas3D()->get_size_proportional_to_max_bed_size(0.05);
+        offset = offset_base;
+        was_one_instance = model_object->instances.size()==1;
+    }
+
+    for (int i = 0; i < needed_items; ++i, offset += offset_base) {
         ArrangePolygon ap = template_ap;
         ap.poly = m_selected.front().poly;
         ap.bed_idx = PartPlateList::MAX_PLATES_COUNT;
         ap.itemid = -1;
-        ap.setter = [this](const ArrangePolygon &p) {
+        ap.setter = [this, offset](const ArrangePolygon &p) {
             ModelObject *mo = m_plater->model().objects[m_object_idx];
-            ModelObject* newObj = m_plater->model().add_object(*mo);
-            newObj->name = mo->name +" "+ std::to_string(p.itemid);
-            for (ModelInstance *newInst : newObj->instances) { newInst->apply_arrange_result(p.translation.cast<double>(), p.rotation); }
+            ModelObject *obj;
+            if (m_instances) {
+                ModelInstance* model_instance = mo->instances.back();
+                Vec3d offset_vec = model_instance->get_offset() + Vec3d(offset, offset, 0.0);
+                mo->add_instance(offset_vec, model_instance->get_scaling_factor(), model_instance->get_rotation(), model_instance->get_mirror());
+                obj = mo;
+            } else {
+                ModelObject* newObj = m_plater->model().add_object(*mo);
+                newObj->name = mo->name +" "+ std::to_string(p.itemid);
+                obj = newObj;
+            }
+            for (ModelInstance *newInst : obj->instances) { newInst->apply_arrange_result(p.translation.cast<double>(), p.rotation); }            
             //m_plater->sidebar().obj_list()->paste_objects_into_list({m_plater->model().objects.size()-1});
         };
         m_selected.emplace_back(ap);
@@ -213,7 +257,7 @@ void FillBedJob::process(Ctl &ctl)
     const bool is_bbl = wxGetApp().preset_bundle->is_bbl_vendor();
     if (is_bbl && params.avoid_extrusion_cali_region && global_config.opt_bool("scan_first_layer"))
         partplate_list.preprocess_nonprefered_areas(m_unselected, MAX_NUM_PLATES);
-    
+
     update_selected_items_inflation(m_selected, m_plater->config(), params);
     update_unselected_items_inflation(m_unselected, m_plater->config(), params);
 
@@ -222,9 +266,10 @@ void FillBedJob::process(Ctl &ctl)
         return ctl.was_canceled() || do_stop;
     };
 
-    params.progressind = [this, &ctl, &statustxt](unsigned st,std::string str="") {
+    params.progressind = [this, &ctl](unsigned st,std::string str="") {
          if (st > 0)
-             ctl.update_status(st * 100 / status_range(), statustxt + " " + str);
+             // TRN Progress status of Fill bed. %1% is the name of the object being copied.
+             ctl.update_status(st * 100 / status_range(), GUI::format(_u8L("Filling %1%"), str));
     };
 
     params.on_packed = [&do_stop] (const ArrangePolygon &ap) {
@@ -255,7 +300,7 @@ void FillBedJob::process(Ctl &ctl)
                                        _u8L("Bed filling done."));
 }
 
-FillBedJob::FillBedJob() : m_plater{wxGetApp().plater()} {}
+FillBedJob::FillBedJob(bool instances) : m_plater{wxGetApp().plater()}, m_instances{instances} {}
 
 void FillBedJob::finalize(bool canceled, std::exception_ptr &eptr)
 {
@@ -279,8 +324,7 @@ void FillBedJob::finalize(bool canceled, std::exception_ptr &eptr)
         return s + int(ap.priority == 0 && ap.bed_idx == 0);
     });
 
-    Model& model = m_plater->model();
-    const size_t oldObjectCount = model.objects.size();
+    int oldSize = m_plater->model().objects.size();
 
     if (added_cnt > 0) {
         //BBS: adjust the selected instances
@@ -306,15 +350,9 @@ void FillBedJob::finalize(bool canceled, std::exception_ptr &eptr)
             BOOST_LOG_TRIVIAL(debug) << __FUNCTION__ << boost::format(":selected: bed_id %1%, trans {%2%,%3%}") % ap.bed_idx % unscale<double>(ap.translation(X)) % unscale<double>(ap.translation(Y));
         }
 
-        const size_t newObjectCount = model.objects.size();
-        if (newObjectCount > oldObjectCount)
-        {
-            ModelObjectPtrs newObjects(model.objects.begin() + oldObjectCount, model.objects.end());
-            model.InitializeAssemblyPositions(newObjects);
-        }
-
+        int   newSize = m_plater->model().objects.size();
         auto obj_list = m_plater->sidebar().obj_list();
-        for (size_t i = oldObjectCount; i < newObjectCount; i++) {
+        for (size_t i = oldSize; i < newSize; i++) {
             obj_list->add_object_to_list(i, true, true, false);
             obj_list->update_printable_state(i, 0);
         }
@@ -329,8 +367,21 @@ void FillBedJob::finalize(bool canceled, std::exception_ptr &eptr)
         //model_object->ensure_on_bed();
         //BOOST_LOG_TRIVIAL(debug) << __FUNCTION__ << ": model_object->ensure_on_bed()";
 
+        if (m_instances) {// && wxGetApp().app_config->get("auto_arrange") == "true") {
+            m_plater->set_prepare_state(Job::PREPARE_STATE_MENU);
+            m_plater->arrange();
+        }
         m_plater->update();
+
+        {
+            Slic3r::LifecycleEventContext ctx;
+            ctx.code = Slic3r::LifecycleEvtCode::Ok;
+            ctx.msg = "arranged";
+            Slic3r::fire_lifecycle_event(Slic3r::LifecycleEvent::ObjectTransformed, ctx);
+        }
     }
+
+    m_plater->mark_plate_toolbar_image_dirty();
 }
 
 }} // namespace Slic3r::GUI

@@ -1,10 +1,14 @@
 #ifndef slic3r_UpdateDialogs_hpp_
 #define slic3r_UpdateDialogs_hpp_
 
+#include "slic3r/GUI/GUI_Utils.hpp"
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
+#include <wx/gdicmn.h>
 #include <wx/hyperlink.h>
+#include <wx/string.h>
 
 #include "libslic3r/Semver.hpp"
 #include "MsgDialog.hpp"
@@ -33,7 +37,6 @@ public:
 
 	void on_hyperlink(wxHyperlinkEvent& evt);
 private:
-	wxCheckBox *cbox;
 };
 
 
@@ -61,10 +64,12 @@ public:
 	// force_before_wizard - indicates that check of updated is forced before ConfigWizard opening
     MsgUpdateConfig(const std::vector<Update> &updates, bool force_before_wizard = false);
     void on_dpi_changed(const wxRect &suggested_rect);
+    // MsgUpdateConfig(MsgUpdateConfig &&)      = delete;
+    //MsgUpdateConfig(const MsgUpdateConfig &) = delete;
+    //MsgUpdateConfig &operator=(MsgUpdateConfig &&) = delete;
+    //MsgUpdateConfig &operator=(const MsgUpdateConfig &) = delete;
 	~MsgUpdateConfig();
 };
-
-void dismiss_modal_msg_update_config_with_cancel();
 
 // Informs about currently installed bundles not being compatible with the running Slic3r. Asks about action.
 class MsgUpdateForced : public MsgDialog

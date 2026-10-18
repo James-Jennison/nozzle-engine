@@ -9,9 +9,11 @@
         "80"
     ],
     "fan_min_speed": [
+        "50",
         "50"
     ],
     "filament_max_volumetric_speed": [
+        "1.8",
         "1.8"
     ],
     "hot_plate_temp": [

@@ -5,8 +5,20 @@
 #include "GUI_Geometry.hpp"
 #include "GLModel.hpp"
 
+#include "libslic3r/Technologies.hpp"
+#include "libslic3r/Point.hpp"
+#include <map>
+#include <memory>
+#include "libslic3r/BoundingBox.hpp"
+#include <array>
+#include <cstddef>
+#include "libslic3r/libslic3r.h"
+#include "libslic3r/Color.hpp"
 #include <set>
 #include <optional>
+#include <vector>
+#include <utility>
+#include <string>
 
 namespace Slic3r {
 
@@ -181,6 +193,7 @@ private:
     GLModel m_arrow;
     GLModel m_curved_arrow;
     GLModel m_box;
+    bool m_auto_drop = true;
     struct Planes
     {
         std::array<Vec3f, 2> check_points{ Vec3f::Zero(), Vec3f::Zero() };
@@ -235,8 +248,13 @@ public:
     void clone(int numbers = 1);
     void center();
     void drop();
+    bool can_drop() const;
+    // Lowest world Z that drop() moves to the bed; whole objects count model parts only, as auto drop does.
+    double get_drop_min_z() const;
     void center_plate(const int plate_idx);
     void set_printable(bool printable);
+    bool get_auto_drop() const;
+    void set_auto_drop(bool enabled);
 
     void add_all();
     void remove_all();
@@ -249,7 +267,7 @@ public:
     // Update the selection based on the map from old indices to new indices after m_volumes changed.
     // If the current selection is by instance, this call may select newly added volumes, if they belong to already selected instances.
     void volumes_changed(const std::vector<size_t> &map_volume_old_to_new);
-    void clear(bool notify_sidebar = true);
+    void clear();
 
     bool is_empty() const { return m_type == Empty; }
     bool is_wipe_tower() const { return m_type == WipeTower; }
@@ -286,7 +304,7 @@ public:
 
     bool requires_uniform_scale() const;
 
-    // Returns the the object id if the selection is from a single object, otherwise is -1
+    // Returns the object id if the selection is from a single object, otherwise is -1
     int get_object_idx() const;
     // Returns the instance id if the selection is from a single object and from a single instance, otherwise is -1
     int get_instance_idx() const;
@@ -345,7 +363,8 @@ public:
 
     void translate(unsigned int object_idx, const Vec3d& displacement);
     void translate(unsigned int object_idx, unsigned int instance_idx, const Vec3d& displacement);
-    void translate(unsigned int object_idx, unsigned int instance_idx, unsigned int volume_idx, const Vec3d &displacement);
+    // local: true (default) if displacement is already in instance-local space; false treats it as world-space delta (L^-1 applied).
+    void translate(unsigned int object_idx, unsigned int instance_idx, unsigned int volume_idx, const Vec3d &displacement, bool local = true);
 
     void rotate(unsigned int object_idx, unsigned int instance_idx, const Transform3d &overwrite_tran);
     void rotate(unsigned int object_idx, unsigned int instance_idx, unsigned int volume_idx, const Transform3d &overwrite_tran);
@@ -370,7 +389,7 @@ public:
 
     void render_bounding_box(const BoundingBoxf3& box, const ColorRGB& color, float scale) {
         m_scale_factor = scale;
-        render_bounding_box(box, Transform3d::Identity(), color);
+        render_bounding_box(box, Transform3d::Identity(), get_auto_drop(), color);
     }
 
     //BBS
@@ -414,7 +433,7 @@ private:
         m_bounding_sphere.reset();
     }
     void render_synchronized_volumes();
-    void render_bounding_box(const BoundingBoxf3& box, const Transform3d& trafo, const ColorRGB& color);
+    void render_bounding_box(const BoundingBoxf3& box, const Transform3d& trafo, const bool auto_drop, const ColorRGB& color);
     void render_sidebar_position_hints(const std::string& sidebar_field, GLShaderProgram& shader, const Transform3d& matrix);
     void render_sidebar_rotation_hints(const std::string& sidebar_field, GLShaderProgram& shader, const Transform3d& matrix);
     //BBS: GUI refactor: add uniform_scale from gizmo

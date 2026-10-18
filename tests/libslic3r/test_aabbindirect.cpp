@@ -1,8 +1,13 @@
+#include <catch2/catch_all.hpp>
 #include <catch2/catch_test_macros.hpp>
-#include <test_utils.hpp>
+#include <catch2/catch_approx.hpp>
 
+#include <igl/Hit.h>
+#include <cstddef>
 #include <libslic3r/TriangleMesh.hpp>
 #include <libslic3r/AABBTreeIndirect.hpp>
+#include <vector>
+#include "libslic3r/Point.hpp"
 
 using namespace Slic3r;
 
@@ -13,7 +18,7 @@ TEST_CASE("Building a tree over a box, ray caster and closest query", "[AABBIndi
     auto tree = AABBTreeIndirect::build_aabb_tree_over_indexed_triangle_set(tmesh.its.vertices, tmesh.its.indices);
     REQUIRE(! tree.empty());
 
-    igl::Hit hit;
+    igl::Hit<float> hit;
 	bool intersected = AABBTreeIndirect::intersect_ray_first_hit(
 		tmesh.its.vertices, tmesh.its.indices,
 		tree,
@@ -22,9 +27,9 @@ TEST_CASE("Building a tree over a box, ray caster and closest query", "[AABBIndi
 		hit);
 
     REQUIRE(intersected);
-    REQUIRE_THAT(hit.t, WithinRel(5., 0.001));
+    REQUIRE(hit.t == Catch::Approx(5.));
 
-    std::vector<igl::Hit> hits;
+    std::vector<igl::Hit<float>> hits;
 	bool intersected2 = AABBTreeIndirect::intersect_ray_all_hits(
 		tmesh.its.vertices, tmesh.its.indices,
 		tree,
@@ -33,8 +38,8 @@ TEST_CASE("Building a tree over a box, ray caster and closest query", "[AABBIndi
 		hits);
     REQUIRE(intersected2);
     REQUIRE(hits.size() == 2);
-    REQUIRE_THAT(hits.front().t, WithinRel(5., 0.001));
-    REQUIRE_THAT(hits.back().t, WithinRel(6., 0.001));
+    REQUIRE(hits.front().t == Catch::Approx(5.));
+    REQUIRE(hits.back().t == Catch::Approx(6.));
 
     size_t hit_idx;
     Vec3d  closest_point;
@@ -43,18 +48,18 @@ TEST_CASE("Building a tree over a box, ray caster and closest query", "[AABBIndi
 		tree,
         Vec3d(0.3, 0.5, -5.),
 		hit_idx, closest_point);
-    REQUIRE_THAT(squared_distance, WithinRel(5. * 5., 0.001));
-    REQUIRE_THAT(closest_point.x(), WithinRel(0.3, 0.001));
-    REQUIRE_THAT(closest_point.y(), WithinRel(0.5, 0.001));
-    REQUIRE_THAT(closest_point.z(), WithinRel(0., 0.001));
+    REQUIRE(squared_distance == Catch::Approx(5. * 5.));
+    REQUIRE(closest_point.x() == Catch::Approx(0.3));
+    REQUIRE(closest_point.y() == Catch::Approx(0.5));
+    REQUIRE(closest_point.z() == Catch::Approx(0.));
 
     squared_distance = AABBTreeIndirect::squared_distance_to_indexed_triangle_set(
 		tmesh.its.vertices, tmesh.its.indices,
 		tree,
         Vec3d(0.3, 0.5, 5.),
 		hit_idx, closest_point);
-    REQUIRE_THAT(squared_distance, WithinRel(4. * 4., 0.001));
-    REQUIRE_THAT(closest_point.x(), WithinRel(0.3, 0.001));
-    REQUIRE_THAT(closest_point.y(), WithinRel(0.5, 0.001));
-    REQUIRE_THAT(closest_point.z(), WithinRel(1., 0.001));
+    REQUIRE(squared_distance == Catch::Approx(4. * 4.));
+    REQUIRE(closest_point.x() == Catch::Approx(0.3));
+    REQUIRE(closest_point.y() == Catch::Approx(0.5));
+    REQUIRE(closest_point.z() == Catch::Approx(1.));
 }

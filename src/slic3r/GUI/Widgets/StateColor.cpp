@@ -1,5 +1,10 @@
 #include "StateColor.hpp"
+#include <algorithm>
 #include <cmath>
+#include <wx/colour.h>
+#include <map>
+#include <tuple>
+#include <wx/string.h>
 
 static bool gDarkMode = false;
 
@@ -14,6 +19,7 @@ static std::map<wxColour, wxColour> gDarkColors{
     {"#DFDFDF", "#3E3E45"}, // rgb(223, 223, 223)  Button Background color
     {"#D4D4D4", "#4D4D54"}, // rgb(212, 212, 212)  Button Background color on Hover
     {"#6B6A6A", "#909090"}, // rgb(107, 107, 106)  Button Dimmed text
+    {"#26A69A", "#008172"}, // rgb(0, 150, 136)    Button Confirm Color hover | ORCA Color Hover
     {"#6B6B6A", "#B3B3B5"}, // rgb(107, 107, 106)  Input box side text
     {"#2C2C2E", "#B3B3B4"}, // rgb(44, 44, 46)     ???
     {"#6B6B6B", "#818183"}, // rgb(107, 107, 107)  Disabled Text
@@ -41,33 +47,13 @@ static std::map<wxColour, wxColour> gDarkColors{
     {"#D7E8DE", "#1F2B27"}, // rgb(215, 232, 222)  Not Used anymore // Leftover from BBS
     {"#2B3436", "#808080"}, // rgb(43, 52, 54)     Not Used anymore // Leftover from BBS. Was used as main fill color of icons
     {"#ABABAB", "#ABABAB"},
-    {"#D9D9D9", "#2D2D32"}, // rgb(217, 217, 217)  Sidebar > Toggle button track color
+    {"#D9D9D9", "#27272A"}, // rgb(217, 217, 217)  Sidebar > Toggle button track color
+    {"#FFFEFE", "#D8D9D9"}, // rgb(255, 254, 254)  Sidebar > Toggle button thumb color
+    {"#EBF9F0", "#293F34"},
     //{"#F0F0F0", "#4C4C54"},
     // ORCA
     {"#BFE1DE", "#223C3C"}, // rgb(191, 225, 222)  Dropdown checked item background color > ORCA color with %25 opacity
     {"#E5F0EE", "#283232"}, // rgb(229, 240, 238)  Combo / Dropdown focused background color > ORCA color with %10 opacity
-    // MixedFilamentDialog dark mode
-    {"#F8F7F7", "#2A2A2E"}, // rgb(248, 247, 247)  Dialog / scrolled content background
-    {"#F0F0F0", "#3F3F46"}, // rgb(240, 240, 240)  Card borders, dividers
-    {"#F3F4F6", "#3A3A3F"}, // rgb(243, 244, 246)  Internal card dividers
-    {"#242424", "#E4E4E7"}, // rgb(36, 36, 36)    Primary text (hex input, cancel btn)
-    {"#18181B", "#E4E4E7"}, // rgb(24, 24, 27)    Login confirmation text
-    {"#4A4A4A", "#A1A1AA"}, // rgb(74, 74, 74)    Secondary text (segmented btns)
-    {"#8F8F8F", "#8A8A95"}, // rgb(143, 143, 143) Label text (Hex:, Preview, percentages)
-    {"#EBEBEB", "#45454B"}, // rgb(235, 235, 235)  Slider track background
-    {"#FDE8E8", "#4D2020"}, // rgb(253, 232, 232)  Error banner background
-    {"#D32F2F", "#EF5350"}, // rgb(211, 47, 47)    Error text
-    {"#FFF3EB", "#452A1A"}, // rgb(255, 243, 235)  Warning banner background
-    {"#FF842D", "#FF9F43"}, // rgb(255, 132, 45)   Warning text
-    {"#B4B4B4", "#73737D"}, // rgb(180, 180, 180)  Preview/strip border
-    {"#E7E7E7", "#54545B"}, // rgb(231, 231, 231)  MixedFilament preview panel background
-    // NOTE: removed {"#939393","#000000"} — its dark value #000000 collided with
-    // {"#000000","#FFFFFE"} in revert()'s reverse map and broke lightModeColorFor(#000000).
-    {"#D1D5DC", "#52525B"}, // rgb(209, 213, 220)  Cancel button border
-    {"#FF0000", "#FF5252"}, // rgb(255, 0, 0)      Hex input error border
-    {"#019687", "#00675B"}, // rgb(1, 150, 135)    Confirm button bg (near #009688)
-    {"#26A69A", "#00675B"}, // rgb(38, 166, 154)   Default target/match color
-    {"#FEFEFE", "#FEFEFE"}, // rgb(254, 254, 254)   Near-white text (segment btn selected, confirm btn)
 };
 
 std::tuple<double, double, double> StateColor::GetLAB(const wxColour& color) {
@@ -211,7 +197,6 @@ inline wxColour darkModeColorFor2(wxColour const &color)
     if (!gDarkMode)
         return color;
     auto iter = gDarkColors.find(color);
-    wxASSERT(iter != gDarkColors.end());
     if (iter != gDarkColors.end()) return iter->second;
     return color;
 }
@@ -227,7 +212,6 @@ wxColour StateColor::lightModeColorFor(wxColour const &color)
 {
     static std::map<wxColour, wxColour> gLightColors = revert(gDarkColors);
     auto iter = gLightColors.find(color);
-    wxASSERT(iter != gLightColors.end());
     if (iter != gLightColors.end()) return iter->second;
     return color;
 }

@@ -2,7 +2,19 @@
 #define slic3r_GLGizmoMmuSegmentation_hpp_
 
 #include "GLGizmoPainterBase.hpp"
-#include "libslic3r/MixedFilament.hpp"
+#include "slic3r/GUI/I18N.hpp"
+#include <cstddef>
+#include <cassert>
+#include <vector>
+#include "slic3r/GUI/Gizmos/GLGizmoBase.hpp"
+#include <string>
+#include "libslic3r/TriangleSelector.hpp"
+#include "libslic3r/Color.hpp"
+#include <wx/string.h>
+#include <wx/gdicmn.h>
+#include <set>
+#include <map>
+#include <utility>
 
 namespace Slic3r::GUI {
 
@@ -58,6 +70,7 @@ public:
 
     // IDs of the Vertex Array Objects, into which the geometry has been loaded.
     // Zero if the VBOs are not sent to GPU yet.
+    unsigned int              vertices_VAO_id{ 0 };
     unsigned int              vertices_VBO_id{0};
     std::vector<unsigned int> triangle_indices_VBO_ids;
 };
@@ -72,44 +85,40 @@ public:
 
     void data_changed(bool is_serializing) override;
 
-    // Keep this in sync with the shared triangle-selector state range.
+    // The paint material limit follows EnforcerBlockerType::ExtruderMax: TriangleSelector
+    // serialization covers the extended (17..32) range through an escape nibble. Mixed-color
+    // filaments occupy ordinary slots, so they draw from the same budget as physical ones.
     static const constexpr size_t EXTRUDERS_LIMIT = static_cast<size_t>(EnforcerBlockerType::ExtruderMax);
 
     const float get_cursor_radius_min() const override { return CursorRadiusMin; }
 
     // BBS
     bool on_number_key_down(int number);
-    bool on_key_down_select_tool_type(int keyCode);
+    bool on_tool_shortcut(Shortcut shortcut) override;
 
 protected:
     // BBS
     ColorRGBA get_cursor_hover_color() const override;
     void on_set_state() override;
 
-    EnforcerBlockerType get_left_button_state_type() const override
-    {
-        if (m_selected_extruder_idx < m_display_filament_ids.size())
-            return EnforcerBlockerType(m_display_filament_ids[m_selected_extruder_idx]);
-        return EnforcerBlockerType::Extruder1;
-    }
+    EnforcerBlockerType get_left_button_state_type() const override { return EnforcerBlockerType(m_selected_extruder_idx + 1); }
     EnforcerBlockerType get_right_button_state_type() const override { return EnforcerBlockerType(-1); }
 
     void on_render_input_window(float x, float y, float bottom_limit) override;
     std::string on_get_name() const override;
-    void show_tooltip_information(float caption_max, float x, float y);
+    void render_tooltip_button(float x, float y);
     bool on_is_selectable() const override;
     bool on_is_activable() const override;
 
     wxString handle_snapshot_action_name(bool shift_down, Button button_down) const override;
 
-    std::string get_gizmo_entering_text() const override { return "Entering color painting"; }
-    std::string get_gizmo_leaving_text() const override { return "Leaving color painting"; }
-    std::string get_action_snapshot_name() const override { return "Color painting editing"; }
+    std::string get_gizmo_entering_text() const override { return _u8L("Entering color painting"); }
+    std::string get_gizmo_leaving_text() const override { return _u8L("Leaving color painting"); }
+    std::string get_action_snapshot_name() const override { return _u8L("Color painting editing"); }
 
     // BBS
     size_t                            m_selected_extruder_idx = 0;
     std::vector<ColorRGBA>            m_extruders_colors;
-    std::vector<unsigned int>         m_display_filament_ids;
     std::vector<int>                  m_volumes_extruder_idxs;
 
     // BBS
@@ -118,10 +127,12 @@ protected:
     
     // Filament remap feature
     std::vector<size_t>               m_extruder_remap;      // index → target extruder index
-    bool                              m_show_filament_remap_ui = false;
-
-    // Minimal context for gradient rendering; only physical_colors is used
-    MixedFilamentDisplayContext       m_mixed_display_context;
+    // Colours each gradient mixed filament actually prints, bottom of the model first, mirrored
+    // from Plater so the extruder swatches draw the same fade the editor previews. Plain
+    // filament slots keep an empty ramp.
+    std::vector<std::vector<wxColour>> m_gradient_ramps;
+    // ORCA: Cache used filaments to filter UI
+    std::set<size_t>                  m_used_filaments;      // Set of used filament indices (cached)
 
     static const constexpr float      CursorRadiusMin = 0.1f; // cannot be zero
 
@@ -140,18 +151,35 @@ private:
 
     void init_model_triangle_selectors();
 
+    // ORCA
+    bool draw_color_button(int idx, const char* id_str, const ColorRGBA& color, ColorRGBA& map_color, bool active, float scale);
+    // Gradient ramp of a filament slot, or nullptr when the slot is a plain single color
+    // filament. A non-null result is never empty.
+    const std::vector<wxColour>* gradient_of(int idx) const
+    {
+        return idx >= 0 && idx < (int) m_gradient_ramps.size() && !m_gradient_ramps[idx].empty() ? &m_gradient_ramps[idx] : nullptr;
+    }
+
     // BBS
     void update_triangle_selectors_colors();
     void init_extruders_data();
-    void init_extruders_data(const std::vector<ColorRGBA> &extruder_colors);
     
     // Filament remapping methods
     void remap_filament_assignments();
-    void render_filament_remap_ui(float window_width, float max_tooltip_width);
+    void render_filament_remap_ui(float window_width, float max_tooltip_width, float scale);
+    // ORCA: Helper to update the cache of used filaments
+    void update_used_filaments();
 
     // This map holds all translated description texts, so they can be easily referenced during layout calculations
     // etc. When language changes, GUI is recreated and this class constructed again, so the change takes effect.
     std::map<std::string, wxString> m_desc;
+
+    // Contains all shortcuts in the format of {shortcut, description}, e.g. {alt + _L("Left mouse button"), _L("Part_selection")}
+    std::vector<std::pair<wxString, wxString>> m_shortcuts_brush;
+    // Contains all shortcuts in the format of {shortcut, description}, e.g. {alt + _L("Left mouse button"), _L("Part_selection")}
+    std::vector<std::pair<wxString, wxString>> m_shortcuts_bucket_fill;
+    // Contains all shortcuts in the format of {shortcut, description}, e.g. {alt + _L("Left mouse button"), _L("Part_selection")}
+    std::vector<std::pair<wxString, wxString>> m_shortcuts_gap_fill;
 };
 
 } // namespace Slic3r

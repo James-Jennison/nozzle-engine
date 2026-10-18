@@ -5,15 +5,15 @@
   <key>CFBundleExecutable</key>
   <string>@SLIC3R_APP_KEY@</string>
   <key>CFBundleGetInfoString</key>
-  <string>@SLIC3R_APP_NAME@ Copyright © 2024-2026 Snapmaker. All rights reserved.</string>
+  <string>@SLIC3R_APP_NAME@ Copyright(C) 2026 OrcaSlicer Pte Ltd All Rights Reserved</string>
   <key>CFBundleIconFile</key>
-  <string>images/Snapmaker_Orca.icns</string>
+  <string>images/OrcaSlicer.icns</string>
   <key>CFBundleName</key>
   <string>@SLIC3R_APP_KEY@</string>
   <key>CFBundleShortVersionString</key>
   <string>@SLIC3R_APP_NAME@ @SLIC3R_BUILD_ID@</string>
   <key>CFBundleIdentifier</key>
-  <string>com.snapmaker.snapmaker-orca</string>
+  <string>com.orcaslicer.OrcaSlicer</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundlePackageType</key>
@@ -28,12 +28,11 @@
   <array>
     <dict>
       <key>CFBundleURLName</key>
-      <string>Snapmaker Orca Open URL</string>
+      <string>orcasliceropen url</string>
       <key>CFBundleURLSchemes</key>
       <array>
-        <string>Snapmaker_Orcaopen</string>
-        <string>Snapmaker_Orca</string>
-        <string>snapmaker-orca</string>
+        <string>orcasliceropen</string>
+        <string>orcaslicer</string>
       </array>
     </dict>
   </array>
@@ -63,7 +62,7 @@
         <string>OBJ</string>
       </array>
       <key>CFBundleTypeIconFile</key>
-      <string>images/Snapmaker_Orca.icns</string>
+      <string>images/OrcaSlicer.icns</string>
       <key>CFBundleTypeName</key>
       <string>STL</string>
       <key>CFBundleTypeRole</key>
@@ -80,7 +79,7 @@
         <string>AMF</string>
       </array>
       <key>CFBundleTypeIconFile</key>
-      <string>images/Snapmaker_Orca.icns</string>
+      <string>images/OrcaSlicer.icns</string>
       <key>CFBundleTypeName</key>
       <string>AMF</string>
       <key>CFBundleTypeRole</key>
@@ -97,7 +96,7 @@
         <string>3MF</string>
       </array>
       <key>CFBundleTypeIconFile</key>
-      <string>images/Snapmaker_Orca.icns</string>
+      <string>images/OrcaSlicer.icns</string>
       <key>CFBundleTypeName</key>
       <string>3MF</string>
       <key>CFBundleTypeRole</key>
@@ -126,52 +125,15 @@
     </dict>
   </array>
   <key>LSMinimumSystemVersion</key>
-  <string>12.0</string>
+  <string>10.10</string>
   <key>NSPrincipalClass</key>
   <string>NSApplication</string>
   <key>NSHighResolutionCapable</key>
   <true/>
-  <key>NSLocalNetworkUsageDescription</key>
-  <string>Snapmaker Orca needs access to your local network to discover and connect to your 3D printer(s), and to serve the app's device interface on localhost.</string>
-  <key>NSBonjourServices</key>
-  <array>
-    <string>_http._tcp</string>
-    <string>_printer._tcp</string>
-  </array>
   <key>LSEnvironment</key>
   <dict>
     <key>ASAN_OPTIONS</key>
     <string>detect_container_overflow=0</string>
-  </dict>
-  <!-- Allow HTTP connections to localhost for local web server (required for newer macOS versions) -->
-  <key>NSAppTransportSecurity</key>
-  <dict>
-    <!-- Completely disable ATS for localhost (allows HTTP instead of HTTPS) -->
-    <key>NSAllowsLocalNetworking</key>
-    <true/>
-    <!-- Allow arbitrary loads for local development server -->
-    <key>NSAllowsArbitraryLoads</key>
-    <false/>
-    <!-- Specific exception for localhost connections -->
-    <key>NSExceptionDomains</key>
-    <dict>
-      <!-- Allow HTTP (not HTTPS) for localhost -->
-      <key>localhost</key>
-      <dict>
-        <key>NSExceptionAllowsInsecureHTTPLoads</key>
-        <true/>
-        <key>NSIncludesSubdomains</key>
-        <true/>
-      </dict>
-      <!-- Allow HTTP for 127.0.0.1 -->
-      <key>127.0.0.1</key>
-      <dict>
-        <key>NSExceptionAllowsInsecureHTTPLoads</key>
-        <true/>
-        <key>NSIncludesSubdomains</key>
-        <false/>
-      </dict>
-    </dict>
   </dict>
 </dict>
 </plist>

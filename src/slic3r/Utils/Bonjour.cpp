@@ -1,8 +1,29 @@
 #include "Bonjour.hpp"
 
+#include <boost/optional/optional.hpp>
+#include <boost/asio/ip/udp.hpp>
+#include <cstddef>
+#include <boost/none.hpp>
+#include <boost/asio/ip/address_v4.hpp>
+#include <boost/asio/ip/address_v6.hpp>
+#include <boost/asio/ip/address.hpp>
+#include <boost/asio/io_service.hpp>
+#include <boost/asio/ip/multicast.hpp>
+#include <boost/asio/buffer.hpp>
+#include <boost/asio/placeholders.hpp>
+#include <cassert>
+#include <cctype>
+#include <boost/asio/ip/host_name.hpp>
+#include <boost/asio/deadline_timer.hpp>
 #include <cstdint>
 #include <algorithm>
 #include <array>
+#include <utility>
+#include <ostream>
+#include <iterator>
+#include <memory>
+#include <exception>
+#include <functional>
 #include <vector>
 #include <string>
 #include <map>
@@ -677,24 +698,6 @@ UdpSocket::UdpSocket( Bonjour::ReplyFn replyfn, const asio::ip::address& multica
 	}
 }
 
-UdpSocket::~UdpSocket()
-{
-	try {
-		// 取消所有异步操作
-		socket.cancel();
-		
-		// 关闭socket
-		if (socket.is_open()) {
-			socket.close();
-		}
-		
-		BOOST_LOG_TRIVIAL(debug) << "UdpSocket destroyed, socket closed";
-	}
-	catch (const std::exception& e) {
-		BOOST_LOG_TRIVIAL(error) << "Error closing socket in destructor: " << e.what();
-	}
-}
-
 void UdpSocket::send()
 {
 	try {
@@ -889,7 +892,7 @@ void Bonjour::priv::lookup_perform()
 
 	std::vector<LookupSocket*> sockets;
 
-	// resolve intefaces - from PR#6646
+	// resolve interfaces - from PR#6646
 	std::vector<boost::asio::ip::address> interfaces;
 	asio::ip::udp::resolver resolver(*io_service);
 	boost::system::error_code ec;
@@ -966,17 +969,6 @@ void Bonjour::priv::lookup_perform()
 	catch (std::exception& e) {
 		BOOST_LOG_TRIVIAL(error) << e.what();
 	}
-	
-	// 清理sockets，释放内存
-	for (auto* socket : sockets) {
-		if (socket) {
-			// 先取消所有异步操作
-			socket->cancel();
-			// 然后释放内存
-			delete socket;
-		}
-	}
-	sockets.clear();
 }
 
 void Bonjour::priv::resolve_perform()
@@ -1071,17 +1063,6 @@ void Bonjour::priv::resolve_perform()
 	catch (std::exception& e) {
 		BOOST_LOG_TRIVIAL(error) << e.what();
 	}
-	
-	// 清理sockets，释放内存
-	for (auto* socket : sockets) {
-		if (socket) {
-			// 先取消所有异步操作
-			socket->cancel();
-			// 然后释放内存
-			delete socket;
-		}
-	}
-	sockets.clear();
 }
 
 
@@ -1154,14 +1135,7 @@ Bonjour::Bonjour(Bonjour &&other) : p(std::move(other.p)) {}
 Bonjour::~Bonjour()
 {
 	if (p && p->io_thread.joinable()) {
-		// 检查是否在同一个线程中，避免死锁
-		if (p->io_thread.get_id() != std::this_thread::get_id()) {
-			// 等待线程完成，确保资源正确清理
-			p->io_thread.join();
-		} else {
-			// 如果在同一个线程中，使用detach避免死锁
-			p->io_thread.detach();
-		}
+		p->io_thread.detach();
 	}
 }
 

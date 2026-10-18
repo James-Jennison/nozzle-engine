@@ -1,8 +1,9 @@
-#include <catch_main.hpp>
+#include <catch2/catch_all.hpp>
 
+#include <catch2/catch_test_macros.hpp>
 #include "slic3r/Utils/Http.hpp"
 
-TEST_CASE("Check SSL certificates paths", "[Http][NotWorking][!mayfail]") {
+TEST_CASE("Check SSL certificates paths", "[Http][NotWorking]") {
     
     Slic3r::Http g = Slic3r::Http::get("https://github.com/");
     
@@ -20,8 +21,8 @@ TEST_CASE("Check SSL certificates paths", "[Http][NotWorking][!mayfail]") {
     REQUIRE(status == 200);
 }
 
-TEST_CASE("Http digest authentication", "[Http][NotWorking][!mayfail]") {
-    Slic3r::Http g = Slic3r::Http::get("https://jigsaw.w3.org/HTTP/Digest/");
+TEST_CASE("Http digest authentication", "[Http][NotWorking]") {
+    Slic3r::Http g = Slic3r::Http::get("https://httpbingo.org/digest-auth/auth/guest/guest");
 
     g.auth_digest("guest", "guest");
 
@@ -39,8 +40,8 @@ TEST_CASE("Http digest authentication", "[Http][NotWorking][!mayfail]") {
     REQUIRE(status == 200);
 }
 
-TEST_CASE("Http basic authentication", "[Http][NotWorking][!mayfail]") {
-    Slic3r::Http g = Slic3r::Http::get("https://jigsaw.w3.org/HTTP/Basic/");
+TEST_CASE("Http basic authentication", "[Http][NotWorking]") {
+    Slic3r::Http g = Slic3r::Http::get("https://httpbingo.org/basic-auth/guest/guest");
 
     g.auth_basic("guest", "guest");
 

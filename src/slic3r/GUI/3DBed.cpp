@@ -15,14 +15,33 @@
 #include "Plater.hpp"
 #include "Camera.hpp"
 
-#include <GL/glew.h>
+#include <boost/version.hpp>
+#include <cstddef>
+#include <array>
+#include <glad/gl.h>
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/filesystem/operations.hpp>
 #include <boost/log/trivial.hpp>
+#include "slic3r/GUI/GLModel.hpp"
+#include <vector>
+#include "libslic3r/Point.hpp"
+#include <utility>
+#include "libslic3r/Color.hpp"
+#include "slic3r/GUI/ImGuiWrapper.hpp"
+#include "slic3r/GUI/GLShader.hpp"
+#include "slic3r/GUI/3DScene.hpp"
+#include "libslic3r/Geometry.hpp"
+#include <math.h>
+#include <tuple>
+#include "libslic3r/Preset.hpp"
+#include "libslic3r/Config.hpp"
+#include <Eigen/Geometry>
 
 #if BOOST_VERSION >= 107800
 #include <boost/timer/timer.hpp>
+#include <algorithm>
+#include <cmath>
 #else
 #include <boost/timer.hpp>
 #endif
@@ -248,8 +267,8 @@ void Bed3D::Axes::render()
 }
 
 //BBS: add part plate logic
-bool Bed3D::set_shape(const Pointfs& printable_area, const double printable_height, const std::string& custom_model, bool force_as_custom,
-    const Vec2d& position, bool with_reset)
+bool Bed3D::set_shape(const Pointfs& printable_area, const double printable_height, std::vector<Pointfs> extruder_areas, std::vector<double> extruder_heights, const std::string& custom_model, bool force_as_custom,
+    const Vec2d position, bool with_reset)
 {
     /*auto check_texture = [](const std::string& texture) {
         boost::system::error_code ec; // so the exists call does not throw (e.g. after a permission problem)
@@ -286,7 +305,7 @@ bool Bed3D::set_shape(const Pointfs& printable_area, const double printable_heig
     }
 
     //BBS: add position related logic
-    if (m_bed_shape == printable_area && m_build_volume.printable_height() == printable_height && m_type == type && m_model_filename == model_filename && position == m_position)
+    if (m_bed_shape == printable_area && m_build_volume.printable_height() == printable_height && m_type == type && m_model_filename == model_filename && position == m_position && m_extruder_shapes == extruder_areas  && m_extruder_heights == extruder_heights)
         // No change, no need to update the UI.
         return false;
 
@@ -294,35 +313,38 @@ bool Bed3D::set_shape(const Pointfs& printable_area, const double printable_heig
     BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << boost::format(":current position {%1%,%2%}, new position {%3%, %4%}") % m_position.x() % m_position.y() % position.x() % position.y();
     m_position = position;
     m_bed_shape = printable_area;
+    m_extruder_shapes = extruder_areas;
+    m_extruder_heights = extruder_heights;
     if ((position(0) != 0) || (position(1) != 0)) {
         Pointfs new_bed_shape;
         for (const Vec2d& p : m_bed_shape) {
             Vec2d point(p(0) + m_position.x(), p(1) + m_position.y());
             new_bed_shape.push_back(point);
         }
-        m_build_volume = BuildVolume { new_bed_shape, printable_height };
+        std::vector<Pointfs> new_extruder_shapes;
+        for (const std::vector<Vec2d>& shape : m_extruder_shapes) {
+            std::vector<Vec2d> new_extruder_shape;
+            for (const Vec2d& p : shape) {
+                Vec2d point(p(0) + m_position.x(), p(1) + m_position.y());
+                new_extruder_shape.push_back(point);
+            }
+            new_extruder_shapes.push_back(new_extruder_shape);
+        }
+        m_build_volume = BuildVolume { new_bed_shape, printable_height, new_extruder_shapes, m_extruder_heights };
     }
     else
-        m_build_volume = BuildVolume { printable_area, printable_height };
+        m_build_volume = BuildVolume { printable_area, printable_height, m_extruder_shapes, m_extruder_heights };
     m_type = type;
     //m_texture_filename = texture_filename;
     m_model_filename = model_filename;
-    //BBS: add part plate logic
-    m_extended_bounding_box = this->calc_extended_bounding_box(false);
-
-    //BBS: add part plate logic
-
     //BBS add default bed
     m_triangles.reset();
-
     if (with_reset) {
         //m_texture.reset();
         m_model.reset();
     }
     //BBS: add part plate logic, always update model offset
-    //else {
-        update_model_offset();
-    //}
+    update_model_offset();//include m_extended_bounding_box = this->calc_extended_bounding_box();
 
     // Set the origin and size for rendering the coordinate system axes.
     m_axes.set_origin({ 0.0, 0.0, static_cast<double>(GROUND_Z) });
@@ -339,7 +361,7 @@ bool Bed3D::set_shape(const Pointfs& printable_area, const double printable_heig
 //BBS: add api to set position for partplate related bed
 void Bed3D::set_position(Vec2d& position)
 {
-    set_shape(m_bed_shape, m_build_volume.printable_height(), m_model_filename, false, position, false);
+    set_shape(m_bed_shape, m_build_volume.printable_height(), m_extruder_shapes, m_extruder_heights, m_model_filename, false, position, false);
 }
 
 void Bed3D::set_axes_mode(bool origin)
@@ -391,14 +413,16 @@ void Bed3D::render_internal(GLCanvas3D& canvas, const Transform3d& view_matrix, 
     case Type::Custom: { render_custom(canvas, view_matrix, projection_matrix, bottom); break; }
     }
 
+    render_gravity_arrow(view_matrix, projection_matrix);
+
     glsafe(::glDisable(GL_DEPTH_TEST));
 }
 
 //BBS: add partplate related logic
 // Calculate an extended bounding box from axes and current model for visualization purposes.
-BoundingBoxf3 Bed3D::calc_extended_bounding_box(bool consider_model_offset) const
+BoundingBoxf3 Bed3D::calc_printable_bounding_box() const
 {
-    BoundingBoxf3 out { m_build_volume.bounding_volume() };
+    BoundingBoxf3 out{m_build_volume.bounding_volume()};
 
     const Vec3d size = out.size();
     // ensures that the bounding box is set as defined or the following calls to merge() will not work as intented
@@ -408,19 +432,22 @@ BoundingBoxf3 Bed3D::calc_extended_bounding_box(bool consider_model_offset) cons
     out.min.z() = 0.0;
     out.max.z() = 0.0;
     // extend to contain axes
-    //BBS: add part plate related logic.
-    Vec3d offset{ m_position.x(), m_position.y(), 0.f };
-    //out.merge(m_axes.get_origin() + offset + m_axes.get_total_length() * Vec3d::Ones());
+    // BBS: add part plate related logic.
+    Vec3d offset{m_position.x(), m_position.y(), 0.f};
+    // out.merge(m_axes.get_origin() + offset + m_axes.get_total_length() * Vec3d::Ones());
     out.merge(Vec3d(0.f, 0.f, GROUND_Z) + offset + m_axes.get_total_length() * Vec3d::Ones());
     out.merge(out.min + Vec3d(-Axes::DefaultTipRadius, -Axes::DefaultTipRadius, out.max.z()));
-    //BBS: add part plate related logic.
-    if (consider_model_offset) {
-        // extend to contain model, if any
-        BoundingBoxf3 model_bb = m_model.get_bounding_box();
-        if (model_bb.defined) {
-            model_bb.translate(m_model_offset);
-            out.merge(model_bb);
-        }
+    return out;
+}
+
+BoundingBoxf3 Bed3D::calc_extended_bounding_box() const
+{
+    BoundingBoxf3 out;
+    out.merge(m_printable_bounding_box);
+    BoundingBoxf3 model_bb = m_model.get_bounding_box();
+    if (model_bb.defined) {
+        model_bb.translate(m_model_offset);
+        out.merge(model_bb);
     }
     return out;
 }
@@ -619,10 +646,17 @@ void Bed3D::update_model_offset()
     shift(2) = -0.03;
     Vec3d* model_offset_ptr = const_cast<Vec3d*>(&m_model_offset);
     *model_offset_ptr = shift;
+    //BBS: TODO: hack for current stl for BBL printer
+    if (std::string::npos != m_model_filename.find("bbl-3dp-"))
+    {
+        (*model_offset_ptr)(0) -= m_bed_shape[2].x() / 2.0f;
+        (*model_offset_ptr)(1) -= m_bed_shape[2].y() / 2.0f;
+    }
     (*model_offset_ptr)(2) = -0.41 + GROUND_Z;
 
     // update extended bounding box
-    const_cast<BoundingBoxf3&>(m_extended_bounding_box) = calc_extended_bounding_box();
+    const_cast<BoundingBoxf3 &>(m_printable_bounding_box) = calc_printable_bounding_box();
+    const_cast<BoundingBoxf3 &>(m_extended_bounding_box)  = calc_extended_bounding_box();
     m_triangles.reset();
 }
 
@@ -659,7 +693,8 @@ void Bed3D::update_bed_triangles()
         BOOST_LOG_TRIVIAL(error) << __FUNCTION__ << ":Unable to update plate triangles\n";
     }
     // update extended bounding box
-    const_cast<BoundingBoxf3&>(m_extended_bounding_box) = calc_extended_bounding_box();
+    const_cast<BoundingBoxf3 &>(m_printable_bounding_box) = calc_printable_bounding_box();
+    const_cast<BoundingBoxf3 &>(m_extended_bounding_box)  = calc_extended_bounding_box();
 }
 
 void Bed3D::render_model(const Transform3d& view_matrix, const Transform3d& projection_matrix)
@@ -677,15 +712,32 @@ void Bed3D::render_model(const Transform3d& view_matrix, const Transform3d& proj
     }
 
     if (!m_model.get_filename().empty()) {
-        GLShaderProgram* shader = wxGetApp().get_shader("gouraud_light");
+        const Camera &     camera      = wxGetApp().plater()->get_camera();
+        const Transform3d &view_matrix = camera.get_view_matrix();
+        const Transform3d &projection_matrix = camera.get_projection_matrix();
+        GLShaderProgram* shader = wxGetApp().get_shader("hotbed");
         if (shader != nullptr) {
             shader->start_using();
             shader->set_uniform("emission_factor", 0.0f);
-            const Transform3d model_matrix = Geometry::assemble_transform(m_model_offset);
+            Transform3d model_matrix = Geometry::assemble_transform(m_model_offset);
+            shader->set_uniform("volume_world_matrix",  model_matrix);
             shader->set_uniform("view_model_matrix", view_matrix * model_matrix);
             shader->set_uniform("projection_matrix", projection_matrix);
             const Matrix3d view_normal_matrix = view_matrix.matrix().block(0, 0, 3, 3) * model_matrix.matrix().block(0, 0, 3, 3).inverse().transpose();
             shader->set_uniform("view_normal_matrix", view_normal_matrix);
+            if (m_build_volume.get_extruder_area_count() > 0) {
+                const BuildVolume::BuildSharedVolume& shared_volume = m_build_volume.get_shared_volume();
+                std::array<float, 4>       xy_data       = shared_volume.data;
+                shader->set_uniform("print_volume.type", shared_volume.type);
+                shader->set_uniform("print_volume.xy_data", xy_data);
+                std::array<float, 2> zs = shared_volume.zs;
+                zs[0]                   = -1;
+                shader->set_uniform("print_volume.z_data", zs);
+            }
+            else {
+                //use -1 ad a invalid type
+                shader->set_uniform("print_volume.type", -1);
+            }
             m_model.render();
             shader->stop_using();
         }
@@ -704,6 +756,59 @@ void Bed3D::render_custom(GLCanvas3D& canvas, const Transform3d& view_matrix, co
 
     /*if (show_texture)
         render_texture(bottom, canvas);*/
+}
+
+void Bed3D::render_gravity_arrow(const Transform3d& view_matrix, const Transform3d& projection_matrix)
+{
+    // build_plate_tilt_{x,y} are kept in sync with the belt tilt (see TabPrinter), so
+    // reading them here covers both belt and non-belt tilted printers.
+    const Vec3d up_dir = build_plate_tilt_up_direction();
+    if (up_dir == Vec3d::UnitZ()) {
+        m_gravity_arrow.reset();
+        return;
+    }
+
+    // A plain line along the tilted "up" direction -- the way the layers lean, i.e.
+    // the gantry -- drawn like the bed axes (no tip: the other direction is not
+    // possible) and shorter than them, so it reads as a hint inside the YZ corner.
+    const float length = 0.6f * m_axes.get_total_length();
+    if (!m_gravity_arrow.is_initialized() || m_gravity_arrow_length != length) {
+        m_gravity_arrow.reset();
+        m_gravity_arrow.init_from(smooth_cylinder(16, /*Radius*/ length / 75.f, length));
+        m_gravity_arrow_length = length;
+    }
+
+    // The cylinder model points along +Z. Compute the rotation that aligns it with
+    // up_dir: rotation axis = cross(+Z, up_dir), angle = acos(dot(+Z, up_dir)).
+    Vec3d from = Vec3d::UnitZ();
+    Vec3d to   = up_dir;
+    double dot  = from.dot(to);
+    Transform3d rot = Transform3d::Identity();
+    if (dot < -0.9999) {
+        // Nearly opposite -- rotate 180 degrees around X
+        rot = Eigen::AngleAxisd(M_PI, Vec3d::UnitX()) * rot;
+    } else if (dot < 0.9999) {
+        Vec3d axis  = from.cross(to).normalized();
+        double angle = std::acos(std::clamp(dot, -1.0, 1.0));
+        rot = Eigen::AngleAxisd(angle, axis) * rot;
+    }
+
+    GLShaderProgram* shader = wxGetApp().get_shader("flat");
+    if (shader == nullptr)
+        return;
+
+    glsafe(::glEnable(GL_DEPTH_TEST));
+    shader->start_using();
+
+    const Camera& camera = wxGetApp().plater()->get_camera();
+    Transform3d model_matrix = Eigen::Translation3d(m_axes.get_origin()) * rot;
+    shader->set_uniform("view_model_matrix", camera.get_view_matrix() * model_matrix);
+    shader->set_uniform("projection_matrix", camera.get_projection_matrix());
+
+    m_gravity_arrow.set_color({ 1.0f, 0.85f, 0.0f, 1.0f }); // yellow
+    m_gravity_arrow.render();
+
+    shader->stop_using();
 }
 
 void Bed3D::render_default(bool bottom, const Transform3d& view_matrix, const Transform3d& projection_matrix)

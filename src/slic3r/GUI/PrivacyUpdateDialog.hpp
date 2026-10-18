@@ -5,6 +5,11 @@
 #include "Widgets/Button.hpp"
 #include "Widgets/Label.hpp"
 #include "Widgets/WebView.hpp"
+#include <wx/event.h>
+#include <wx/string.h>
+#include <wx/gdicmn.h>
+#include <string>
+#include <wx/sizer.h>
 #include <wx/webview.h>
 #include <wx/progdlg.h>
 #include <wx/simplebook.h>
@@ -17,7 +22,7 @@ wxDECLARE_EVENT(EVT_PRIVACY_UPDATE_CANCEL, wxCommandEvent);
 class PrivacyUpdateDialog : public DPIDialog
 {
 public:
-    enum ButtonStyle {
+    enum VisibleButtons { // ORCA VisibleButtons instead ButtonStyle 
         ONLY_CONFIRM = 0,
         CONFIRM_AND_CANCEL = 1,
         MAX_STYLE_NUM = 2
@@ -26,7 +31,7 @@ public:
         wxWindow* parent,
         wxWindowID      id = wxID_ANY,
         const wxString& title = wxEmptyString,
-        enum ButtonStyle btn_style = CONFIRM_AND_CANCEL,
+        enum VisibleButtons btn_style = CONFIRM_AND_CANCEL, // ORCA VisibleButtons instead ButtonStyle 
         const wxPoint& pos = wxDefaultPosition,
         const wxSize& size = wxDefaultSize,
         long style = wxPD_APP_MODAL| wxCAPTION

@@ -1,4 +1,8 @@
 #include "StateHandler.hpp"
+#include <wx/event.h>
+#include "slic3r/GUI/Widgets/StateColor.hpp"
+#include <vector>
+#include <algorithm>
 #include <wx/window.h>
 
 wxDEFINE_EVENT(EVT_ENABLE_CHANGED, wxCommandEvent);
@@ -35,7 +39,7 @@ void StateHandler::attach_child(wxWindow *child)
 
 void StateHandler::remove_child(wxWindow *child)
 {
-    children_.erase(std::remove_if(children_.begin(), children_.end(), 
+    children_.erase(std::remove_if(children_.begin(), children_.end(),
             [child](auto &c) { return c->owner_ == child; }), children_.end());
     states2_ = 0;
     for (auto & c : children_) states2_ |= c->states();

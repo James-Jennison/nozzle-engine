@@ -1,12 +1,16 @@
-//**********************************************************/
-/* File: uiDeviceUpdateVersion.h
+/**********************************************************
+* File: uiDeviceUpdateVersion.h
 *  Description: The panel with firmware info
 * 
 *  \n class uiDeviceUpdateVersion
-//**********************************************************/
+**********************************************************/
 
 #pragma once
+#include <wx/event.h>
+#include <wx/gdicmn.h>
+#include "slic3r/GUI/DeviceCore/DevFirmware.h"
 #include <wx/panel.h>
+#include <wx/string.h>
 #include "slic3r/GUI/wxExtensions.hpp"
 #include "slic3r/GUI/DeviceManager.hpp"
 
@@ -29,7 +33,7 @@ public:
     ~uiDeviceUpdateVersion() = default;
 
 public:
-    void  UpdateInfo(const MachineObject::ModuleVersionInfo& info);
+    void  UpdateInfo(const DevFirmwareVersionInfo& info);
 
 private:
     void  CreateWidgets();

@@ -2,6 +2,18 @@
 #define slic3r_GUI_StepCtrlBase_hpp_
 
 #include "StaticBox.hpp"
+#include <wx/anybutton.h>
+#include <wx/event.h>
+#include "slic3r/GUI/Widgets/StateColor.hpp"
+#include <vector>
+#include <wx/string.h>
+#include <wx/gdicmn.h>
+#include <wx/checklst.h>
+#include "slic3r/GUI/wxExtensions.hpp"
+#include <wx/dc.h>
+
+class wxDC;
+class wxWindow;
 
 wxDECLARE_EVENT( EVT_STEP_CHANGING, wxCommandEvent );
 wxDECLARE_EVENT( EVT_STEP_CHANGED, wxCommandEvent );
@@ -10,7 +22,7 @@ class StepCtrlBase : public StaticBox
 {
 protected:
     wxFont font_tip;
-    StateColor clr_bar; 
+    StateColor clr_bar;
     StateColor clr_step;
     StateColor clr_text;
     StateColor clr_tip;
@@ -102,5 +114,29 @@ public:
 private:
     void doRender(wxDC &dc) override;
 };
+
+
+class FilamentStepIndicator : public StepCtrlBase
+
+{
+    ScalableBitmap bmp_ok;
+    //wxBitmap bmp_extruder;
+    wxString m_slot_information = "";
+
+public:
+    FilamentStepIndicator(wxWindow* parent,
+        wxWindowID      id,
+        const wxPoint& pos = wxDefaultPosition,
+        const wxSize& size = wxDefaultSize,
+        long            style = 0);
+
+    virtual void Rescale();
+
+    void SelectNext();
+    void SetSlotInformation(wxString slot);
+private:
+    void doRender(wxDC& dc) override;
+};
+
 
 #endif // !slic3r_GUI_StepCtrlBase_hpp_

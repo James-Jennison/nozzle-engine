@@ -1,6 +1,17 @@
+#include <boost/variant/get.hpp>
+#include <boost/log/trivial.hpp>
+#include <boost/chrono/duration.hpp>
 #include <exception>
+#include "slic3r/GUI/Jobs/ThreadSafeQueue.hpp"
+#include <utility>
+#include <future>
+#include <functional>
+#include <memory>
+#include "libslic3r/Thread.hpp"
+#include "slic3r/GUI/Jobs/Job.hpp"
 
 #include "BoostThreadWorker.hpp"
+#include "slic3r/GUI/Jobs/ProgressIndicator.hpp"
 
 namespace Slic3r { namespace GUI {
 
@@ -170,7 +181,7 @@ bool BoostThreadWorker::wait_for_idle(unsigned timeout_ms)
     return !timeout_reached;
 }
 
-bool BoostThreadWorker::push(std::unique_ptr<Job> job)
+bool BoostThreadWorker::push(std::shared_ptr<Job> job)
 {
     if (!job)
         return false;

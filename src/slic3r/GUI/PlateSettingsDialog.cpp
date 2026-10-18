@@ -1,9 +1,32 @@
 #include "PlateSettingsDialog.hpp"
 #include "MsgDialog.hpp"
 #include "Widgets/DialogButtons.hpp"
-
-#include <boost/algorithm/string/predicate.hpp>
+#include <climits>
+#include <wx/event.h>
+#include <wx/gdicmn.h>
+#include "slic3r/GUI/Widgets/ComboBox.hpp"
+#include <wx/colour.h>
+#include <wx/string.h>
+#include <wx/valtext.h>
+#include "slic3r/GUI/Widgets/Label.hpp"
+#include "slic3r/GUI/Gizmos/GLGizmoBase.hpp"
+#include <algorithm>
+#include <cstdlib>
+#include <wx/textctrl.h>
+#include <string>
+#include <wx/panel.h>
+#include "slic3r/GUI/wxExtensions.hpp"
+#include <vector>
+#include "slic3r/GUI/GUI_App.hpp"
+#include "slic3r/GUI/GUI_Utils.hpp"
+#include <wx/sizer.h>
+#include "slic3r/GUI/Widgets/TextInput.hpp"
 #include "libslic3r/Config.hpp"
+#include "libslic3r/PrintConfig.hpp"
+#include "libslic3r/FilamentMixer.hpp"
+#include "slic3r/GUI/Widgets/StateColor.hpp"
+#include "libslic3r/ParameterUtils.hpp"
+#include <cstddef>
 
 namespace Slic3r { namespace GUI {
 static constexpr int MIN_LAYER_VALUE = 2;
@@ -36,7 +59,7 @@ LayerNumberTextInput::LayerNumberTextInput(wxWindow* parent, int layer_number, w
 {
     GetTextCtrl()->SetValidator(wxTextValidator(wxFILTER_DIGITS));
     GetTextCtrl()->SetFont(::Label::Body_14);
-    Append(_L("End"));
+    Append(_L_CONTEXT("End", "Layer range"));
     Append(_L("Customize"));
     if (m_value_type == ValueType::End)
         SetSelection(0);
@@ -48,7 +71,7 @@ LayerNumberTextInput::LayerNumberTextInput(wxWindow* parent, int layer_number, w
     Bind(wxEVT_TEXT, [this](auto& evt) {
             if (m_value_type == ValueType::End) {
                 // TextCtrl->SetValue() will generate a wxEVT_TEXT event
-                GetTextCtrl()->ChangeValue(_L("End"));
+                GetTextCtrl()->ChangeValue(_L_CONTEXT("End", "Layer range"));
                 return;
             }
             evt.Skip();
@@ -149,7 +172,7 @@ void LayerNumberTextInput::update_label()
 
 void LayerNumberTextInput::set_layer_number(int layer_number)
 {
-    m_layer_number = layer_number; 
+    m_layer_number = layer_number;
     if (layer_number == MAX_LAYER_VALUE)
         m_value_type = ValueType::End;
     else
@@ -304,8 +327,8 @@ void OtherLayersSeqPanel::append_layer(const LayerSeqInfo* layer_info)
     auto drag_canvas = new DragCanvas(m_layer_input_panel, extruder_colours, order);
 
     if (layer_info) {
-        begin_layer_input->set_layer_number(layer_info->begin_layer_number);
-        end_layer_input->set_layer_number(layer_info->end_layer_number);
+        begin_layer_input->set_layer_number(std::max(MIN_LAYER_VALUE, layer_info->begin_layer_number));
+        end_layer_input->set_layer_number(std::min(MAX_LAYER_VALUE, layer_info->end_layer_number));
         drag_canvas->set_shape_list(extruder_colours, layer_info->print_sequence);
     }
 
@@ -316,7 +339,7 @@ void OtherLayersSeqPanel::append_layer(const LayerSeqInfo* layer_info)
     single_layer_input_sizer->Add(end_layer_input, 0, wxLEFT | wxRIGHT | wxALIGN_CENTER, FromDIP(5));
     single_layer_input_sizer->AddStretchSpacer();
     single_layer_input_sizer->Add(drag_canvas, 0, wxLEFT | wxALIGN_CENTER, FromDIP(5));
-    layer_panel_sizer->Add(single_layer_input_sizer, 0, wxEXPAND | wxALIGN_CENTER | wxBOTTOM, FromDIP(10));
+    layer_panel_sizer->Add(single_layer_input_sizer, 0, wxEXPAND | wxBOTTOM, FromDIP(10));
     m_layer_input_sizer_list.push_back(single_layer_input_sizer);
     m_begin_layer_input_list.push_back(begin_layer_input);
     m_end_layer_input_list.push_back(end_layer_input);
@@ -369,9 +392,6 @@ void OtherLayersSeqPanel::sync_layers_print_seq(int selection, const std::vector
 PlateSettingsDialog::PlateSettingsDialog(wxWindow* parent, const wxString& title, bool only_layer_seq, const wxPoint& pos, const wxSize& size, long style)
 :DPIDialog(parent, wxID_ANY, title, pos, size, style)
 {
-    std::string icon_path = (boost::format("%1%/images/Snapmaker_OrcaTitle.ico") % resources_dir()).str();
-    SetIcon(wxIcon(encode_path(icon_path.c_str()), wxBITMAP_TYPE_ICO));
-
     SetBackgroundColour(*wxWHITE);
     wxBoxSizer* m_sizer_main = new wxBoxSizer(wxVERTICAL);
     auto m_line_top = new wxPanel(this, wxID_ANY, wxDefaultPosition, wxSize(FromDIP(650), -1));
@@ -389,14 +409,31 @@ PlateSettingsDialog::PlateSettingsDialog(wxWindow* parent, const wxString& title
     top_sizer->Add(plate_name_txt, 0, wxALIGN_CENTER_VERTICAL | wxALIGN_LEFT | wxTOP | wxBOTTOM, FromDIP(5));
     top_sizer->Add(m_ti_plate_name, 0, wxALIGN_CENTER_VERTICAL | wxALIGN_RIGHT | wxTOP | wxBOTTOM, FromDIP(5));
 
-    m_bed_type_choice = new ComboBox(this, wxID_ANY, wxEmptyString, wxDefaultPosition, wxSize(FromDIP(240), -1), 0,
-                                     NULL, wxCB_READONLY);
-    for (BedType i = btDefault; i < btCount; i = BedType(int(i) + 1)) {
-      m_bed_type_choice->Append(to_bed_type_name(i));
+    m_bed_type_choice = new ComboBox( this, wxID_ANY, wxEmptyString, wxDefaultPosition, wxSize(FromDIP(240),-1), 0, NULL, wxCB_READONLY );
+    auto pm           = wxGetApp().plater()->get_curr_printer_model();
+    if (pm) {
+        m_cur_combox_bed_types.clear();
+        m_bed_type_choice->AppendString(_L("Same as Global Plate Type"));
+        const ConfigOptionDef *bed_type_def = print_config_def.get("curr_bed_type");
+        int                    index        = 0;
+        for (auto item : bed_type_def->enum_labels) {
+            index++;
+            bool find = std::find(pm->not_support_bed_types.begin(), pm->not_support_bed_types.end(), item) != pm->not_support_bed_types.end();
+            if (!find) {
+                m_bed_type_choice->AppendString(_L(item));
+                m_cur_combox_bed_types.emplace_back(BedType(index));
+            }
+        }
+
+    } else {
+        for (BedType i = btDefault; i < btCount; i = BedType(int(i) + 1)) {
+            m_bed_type_choice->Append(to_bed_type_name(i));
+        }
     }
 
-    if (!wxGetApp().preset_bundle->is_bbl_vendor())
-      m_bed_type_choice->Disable();
+    auto &preset_bundle = *wxGetApp().preset_bundle;
+    const auto &printer_config = preset_bundle.printers.get_edited_preset().config;
+    m_bed_type_choice->Enable(preset_bundle.is_bbl_vendor() || printer_config.opt_bool("support_multi_bed_types"));
 
     wxStaticText* m_bed_type_txt = new wxStaticText(this, wxID_ANY, _L("Bed type"));
     m_bed_type_txt->SetFont(Label::Body_14);
@@ -454,13 +491,38 @@ PlateSettingsDialog::PlateSettingsDialog(wxWindow* parent, const wxString& title
     m_drag_canvas->Hide();
     top_sizer->Add(0, 0, 0, wxALIGN_CENTER_VERTICAL | wxALIGN_LEFT, 0);
     top_sizer->Add(m_drag_canvas, 0, wxALIGN_CENTER_VERTICAL | wxALIGN_RIGHT | wxBOTTOM, FromDIP(10));
-    
+
     m_sizer_main->Add(top_sizer, 0, wxEXPAND | wxTOP | wxLEFT | wxRIGHT, FromDIP(30));
 
     // Other layer filament sequence
     m_other_layers_seq_panel = new OtherLayersSeqPanel(this);
     m_sizer_main->AddSpacer(FromDIP(5));
     m_sizer_main->Add(m_other_layers_seq_panel, 0, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(30));
+
+    // A mixed-color slot resolves to a different physical filament per layer, so a user-defined
+    // filament order cannot be honoured; grey out the choice and explain that in the dialog.
+    {
+        auto &proj_cfg     = wxGetApp().preset_bundle->project_config;
+        auto *is_mixed_opt = proj_cfg.option<ConfigOptionBools>("filament_is_mixed");
+        if (is_mixed_opt && Slic3r::has_any_mixed_filament(is_mixed_opt->values)) {
+            m_first_layer_print_seq_choice->Enable(false);
+            m_other_layers_seq_panel->enable_seq_choice(false);
+
+            auto *warn_sizer = new wxBoxSizer(wxHORIZONTAL);
+            auto *warn_icon  = new wxStaticBitmap(this, wxID_ANY, create_scaled_bitmap("warning", this, 16),
+                                                  wxDefaultPosition, wxSize(FromDIP(16), FromDIP(16)));
+            auto *warn_text  = new wxStaticText(this, wxID_ANY,
+                _L("The filament list contains mixed filaments. Custom filament sequence will not take effect."));
+            warn_text->SetForegroundColour(StateColor::darkModeColorFor(wxColour("#FF6F00")));
+            warn_text->SetFont(Label::Body_12);
+            warn_text->Wrap(FromDIP(300));
+
+            warn_sizer->Add(warn_icon, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(5));
+            warn_sizer->Add(warn_text, 1, wxALIGN_CENTER_VERTICAL, 0);
+            m_sizer_main->AddSpacer(FromDIP(5));
+            m_sizer_main->Add(warn_sizer, 0, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(30));
+        }
+    }
 
     auto dlg_btns = new DialogButtons(this, {"OK", "Cancel"});
 
@@ -516,7 +578,13 @@ PlateSettingsDialog::~PlateSettingsDialog()
 void PlateSettingsDialog::sync_bed_type(BedType type)
 {
     if (m_bed_type_choice != nullptr) {
-        m_bed_type_choice->SetSelection(int(type));
+        for (int i = 0; i < m_cur_combox_bed_types.size(); i++) {
+            if (m_cur_combox_bed_types[i] == type) {
+                m_bed_type_choice->SetSelection(i + 1);//+1 because same as global
+                return;
+            }
+        }
+        m_bed_type_choice->SetSelection(0);
     }
 }
 
@@ -578,60 +646,11 @@ wxString PlateSettingsDialog::to_bed_type_name(BedType bed_type) {
     case btDefault:
         return _L("Same as Global Plate Type");
     default: {
-        const ConfigOptionDef *def = print_config_def.get("curr_bed_type");
-        if (!def || !def->enum_keys_map)
-            return _L("Same as Global Bed Type");
-        std::string key;
-        for (const auto &kv : *def->enum_keys_map) {
-            if (kv.second == int(bed_type)) {
-                key = kv.first;
-                break;
-            }
+        const ConfigOptionDef *bed_type_def = print_config_def.get("curr_bed_type");
+        return _(bed_type_def->enum_labels[size_t(bed_type) - 1]);
         }
-        if (key.empty())
-            return _L("Same as Global Bed Type");
-        auto match_label = [&](const std::vector<std::string> &vals, const std::vector<std::string> &labels) -> wxString {
-            for (size_t i = 0; i < vals.size() && i < labels.size(); ++i)
-                if (vals[i] == key)
-                    return _(labels[i]);
-            return {};
-        };
-
-        // Match Plater sidebar: U1 uses enum_labels_u1 or enum_labels_ex before generic enum_labels,
-        // so e.g. btPEI shows "Smooth PEI Plate" not "Smooth High Temp Plate".
-        bool        is_snapmaker_u1   = false;
-        bool        support_multi     = false;
-        const auto *printer_model_opt = wxGetApp().preset_bundle->printers.get_edited_preset().config.option<ConfigOptionString>("printer_model");
-        if (printer_model_opt) {
-            const std::string &printer_model = printer_model_opt->value;
-            is_snapmaker_u1 = boost::icontains(printer_model, "Snapmaker") && boost::icontains(printer_model, "U1");
-            support_multi   = wxGetApp().preset_bundle->printers.get_edited_preset().config.opt_bool("support_multi_bed_types");
-        }
-
-        wxString lab;
-        if (is_snapmaker_u1 && !support_multi) {
-            lab = match_label(def->enum_values_u1, def->enum_labels_u1);
-            if (!lab.empty())
-                return lab;
-        } else if (is_snapmaker_u1 && support_multi) {
-            lab = match_label(def->enum_values_ex, def->enum_labels_ex);
-            if (!lab.empty())
-                return lab;
-        }
-
-        lab = match_label(def->enum_values, def->enum_labels);
-        if (!lab.empty())
-            return lab;
-        lab = match_label(def->enum_values_ex, def->enum_labels_ex);
-        if (!lab.empty())
-            return lab;
-        lab = match_label(def->enum_values_u1, def->enum_labels_u1);
-        if (!lab.empty())
-            return lab;
-        return _(key);
     }
-    }
-    return _L("Same as Global Bed Type");
+    return _L("Same as Global Plate Type");
 }
 
 wxString PlateSettingsDialog::to_print_sequence_name(PrintSequence print_seq) {
@@ -656,6 +675,17 @@ wxString PlateSettingsDialog::get_plate_name() const {
 
 void PlateSettingsDialog::set_plate_name(const wxString &name) { m_ti_plate_name->GetTextCtrl()->SetValue(name); }
 
+BedType PlateSettingsDialog::get_bed_type_choice()
+{
+    if (m_bed_type_choice != nullptr) {
+        int choice = m_bed_type_choice->GetSelection();
+        if (choice > 0) {
+            return m_cur_combox_bed_types[choice - 1];//-1 because same as globlal
+        }
+    }
+    return BedType::btDefault;
+};
+
 std::vector<int> PlateSettingsDialog::get_first_layer_print_seq()
 {
     return m_drag_canvas->get_shape_list_order();
@@ -666,9 +696,6 @@ std::vector<int> PlateSettingsDialog::get_first_layer_print_seq()
 PlateNameEditDialog::PlateNameEditDialog(wxWindow *parent, wxWindowID id, const wxString &title, const wxPoint &pos, const wxSize &size, long style)
     : DPIDialog(parent, id, title, pos, size, style)
 {
-    std::string icon_path = (boost::format("%1%/images/Snapmaker_OrcaTitle.ico") % resources_dir()).str();
-    SetIcon(wxIcon(encode_path(icon_path.c_str()), wxBITMAP_TYPE_ICO));
-
     SetBackgroundColour(*wxWHITE);
     wxBoxSizer *m_sizer_main = new wxBoxSizer(wxVERTICAL);
     auto        m_line_top   = new wxPanel(this, wxID_ANY, wxDefaultPosition, wxSize(FromDIP(400), -1));

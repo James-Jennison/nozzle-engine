@@ -2,6 +2,13 @@
 #define slic3r_Polygon_hpp_
 
 #include "libslic3r.h"
+#include <initializer_list>
+#include <utility>
+#include <cstddef>
+#include <algorithm>
+#include <iterator>
+#include <cmath>
+#include <cassert>
 #include <vector>
 #include <string>
 #include "Line.hpp"
@@ -61,7 +68,6 @@ public:
     bool make_clockwise();
     bool is_valid() const { return this->points.size() >= 3; }
     void douglas_peucker(double tolerance);
-    void round_to_grid(double grid_size);
 
     // Does an unoriented polygon contain a point?
     bool contains(const Point &point) const { return Slic3r::contains(*this, point, true); }
@@ -158,7 +164,7 @@ inline void polygons_append(Polygons &dst, Polygons &&src)
     }
 }
 
-Polygons polygons_simplify(const Polygons &polys, double tolerance, bool strictly_simple = true);
+Polygons polygons_simplify(const Polygons &polys, double tolerance);
 
 inline void polygons_rotate(Polygons &polys, double angle)
 {

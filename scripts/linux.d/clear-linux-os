@@ -1,17 +1,14 @@
 #!/bin/bash
 # these are the Clear Linux specific build functions
-export FOUND_GTK3
-FOUND_GTK3=$(find /usr/lib64/libgtk-3.so.* 2>/dev/null | tail -n 1 || true)
 
-# Addtional bundles for OrcaSlicer
+# Additional bundles for OrcaSlicer
 export REQUIRED_BUNDLES=(
     c-basic
     dev-utils
     devpkg-curl
-    devpkg-glew
-    devpkg-glu
     devpkg-gstreamer
     devpkg-gtk3
+    devpkg-libglvnd
     devpkg-libmspack
     devpkg-libsecret
     devpkg-openssl
@@ -22,6 +19,7 @@ export REQUIRED_BUNDLES=(
     perl-basic
     texinfo
     wget
+    nasm
 )
 
 if [[ -n "$UPDATE_LIB" ]]

@@ -5,14 +5,12 @@
 //   nozzle-engine <request.txt>      slice; prints "progress <0-100>" lines on stdout, exits 0 on success
 //   nozzle-engine --version
 //   nozzle-engine --schema           every print/filament/printer setting libslic3r defines, as JSON on stdout
-//   nozzle-engine --full-spectrum <request.json>
-//                                    Full Spectrum colour mixing (Snapmaker Orca's Color Mixing list and Color Mixing
-//                                    Match, see full_spectrum.cpp): one JSON response on stdout; exit 0 success,
-//                                    1 the operation failed, 2 bad request (response {"error": "..."})
+//   nozzle-engine --paint <request.json>            paint tools: brush / fill strokes and painted pieces (paint_ops.cpp)
+//   nozzle-engine --semantic-paint <request.json>   AI auto-paint ops (semantic_paint_op.cpp; the engine makes no provider calls)
+//   nozzle-engine --mixed-filament <request.json>
+//                                    Orca 2.5.0 mixed filaments (display/add/update/remove/match/presets/slice_overrides; see
+//                                    mixed_filament.cpp): one JSON response on stdout; exit 0 success, 1 failed, 2 bad request.
 //   nozzle-engine --plate <request.json>           plate tools (arrange, auto-orient, cut): see plate_ops.cpp
-//   nozzle-engine --color-mix <request.json>
-//                                    PrusaSlicer 2.9.6 colour mixing (virtual extruders; see color_mix.cpp): one JSON
-//                                    response on stdout, exit codes as --full-spectrum
 //
 // The request file uses the Web App's line format (one field per line, tab-separated):
 //   out\t<gcode path>
@@ -21,23 +19,22 @@
 //   object\t<model path>\t<x mm>\t<y mm>\t<rotation z deg>\t<scale>\t<tool index, 1-based, 0 = default>
 //   object_set\t<object number, 1-based, in object line order>\t<key>\t<value>
 //                                (repeatable) a per-object print setting, as Orca's object list sets them
-//   virtual_extruders\t<path>    (optional, at most once) PrusaSlicer 2.9.6 virtual extruders, a JSON file in the
-//                                Metadata/Prusa_Slicer_full_spectrum.json format; a tool index or painted state equal
-//                                to a virtual id then prints by PrusaSlicer's layer cycle
 // x/y are relative to the bed centre, as in the Web App.
 //
 // stdout carries only the progress lines: libslic3r's own log output (Boost.Log) is sent to stderr with everything else.
 // Exit codes: 0 success, 1 slice failed (message on stderr), 2 bad usage/request, 3 cancelled (SIGINT/SIGTERM).
 // Everything is local; nothing here performs network I/O.
 #include "slic3r_engine.hpp"
-#include "full_spectrum.hpp"
-#include "color_mix.hpp"
+#include "mixed_filament.hpp"
+#include "semantic_paint_op.hpp"
+#include "paint_ops.hpp"
 #include "plate_ops.hpp"
 #include "contract_cli.hpp"
 
 #include <libslic3r/PrintConfig.hpp>
 #include <libslic3r/Preset.hpp>
 
+#include <algorithm>
 #include <atomic>
 #include <cfloat>
 #include <chrono>
@@ -64,7 +61,10 @@ struct Request {
     std::vector<std::pair<std::string, std::string>> overrides;
     std::vector<std::tuple<std::string, engine::ModelTransform, int>> objects;
     std::vector<std::tuple<size_t, std::string, std::string>> object_settings;
-    std::string virtual_extruders_path;
+    std::vector<std::pair<size_t, std::string>> object_parts;                       // object number, volume spec
+    std::vector<std::tuple<size_t, double, double, std::string, std::string>> object_ranges; // object number, z0, z1, key, value
+    std::vector<std::pair<size_t, std::vector<double>>> object_layers;              // object number, z / height pairs
+    std::vector<std::tuple<size_t, double, double, double, std::string>> object_scales; // object number, sx, sy, sz, mirror axes ("xz")
 };
 
 // Same parser as nozzle/bridge/wasm/wasm_engine.cpp, so a request written for one engine works for the other.
@@ -93,20 +93,40 @@ Request parse(const std::string& text) {
             size_t n = 0;
             try { n = std::stoul(f[1]); } catch (const std::logic_error&) { throw BadRequest("Bad object number in object_set line: " + line); }
             r.object_settings.emplace_back(n, f[2], f.size() == 4 ? f[3] : "");
-        } else if (f[0] == "virtual_extruders" && f.size() == 2) {
-            if (!r.virtual_extruders_path.empty()) throw BadRequest("Only one virtual_extruders line is allowed.");
-            r.virtual_extruders_path = f[1];
+        } else if ((f[0] == "object_part" && f.size() == 3) || (f[0] == "object_range" && (f.size() == 6 || f.size() == 5)) ||
+                   (f[0] == "object_layers" && f.size() == 3) || (f[0] == "object_scale" && (f.size() == 5 || f.size() == 6))) {
+            size_t n = 0;
+            try {
+                n = std::stoul(f[1]);
+                if (f[0] == "object_part") r.object_parts.emplace_back(n, f[2]);
+                else if (f[0] == "object_range") r.object_ranges.emplace_back(n, std::stod(f[2]), std::stod(f[3]), f[4], f.size() == 6 ? f[5] : "");
+                else if (f[0] == "object_scale") r.object_scales.emplace_back(n, std::stod(f[2]), std::stod(f[3]), std::stod(f[4]), f.size() == 6 ? f[5] : "");
+                else {
+                    std::vector<double> v; std::stringstream ns(f[2]); std::string num;
+                    while (std::getline(ns, num, ',')) v.push_back(std::stod(num));
+                    r.object_layers.emplace_back(n, v);
+                }
+            } catch (const std::logic_error&) { throw BadRequest("Bad number in " + f[0] + " line: " + line); }
         } else throw BadRequest("Unrecognised request line: " + f[0]);
     }
     if (r.out.empty() || r.objects.empty() || r.profiles.empty()) throw BadRequest("The slice request is incomplete.");
     for (const auto& s : r.object_settings)
         if (std::get<0>(s) < 1 || std::get<0>(s) > r.objects.size()) throw BadRequest("object_set names an object that isn't in the request.");
+    auto known = [&](size_t n, const char* what) { if (n < 1 || n > r.objects.size()) throw BadRequest(std::string(what) + " names an object that isn't in the request."); };
+    for (const auto& p : r.object_parts) known(p.first, "object_part");
+    for (const auto& p : r.object_ranges) known(std::get<0>(p), "object_range");
+    for (const auto& p : r.object_layers) known(p.first, "object_layers");
+    for (const auto& [n, sx, sy, sz, mirror] : r.object_scales) {
+        known(n, "object_scale");
+        if (!(sx > 0 && sy > 0 && sz > 0)) throw BadRequest("object_scale factors must be positive; mirror with the axes field.");
+        engine::ModelTransform& t = std::get<1>(r.objects[n - 1]);
+        t.scale_x = sx; t.scale_y = sy; t.scale_z = sz;
+        t.mirror_x = mirror.find('x') != std::string::npos; t.mirror_y = mirror.find('y') != std::string::npos; t.mirror_z = mirror.find('z') != std::string::npos;
+    }
     // The shared pipeline skips a profile path it cannot read; here a missing input is a request error instead.
     auto readable = [](const std::string& p) { std::ifstream f(p, std::ios::binary); return f.good(); };
     for (const auto& p : r.profiles) if (!readable(p)) throw BadRequest("Cannot read profile " + p);
     for (const auto& o : r.objects) if (!readable(std::get<0>(o))) throw BadRequest("Cannot read model " + std::get<0>(o));
-    if (!r.virtual_extruders_path.empty() && !readable(r.virtual_extruders_path))
-        throw BadRequest("Cannot read virtual extruders " + r.virtual_extruders_path);
     return r;
 }
 
@@ -242,9 +262,8 @@ int main(int argc, char** argv) {
         std::cout << "nozzle-engine 1 (libslic3r, shared Android pipeline, native)" << std::endl;
         return 0;
     }
-    if (argc == 3 && (std::string(argv[1]) == "--full-spectrum" || std::string(argv[1]) == "--color-mix" || std::string(argv[1]) == "--plate" || std::string(argv[1]) == "--option-states" || std::string(argv[1]) == "--config-checks")) {
+    if (argc == 3 && (std::string(argv[1]) == "--mixed-filament" || std::string(argv[1]) == "--semantic-paint" || std::string(argv[1]) == "--paint" || std::string(argv[1]) == "--plate" || std::string(argv[1]) == "--option-states" || std::string(argv[1]) == "--config-checks")) {
         const std::string mode = argv[1];
-        const bool color_mix = mode == "--color-mix";
         std::string request, response;
         int code = 2;
         std::ifstream f(argv[2], std::ios::binary);
@@ -253,8 +272,10 @@ int main(int argc, char** argv) {
             request = ss.str();
             code = mode == "--option-states" ? nozzle_contract::run_option_states(request, response)
                  : mode == "--config-checks" ? nozzle_contract::run_config_checks(request, response)
-                 : mode == "--plate" ? nozzle_plate::run_plate(request, response)
-                 : color_mix ? nozzle_cm::run_color_mix(request, response) : nozzle_fs::run_full_spectrum(request, response);
+                 : mode == "--mixed-filament" ? nozzle_mf::run_mixed_filament(request, response)
+                 : mode == "--semantic-paint" ? nozzle_sp::run_semantic_paint(request, response)
+                 : mode == "--paint" ? nozzle_paint::run_paint(request, response)
+                 : nozzle_plate::run_plate(request, response);
         } else {
             response = "{\"error\":" + json_string(std::string("Cannot read request file ") + argv[2]) + "}";
         }
@@ -263,24 +284,15 @@ int main(int argc, char** argv) {
         return code;
     }
     if (argc != 2) {
-        std::cerr << "usage: nozzle-engine <request.txt> | --version | --schema | --full-spectrum <request.json> | --color-mix <request.json> | --plate <request.json> | --option-states <request.json> | --config-checks <request.json>" << std::endl;
+        std::cerr << "usage: nozzle-engine <request.txt> | --version | --schema | --mixed-filament <request.json> | --semantic-paint <request.json> | --paint <request.json> | --plate <request.json> | --option-states <request.json> | --config-checks <request.json>" << std::endl;
         return 2;
     }
     Request req;
-    std::string virtual_extruders_json;
     try {
         std::ifstream f(argv[1], std::ios::binary);
         if (!f) throw BadRequest(std::string("Cannot read request file ") + argv[1]);
         std::stringstream ss; ss << f.rdbuf();
         req = parse(ss.str());
-        if (!req.virtual_extruders_path.empty()) {
-            std::ifstream vf(req.virtual_extruders_path, std::ios::binary);
-            std::stringstream vs; vs << vf.rdbuf();
-            virtual_extruders_json = vs.str();
-            std::string why;
-            if (!nozzle_cm::check_virtual_extruders_file(virtual_extruders_json, why))
-                throw BadRequest("Bad virtual extruders file " + req.virtual_extruders_path + ": " + why);
-        }
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
         return 2;
@@ -308,7 +320,15 @@ int main(int argc, char** argv) {
         try {
             std::vector<engine::ObjectExtras> extras(req.objects.size());
             for (const auto& [n, key, value] : req.object_settings) extras[n - 1].settings.emplace_back(key, value);
-            engine::slice_multi_object(req.objects, req.out, req.profiles, req.overrides, extras, virtual_extruders_json);
+            for (const auto& [n, spec] : req.object_parts) extras[n - 1].volume_specs += (extras[n - 1].volume_specs.empty() ? "" : ";") + spec;
+            for (const auto& [n, z0, z1, key, value] : req.object_ranges) {
+                auto& ranges = extras[n - 1].layer_ranges;
+                auto it = std::find_if(ranges.begin(), ranges.end(), [&](const engine::LayerRange& lr) { return lr.z0 == z0 && lr.z1 == z1; });
+                if (it == ranges.end()) { ranges.push_back({z0, z1, {}}); it = ranges.end() - 1; }
+                it->settings.emplace_back(key, value);
+            }
+            for (const auto& [n, profile] : req.object_layers) extras[n - 1].layer_profile = profile;
+            engine::slice_multi_object(req.objects, req.out, req.profiles, req.overrides, extras);
         } catch (const engine::SliceCancelled&) {
             code = 3; message = "Slicing cancelled";
         } catch (const std::exception& e) {

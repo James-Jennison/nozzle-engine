@@ -1,7 +1,10 @@
 #ifndef PRUSALSICER_WORKER_HPP
 #define PRUSALSICER_WORKER_HPP
 
+#include <exception>
 #include <memory>
+#include <type_traits>
+#include <utility>
 
 #include "Job.hpp"
 
@@ -14,7 +17,7 @@ class Worker {
 public:
     // Queue up a new job after the current one. This call does not block.
     // Returns false if the job gets discarded.
-    virtual bool push(std::unique_ptr<Job> job) = 0;
+    virtual bool push(std::shared_ptr<Job> job) = 0;
 
     // Returns true if no job is running, the job queue is empty and no job
     // message is left to be processed. This means that nothing is left to
@@ -73,7 +76,7 @@ bool queue_job(Worker &w, ProcessFn fn, FinishFn finishfn)
         }
     };
 
-    auto j = std::make_unique<LambdaJob>(std::move(fn), std::move(finishfn));
+    auto j = std::make_shared<LambdaJob>(std::move(fn), std::move(finishfn));
     return w.push(std::move(j));
 }
 
@@ -83,7 +86,7 @@ bool queue_job(Worker &w, ProcessFn fn)
     return queue_job(w, std::move(fn), [](bool, std::exception_ptr &) {});
 }
 
-inline bool queue_job(Worker &w, std::unique_ptr<Job> j)
+inline bool queue_job(Worker &w, std::shared_ptr<Job> j)
 {
     return w.push(std::move(j));
 }

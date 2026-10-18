@@ -1,5 +1,4 @@
 #include "ObjectDataViewModel.hpp"
-#include "slic3r/GUI/wxExtensions.hpp"
 #include "wxExtensions.hpp"
 #include "BitmapCache.hpp"
 #include "GUI_App.hpp"
@@ -10,8 +9,28 @@
 
 #include "libslic3r/Model.hpp"
 
+#include <string>
+#include <map>
+#include <cassert>
+#include <vector>
+#include "slic3r/GUI/ExtraRenderers.hpp"
+#include <cstdio>
+#include <cstddef>
+#include <cstdlib>
+#include <algorithm>
+#include "slic3r/GUI/GUI_ObjectSettings.hpp"
+#include <tuple>
 #include <wx/bmpcbox.h>
+#include <wx/chartype.h>
+#include <wx/dataview.h>
 #include <wx/dc.h>
+#include <wx/event.h>
+#include <wx/string.h>
+#include <wx/variant.h>
+#include <wx/gdicmn.h>
+#include <wx/strconv.h>
+#include <wx/debug.h>
+#include <wx/dynarray.h>
 
 
 namespace Slic3r {
@@ -67,9 +86,9 @@ struct InfoItemAtributes {
 
 const std::map<InfoItemType, InfoItemAtributes> INFO_ITEMS{
 //           info_item Type                         info_item Name              info_item BitmapName
-            { InfoItemType::CustomSupports,      {L("Support painting"),       "toolbar_support" },     },
+            { InfoItemType::CustomSupports,      {L("Support Painting"),       "toolbar_support" },     },
             //{ InfoItemType::CustomSeam,          {L("Paint-on seam"),           "seam_" },             },
-            { InfoItemType::MmSegmentation,     {L("Color painting"),          "mmu_segmentation"},  },
+            { InfoItemType::MmSegmentation,     {L("Color Painting"),          "mmu_segmentation"},  },
             //{ InfoItemType::Sinking,             {L("Sinking"),                 "objlist_sinking"}, },
             { InfoItemType::CutConnectors,       {L("Cut connectors"),          "cut_connectors" },    },
             { InfoItemType::FuzzySkin,           {L("Paint-on fuzzy skin"),     "objlist_fuzzy_skin_paint" }, },
@@ -115,13 +134,13 @@ ObjectDataViewModelNode::ObjectDataViewModelNode(ObjectDataViewModelNode* parent
         m_name = "Settings to modified";
     }
     else if (type == itInstanceRoot) {
-        m_name = _(_devL("Instances"));
+        m_name = _L("Instances");
         m_extruder = parent->m_extruder;
     }
     else if (type == itInstance)
     {
         m_idx = parent->GetChildCount();
-        m_name = wxString::Format(_(_devL("Instance %d")), m_idx + 1);
+        m_name = wxString::Format(_L("Instance %d"), m_idx + 1);
         m_extruder = parent->GetParent()->m_extruder;
         set_icons();
     }
@@ -158,7 +177,7 @@ ObjectDataViewModelNode::ObjectDataViewModelNode(ObjectDataViewModelNode* parent
             parent->GetNthChild(i)->SetIdx(i + 1);
     }
     const std::string label_range = (boost::format(" %.2f-%.2f ") % layer_range.first % layer_range.second).str();
-    m_name = _(L("Range")) + label_range + "(" + _("mm") + ")";
+    m_name = _(L("Range")) + label_range + "(" + _(L("mm")) + ")";
     m_bmp = create_scaled_bitmap(LayerIcon);
 
     set_icons();
@@ -205,8 +224,15 @@ void ObjectDataViewModelNode::set_printable_icon(PrintIndicator printable)
     if (m_printable == printable)
         return;
     m_printable = printable;
-    m_printable_icon = m_printable == piUndef ? m_empty_bmp :
-                       create_scaled_bitmap(m_printable == piPrintable ? "check_on" : "check_off_focused");
+    m_printable_icon = m_printable == piUndef ? 
+        m_empty_bmp : create_scaled_bitmap(m_printable == piPrintable ? "check_on" : "check_off_focused");
+}
+
+void ObjectDataViewModelNode::set_variable_height_icon(VaryHeightIndicator vari_height) {
+    if (m_variable_height == vari_height)
+        return;
+    m_variable_height = vari_height;
+    m_variable_height_icon = m_variable_height == hiUnVariable ? m_empty_bmp : create_scaled_bitmap("obj_variable_layer_height");
 }
 
 void ObjectDataViewModelNode::set_action_icon(bool enable)
@@ -222,9 +248,9 @@ void ObjectDataViewModelNode::set_action_icon(bool enable)
 }
 
 // BBS
-void ObjectDataViewModelNode::set_color_icon(bool enable)
+void ObjectDataViewModelNode::set_color_icon(bool enable, bool force)
 {
-    if (m_color_enable == enable)
+    if (!force && m_color_enable == enable)
         return;
     m_color_enable = enable;
     if ((m_type & itObject) && enable)
@@ -233,9 +259,9 @@ void ObjectDataViewModelNode::set_color_icon(bool enable)
         m_color_icon = create_scaled_bitmap("dot");
 }
 
-void ObjectDataViewModelNode::set_support_icon(bool enable)
+void ObjectDataViewModelNode::set_support_icon(bool enable, bool force)
 {
-    if (m_support_enable == enable)
+    if (!force && m_support_enable == enable)
         return;
     m_support_enable = enable;
     if ((m_type & itObject) && enable)
@@ -244,9 +270,9 @@ void ObjectDataViewModelNode::set_support_icon(bool enable)
         m_support_icon = create_scaled_bitmap("dot");
 }
 
-void ObjectDataViewModelNode::set_sinking_icon(bool enable)
+void ObjectDataViewModelNode::set_sinking_icon(bool enable, bool force)
 {
-    if (m_sink_enable == enable)
+    if (!force && m_sink_enable == enable)
         return;
     m_sink_enable = enable;
     if ((m_type & itObject) && enable)
@@ -304,7 +330,9 @@ void ObjectDataViewModelNode::msw_rescale()
         m_action_icon = create_scaled_bitmap(m_action_icon_name);
 
     if (m_printable != piUndef)
-        m_printable_icon = create_scaled_bitmap(m_printable == piPrintable ? "obj_printable" : "obj_unprintable");
+        m_printable_icon = create_scaled_bitmap(m_printable == piPrintable ? "check_on" : "check_off_focused");
+
+    m_variable_height_icon = m_variable_height == hiUnVariable ? m_empty_bmp : create_scaled_bitmap("obj_variable_layer_height");
 
     if (!m_opt_categories.empty())
         update_settings_digest_bitmaps();
@@ -319,13 +347,20 @@ bool ObjectDataViewModelNode::SetValue(const wxVariant& variant, unsigned col)
     case colPrint:
         m_printable_icon << variant;
         return true;
+    case colHeight:
+        m_variable_height_icon << variant;
+        return true;
     case colName: {
+        if (variant.GetType() != wxT("DataViewBitmapText"))
+            return false;
         DataViewBitmapText data;
         data << variant;
         m_bmp = data.GetBitmap();
         m_name = data.GetText();
         return true; }
     case colFilament: {
+        if (variant.GetType() != wxT("DataViewBitmapText"))
+            return false;
         DataViewBitmapText data;
         data << variant;
         m_extruder_bmp = data.GetBitmap();
@@ -363,10 +398,11 @@ void ObjectDataViewModelNode::SetIdx(const int &idx)
     // update name if this node is instance
     if (m_type == itInstance) {
         if (m_plate_idx > 0) {
-            m_name = wxString::Format(_(_devL("[P%d]Instance %d")), m_plate_idx, m_idx + 1);
+            // TRN Object list item: plate number, then instance number
+            m_name = wxString::Format(_L("[P%d]Instance %d"), m_plate_idx, m_idx + 1);
         }
         else {
-            m_name = wxString::Format(_(_devL("Instance %d")), m_idx + 1);
+            m_name = wxString::Format(_L("Instance %d"), m_idx + 1);
         }
     }
 }
@@ -390,13 +426,7 @@ void ObjectDataViewModelNode::UpdateExtruderAndColorIcon(wxString extruder /*= "
     if (extruder_idx == 0) {
         if (m_type & itObject);
         else if (m_type & itVolume && m_volume_type == ModelVolumeType::MODEL_PART) {
-            // A part explicitly set to "default" (extruder 0) shows the default
-            // icon — do NOT inherit the parent object's color.  Volumes that
-            // truly inherit (no own extruder config) already had the object's
-            // value baked into m_extruder by update_filament_values_for_items,
-            // so they don't reach this branch.
-            m_extruder_bmp = *get_default_extruder_color_icon();
-            return;
+            extruder_idx = atoi(m_parent->GetExtruder().c_str());
         }
         // BBS
         else if (m_type & itVolume && m_volume_type == ModelVolumeType::PARAMETER_MODIFIER) {
@@ -411,11 +441,6 @@ void ObjectDataViewModelNode::UpdateExtruderAndColorIcon(wxString extruder /*= "
             m_extruder_bmp = wxNullBitmap;
             return;
         }
-    }
-
-    if (extruder_idx == 0) {
-        m_extruder_bmp = *get_default_extruder_color_icon();
-        return;
     }
 
     if (extruder_idx > 0) --extruder_idx;
@@ -541,7 +566,8 @@ void ObjectDataViewModel::UpdateBitmapForNode(ObjectDataViewModelNode *node)
 {
     bool is_volume_node = node->GetType() & itVolume;
     int  vol_type       = static_cast<int>(node->GetVolumeType());
-    is_volume_node &= (vol_type >= int(ModelVolumeType::MODEL_PART) && vol_type <= int(ModelVolumeType::SUPPORT_ENFORCER));
+    // Extended range to include Precise Seam modifier types
+    is_volume_node &= (vol_type >= int(ModelVolumeType::MODEL_PART) && vol_type <= int(ModelVolumeType::PRECISE_SEAM_NEUTRAL));
 
     if (!node->has_warning_icon() && !node->has_lock()) {
         node->SetBitmap(is_volume_node ? (
@@ -559,9 +585,6 @@ void ObjectDataViewModel::UpdateBitmapForNode(ObjectDataViewModelNode *node)
     if (is_volume_node)
         scaled_bitmap_name += std::to_string(vol_type);
     scaled_bitmap_name += (wxGetApp().dark_mode() ? "-dm" : "-lm");
-
-    if (!m_bitmap_cache)
-        return;
 
     wxBitmap* bmp = m_bitmap_cache->find(scaled_bitmap_name);
     if (bmp == nullptr) {
@@ -583,8 +606,7 @@ void ObjectDataViewModel::UpdateBitmapForNode(ObjectDataViewModelNode *node)
         }
         bmp = m_bitmap_cache->insert(scaled_bitmap_name, bmps);
     }
-    if (!bmp)
-        return;
+
     node->SetBitmap(*bmp);
 }
 
@@ -599,7 +621,7 @@ wxDataViewItem ObjectDataViewModel::AddObject(ModelObject *model_object, std::st
 {
     // get object node params
     wxString name = from_u8(model_object->name);
-    int extruder = model_object->config.has("extruder") ? model_object->config.extruder() : 0;
+    int extruder = model_object->config.has("extruder") ? model_object->config.extruder() : 1;
     int plate_idx = -1;
     ObjectDataViewModelNode* plate_node = nullptr;
     for (auto plate : m_plates) {
@@ -884,6 +906,14 @@ bool ObjectDataViewModel::IsPrintable(const wxDataViewItem& item) const
         return false;
 
     return node->IsPrintable() == piPrintable;
+}
+
+bool ObjectDataViewModel::IsVariableHeight(const wxDataViewItem& item) const {
+    ObjectDataViewModelNode* node = static_cast<ObjectDataViewModelNode*>(item.GetID());
+    if (!node)
+        return false;
+
+    return node->IsVaribaleHeight() == hiVariable;
 }
 
 wxDataViewItem ObjectDataViewModel::AddLayersRoot(const wxDataViewItem &parent_item)
@@ -1766,6 +1796,9 @@ void ObjectDataViewModel::GetValue(wxVariant &variant, const wxDataViewItem &ite
 	case colPrint:
 		variant << node->m_printable_icon;
 		break;
+    case colHeight:
+        variant << node->m_variable_height_icon;
+        break;
 	case colName:
         variant << DataViewBitmapText(node->m_name, node->m_bmp);
 		break;
@@ -2294,6 +2327,18 @@ wxDataViewItem ObjectDataViewModel::SetObjectPrintableState(
     return obj_item;
 }
 
+// is the height is variable?
+wxDataViewItem ObjectDataViewModel::SetObjectVariableHeightState(VaryHeightIndicator vari_height, wxDataViewItem obj_item) {
+
+    ObjectDataViewModelNode* node = static_cast<ObjectDataViewModelNode*>(obj_item.GetID());
+    if (!node)
+        return wxDataViewItem(0);
+    node->set_variable_height_icon(vari_height);
+    ItemChanged(obj_item);
+
+    return obj_item;
+}
+
 bool ObjectDataViewModel::IsColorPainted(wxDataViewItem& item) const
 {
     ObjectDataViewModelNode* node = static_cast<ObjectDataViewModelNode*>(item.GetID());
@@ -2320,32 +2365,32 @@ bool ObjectDataViewModel::IsSinked(wxDataViewItem &item) const
     return node->m_sink_enable;
 }
 
-void ObjectDataViewModel::SetColorPaintState(const bool painted, wxDataViewItem obj_item)
+void ObjectDataViewModel::SetColorPaintState(const bool painted, wxDataViewItem obj_item, bool force)
 {
     ObjectDataViewModelNode* node = static_cast<ObjectDataViewModelNode*>(obj_item.GetID());
     if (!node)
         return;
 
-    node->set_color_icon(painted);
+    node->set_color_icon(painted, force);
     ItemChanged(obj_item);
 }
 
-void ObjectDataViewModel::SetSupportPaintState(const bool painted, wxDataViewItem obj_item)
+void ObjectDataViewModel::SetSupportPaintState(const bool painted, wxDataViewItem obj_item, bool force)
 {
     ObjectDataViewModelNode* node = static_cast<ObjectDataViewModelNode*>(obj_item.GetID());
     if (!node)
         return;
 
-    node->set_support_icon(painted);
+    node->set_support_icon(painted, force);
     ItemChanged(obj_item);
 }
 
-void ObjectDataViewModel::SetSinkState(const bool painted, wxDataViewItem obj_item)
+void ObjectDataViewModel::SetSinkState(const bool painted, wxDataViewItem obj_item, bool force)
 {
     ObjectDataViewModelNode *node = static_cast<ObjectDataViewModelNode *>(obj_item.GetID());
     if (!node) return;
 
-    node->set_sinking_icon(painted);
+    node->set_sinking_icon(painted, force);
     ItemChanged(obj_item);
 }
 

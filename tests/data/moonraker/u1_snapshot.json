@@ -1,0 +1,960 @@
+{
+ "objects": [
+  "gcode",
+  "webhooks",
+  "exception_manager",
+  "configfile",
+  "mcu",
+  "mcu e0",
+  "mcu e1",
+  "mcu e2",
+  "mcu e3",
+  "gcode_move",
+  "print_stats",
+  "gcode_macro _PL_SAVE_VARIABLE",
+  "virtual_sdcard",
+  "pause_resume",
+  "display_status",
+  "gcode_macro M600",
+  "gcode_macro T4",
+  "gcode_macro T5",
+  "gcode_macro T6",
+  "gcode_macro T7",
+  "gcode_macro T8",
+  "gcode_macro T9",
+  "gcode_macro T10",
+  "gcode_macro T11",
+  "gcode_macro T12",
+  "gcode_macro T13",
+  "gcode_macro T14",
+  "gcode_macro T15",
+  "gcode_macro T16",
+  "gcode_macro T17",
+  "gcode_macro T18",
+  "gcode_macro T19",
+  "gcode_macro T20",
+  "gcode_macro T21",
+  "gcode_macro T22",
+  "gcode_macro T23",
+  "gcode_macro T24",
+  "gcode_macro T25",
+  "gcode_macro T26",
+  "gcode_macro T27",
+  "gcode_macro T28",
+  "gcode_macro T29",
+  "gcode_macro T30",
+  "gcode_macro T31",
+  "gcode_macro MOVE_TO_DISCARD_FILAMENT_POSITION",
+  "gcode_macro SHAPER_CALIBRATE",
+  "gcode_macro PRINT_START",
+  "gcode_macro PRINT_PRESTART_CHECK",
+  "gcode_macro PRINT_END",
+  "gcode_macro CANCEL_PRINT",
+  "gcode_macro INNER_PAUSE",
+  "gcode_macro INNER_RESUME",
+  "gcode_macro SET_PAUSE_NEXT_LAYER",
+  "gcode_macro SET_PAUSE_AT_LAYER",
+  "gcode_macro SET_PRINT_STATS_INFO",
+  "gcode_macro _CLIENT_EXTRUDE",
+  "gcode_macro _CLIENT_RETRACT",
+  "gcode_macro INNER_FILAMENT_UNLOAD",
+  "gcode_macro AUTO_FEEDING",
+  "gcode_macro AUTO_FEEDING_PREHEAT",
+  "gcode_macro MANUAL_FEEDING",
+  "gcode_macro FEEDING_RUNOUT_EVENT_HANDLE",
+  "gcode_macro ROUGHLY_CLEAN_NOZZLE",
+  "gcode_macro ROUGHLY_CLEAN_NOZZLE_WITH_DISCARD",
+  "gcode_macro FINELY_CLEAN_NOZZLE_STAGE_1",
+  "gcode_macro FINELY_CLEAN_NOZZLE_STAGE_2",
+  "gcode_macro SM_PRINT_CHECK_SWITCH_EXTRUDER",
+  "gcode_macro SM_PRINT_EXTRUDER_PREHEAT",
+  "gcode_macro SM_PRINT_AUTO_FEED",
+  "gcode_macro SM_PRINT_END_AUTO_UNLOAD_FILAMENT",
+  "gcode_macro SM_PRINT_START_LINE",
+  "gcode_macro SM_PRINT_START_LINE_EXTRUDER_0",
+  "gcode_macro SM_PRINT_START_LINE_EXTRUDER_1",
+  "gcode_macro SM_PRINT_START_LINE_EXTRUDER_2",
+  "gcode_macro SM_PRINT_START_LINE_EXTRUDER_3",
+  "gcode_macro INNER_ROUGHLY_CLEAN_NOZZLE_BASE_DISCARD",
+  "gcode_macro INNER_DISCARD_FILAMENT_BASE_DISCARD",
+  "gcode_macro INNER_CUTOFF_BASE_DISCARD",
+  "gcode_macro INNER_FLUSH_FILAMENT",
+  "gcode_macro INNER_MANUAL_FEED_STAGE_PREPARE",
+  "gcode_macro INNER_MANUAL_FEED_STAGE_EXTRUDE",
+  "gcode_macro INNER_MANUAL_FEED_STAGE_FLUSH",
+  "gcode_macro INNER_MANUAL_FEED_STAGE_FINISH",
+  "gcode_macro INNER_MANUAL_FEED_STAGE_CANCEL",
+  "gcode_macro INNER_FLOW_MEASURE_END_BASE_DISCARD",
+  "gcode_macro INNER_FLOW_CALIB_END_BASE_DISCARD",
+  "gcode_macro INNER_PREEXTRUDE_FILAMENT",
+  "gcode_macro INNER_DETECT_NOZZLE_STAGE_1",
+  "gcode_macro INNER_DETECT_NOZZLE_STAGE_2",
+  "gcode_macro CONTROL_EXTRUDE_ACTION",
+  "gcode_macro CONTROL_RETRACT_ACTION",
+  "gcode_macro FEED_HANG_NEUTRAL",
+  "gcode_macro AUTO_FEEDING_BATCH",
+  "exclude_object",
+  "print_task_config",
+  "mqtt",
+  "timelapse",
+  "filament_detect",
+  "resonance_tester",
+  "gcode_macro _EXTRUDER_OFFSET_ACTION_PRESTART",
+  "gcode_macro _EXTRUDER_OFFSET_ACTION_PREHOMING",
+  "gcode_macro _DETECT_PLATE",
+  "gcode_macro _EXTRUDER_OFFSET_ACTION_PREHEAT",
+  "gcode_macro _EXTRUDER_OFFSET_ACTION_HEAT_T0",
+  "gcode_macro _EXTRUDER_OFFSET_ACTION_HEAT_T1",
+  "gcode_macro _EXTRUDER_OFFSET_ACTION_HEAT_T2",
+  "gcode_macro _EXTRUDER_OFFSET_ACTION_HEAT_T3",
+  "gcode_macro _EXTRUDER_OFFSET_ACTION_AUTO_CLEAN_T0",
+  "gcode_macro _EXTRUDER_OFFSET_ACTION_AUTO_CLEAN_T1",
+  "gcode_macro _EXTRUDER_OFFSET_ACTION_AUTO_CLEAN_T2",
+  "gcode_macro _EXTRUDER_OFFSET_ACTION_AUTO_CLEAN_T3",
+  "gcode_macro _EXTRUDER_OFFSET_ACTION_MANUAL_CLEAN_T0",
+  "gcode_macro _EXTRUDER_OFFSET_ACTION_MANUAL_CLEAN_T1",
+  "gcode_macro _EXTRUDER_OFFSET_ACTION_MANUAL_CLEAN_T2",
+  "gcode_macro _EXTRUDER_OFFSET_ACTION_MANUAL_CLEAN_T3",
+  "gcode_macro _EXTRUDER_OFFSET_ACTION_WAIT_COOL_T0",
+  "gcode_macro _EXTRUDER_OFFSET_ACTION_WAIT_COOL_T1",
+  "gcode_macro _EXTRUDER_OFFSET_ACTION_WAIT_COOL_T2",
+  "gcode_macro _EXTRUDER_OFFSET_ACTION_WAIT_COOL_T3",
+  "gcode_macro EXTRUDER_OFFSET_ACTION_PROBE_CALIBRATE_ALL",
+  "gcode_macro _EXTRUDER_OFFSET_ACTION_PROBE_CALIBRATE_T0",
+  "gcode_macro _EXTRUDER_OFFSET_ACTION_PROBE_CALIBRATE_T1",
+  "gcode_macro _EXTRUDER_OFFSET_ACTION_PROBE_CALIBRATE_T2",
+  "gcode_macro _EXTRUDER_OFFSET_ACTION_PROBE_CALIBRATE_T3",
+  "gcode_macro _EXTRUDER_OFFSET_ACTION_EXIT",
+  "gcode_macro XYZ_OFFSET_CALIBRATE",
+  "gcode_macro XYZ_OFFSET_CALIBRATE_ALL",
+  "heaters",
+  "stepper_enable",
+  "tmc2240 stepper_x",
+  "tmc2240 stepper_y",
+  "tmc2209 stepper_z",
+  "heater_bed",
+  "temperature_sensor cavity",
+  "fan_generic cavity_fan",
+  "led cavity_led",
+  "fan_generic exhaust_fan",
+  "fan_generic circulation_fan",
+  "purifier",
+  "bed_mesh",
+  "homing_precise_corexy",
+  "heater_fan power_fan",
+  "adc_current_sensor I_AD",
+  "power_loss_check",
+  "auto_screws_tilt_adjust",
+  "gcode_macro AUTO_BED_MESH_CALIBRATE",
+  "gcode_macro SHAKE_Z",
+  "gcode_macro SENSORLESS_HOME_X",
+  "gcode_macro SENSORLESS_HOME_Y",
+  "gcode_macro SENSORLESS_HOME_Z",
+  "gcode_macro _HOMING_PRECISE_COREXY_ADVANCED",
+  "gcode_macro _CLIENT_VARIABLE",
+  "tmc2209 extruder",
+  "fan",
+  "heater_fan e0_nozzle_fan",
+  "output_pin e0_heat_sw",
+  "filament_motion_sensor e0_filament",
+  "filament_entangle_detect e0_filament",
+  "extruder_offset_calibration",
+  "probe",
+  "power_loss_check e0",
+  "tmc2209 extruder1",
+  "fan_generic e1_fan",
+  "heater_fan e1_nozzle_fan",
+  "output_pin e1_heat_sw",
+  "filament_motion_sensor e1_filament",
+  "filament_entangle_detect e1_filament",
+  "power_loss_check e1",
+  "tmc2209 extruder2",
+  "fan_generic e2_fan",
+  "heater_fan e2_nozzle_fan",
+  "output_pin e2_heat_sw",
+  "filament_motion_sensor e2_filament",
+  "filament_entangle_detect e2_filament",
+  "power_loss_check e2",
+  "tmc2209 extruder3",
+  "fan_generic e3_fan",
+  "heater_fan e3_nozzle_fan",
+  "output_pin e3_heat_sw",
+  "filament_motion_sensor e3_filament",
+  "filament_entangle_detect e3_filament",
+  "power_loss_check e3",
+  "filament_feed left",
+  "filament_feed right",
+  "gcode_macro _FILAMENT_FEED_VARIABLE",
+  "idle_timeout",
+  "filament_parameters",
+  "defect_detection",
+  "gcode_macro PAUSE",
+  "gcode_macro RESUME",
+  "motion_report",
+  "query_endstops",
+  "system_stats",
+  "manual_probe",
+  "machine_state_manager",
+  "toolhead",
+  "extruder",
+  "extruder1",
+  "extruder2",
+  "extruder3"
+ ],
+ "status": {
+  "defect_detection": {
+   "clean_bed": {
+    "check_window": 3,
+    "enable": true,
+    "sensitivity": "low"
+   },
+   "main_enable": true,
+   "noodle": {
+    "check_window": 10,
+    "enable": true,
+    "sensitivity": "low"
+   },
+   "nozzle": {
+    "enable": false,
+    "sensitivity": "low"
+   },
+   "residue": {
+    "check_window": 10,
+    "enable": false,
+    "sensitivity": "low"
+   },
+   "sen_high_factor": 0.2,
+   "sen_low_factor": 0.5
+  },
+  "display_status": {
+   "message": null,
+   "progress": 0.33
+  },
+  "exclude_object": {
+   "current_object": null,
+   "excluded_objects": [],
+   "in_excluded_region": false,
+   "objects": []
+  },
+  "extruder": {
+   "activating_move": false,
+   "active_pin": false,
+   "can_extrude": false,
+   "error_count": 0,
+   "extruder_index": 0,
+   "extruder_offset": [
+    0.21150531485066004,
+    0.13813186380932052,
+    0.0
+   ],
+   "grab_valid_pin": false,
+   "last_maintenance_count": 0,
+   "motion_queue": null,
+   "nozzle_diameter": 0.4,
+   "nozzle_volume_type": "standard",
+   "park_pin": true,
+   "power": 0.0,
+   "pressure_advance": 0.02,
+   "printing_e_pos": 0,
+   "real_extruder_stats": [
+    "extruder2",
+    0
+   ],
+   "retry_count": 0,
+   "smooth_time": 0.04,
+   "state": "PARKED",
+   "switch_count": 925,
+   "target": 0.0,
+   "temperature": 31.0
+  },
+  "extruder1": {
+   "activating_move": false,
+   "active_pin": false,
+   "can_extrude": false,
+   "error_count": 0,
+   "extruder_index": 1,
+   "extruder_offset": [
+    -0.21150531485066182,
+    -0.13813186380932052,
+    0.014000000002334367
+   ],
+   "grab_valid_pin": false,
+   "last_maintenance_count": 0,
+   "motion_queue": null,
+   "nozzle_diameter": 0.4,
+   "nozzle_volume_type": "standard",
+   "park_pin": true,
+   "power": 0.0,
+   "pressure_advance": 0.02,
+   "printing_e_pos": -3.5,
+   "real_extruder_stats": [
+    "extruder2",
+    0
+   ],
+   "retry_count": 0,
+   "smooth_time": 0.04,
+   "state": "PARKED",
+   "switch_count": 1328,
+   "target": 0.0,
+   "temperature": 31.0
+  },
+  "extruder2": {
+   "activating_move": false,
+   "active_pin": true,
+   "can_extrude": true,
+   "error_count": 0,
+   "extruder_index": 2,
+   "extruder_offset": [
+    0.08315146383145589,
+    0.04215259207748545,
+    -0.056499999995273775
+   ],
+   "grab_valid_pin": true,
+   "last_maintenance_count": 0,
+   "motion_queue": null,
+   "nozzle_diameter": 0.4,
+   "nozzle_volume_type": "standard",
+   "park_pin": false,
+   "power": 0.016287733944570754,
+   "pressure_advance": 0.4,
+   "printing_e_pos": 0,
+   "real_extruder_stats": [
+    "extruder2",
+    0
+   ],
+   "retry_count": 0,
+   "smooth_time": 0.04,
+   "state": "ACTIVATE",
+   "switch_count": 1085,
+   "target": 240.0,
+   "temperature": 240.0
+  },
+  "extruder3": {
+   "activating_move": false,
+   "active_pin": false,
+   "can_extrude": false,
+   "error_count": 0,
+   "extruder_index": 3,
+   "extruder_offset": [
+    -0.10966370533512126,
+    -0.1152802166401159,
+    -0.04783333332611317
+   ],
+   "grab_valid_pin": false,
+   "last_maintenance_count": 0,
+   "motion_queue": null,
+   "nozzle_diameter": 0.4,
+   "nozzle_volume_type": "standard",
+   "park_pin": true,
+   "power": 0.0,
+   "pressure_advance": 0.4,
+   "printing_e_pos": -2.0,
+   "real_extruder_stats": [
+    "extruder2",
+    0
+   ],
+   "retry_count": 0,
+   "smooth_time": 0.04,
+   "state": "PARKED",
+   "switch_count": 1080,
+   "target": 0.0,
+   "temperature": 31.0
+  },
+  "fan": {
+   "rpm": 8811.219120417256,
+   "speed": 1.0
+  },
+  "fan_generic cavity_fan": {
+   "rpm": 2400.596421624518,
+   "speed": 0.6980392156862745
+  },
+  "fan_generic circulation_fan": {
+   "rpm": 0.0,
+   "speed": 0.0
+  },
+  "fan_generic e1_fan": {
+   "rpm": 0.0,
+   "speed": 0.0
+  },
+  "fan_generic e2_fan": {
+   "rpm": 8811.219120417256,
+   "speed": 1.0
+  },
+  "fan_generic e3_fan": {
+   "rpm": 0.0,
+   "speed": 0.0
+  },
+  "fan_generic exhaust_fan": {
+   "rpm": null,
+   "speed": 0.0
+  },
+  "filament_detect": {
+   "config": {
+    "startup_stay": false
+   },
+   "info": [
+    {
+     "ALPHA": 255,
+     "ARGB_COLOR": 4290656499,
+     "BED_TEMP": 25,
+     "BED_TYPE": 0,
+     "CARD_EVENT_TIME": 522277.343539791,
+     "CARD_TYPE": "NTAG",
+     "CARD_UID": [
+      4,
+      127,
+      254,
+      166,
+      141,
+      38,
+      129
+     ],
+     "COLOR_NUMS": 1,
+     "DIAMETER": 175,
+     "DRYING_TEMP": 0,
+     "DRYING_TIME": 0,
+     "FIRST_LAYER_TEMP": 190,
+     "HOTEND_MAX_TEMP": 230,
+     "HOTEND_MIN_TEMP": 190,
+     "LENGTH": 0,
+     "MAIN_TYPE": "PLA",
+     "MANUFACTURER": "Polymaker",
+     "MF_DATE": "19700101",
+     "MULTI_MODE": 0,
+     "OFFICIAL": true,
+     "OTHER_LAYER_TEMP": 190,
+     "RGB_1": 12466419,
+     "RGB_2": 16777215,
+     "RGB_3": 16777215,
+     "RGB_4": 16777215,
+     "RGB_5": 16777215,
+     "RSA_KEY_VERSION": 0,
+     "SKU": 0,
+     "SUB_TYPE": "Basic",
+     "TRAY": 0,
+     "VENDOR": "Polymaker",
+     "VERSION": 1,
+     "WEIGHT": 1000
+    },
+    {
+     "ALPHA": 255,
+     "ARGB_COLOR": 4293058267,
+     "BED_TEMP": 60,
+     "BED_TYPE": 1,
+     "CARD_EVENT_TIME": 365631.80518918,
+     "CARD_TYPE": "M1",
+     "CARD_UID": [
+      128,
+      65,
+      228,
+      68
+     ],
+     "COLOR_NUMS": 1,
+     "DIAMETER": 175,
+     "DRYING_TEMP": 55,
+     "DRYING_TIME": 6,
+     "FIRST_LAYER_TEMP": 230,
+     "HOTEND_MAX_TEMP": 230,
+     "HOTEND_MIN_TEMP": 190,
+     "LENGTH": 150,
+     "MAIN_TYPE": "PLA",
+     "MANUFACTURER": "Polymaker",
+     "MF_DATE": "19700101",
+     "MULTI_MODE": 0,
+     "OFFICIAL": true,
+     "OTHER_LAYER_TEMP": 220,
+     "RGB_1": 14868187,
+     "RGB_2": 0,
+     "RGB_3": 0,
+     "RGB_4": 0,
+     "RGB_5": 0,
+     "RSA_KEY_VERSION": 0,
+     "SKU": 900000,
+     "SUB_TYPE": "SnapSpeed",
+     "TRAY": 0,
+     "VENDOR": "Snapmaker",
+     "VERSION": 1,
+     "WEIGHT": 500
+    },
+    {
+     "ALPHA": 255,
+     "ARGB_COLOR": 4292673536,
+     "BED_TEMP": 50,
+     "BED_TYPE": 0,
+     "CARD_EVENT_TIME": 979294.556332713,
+     "CARD_TYPE": "NTAG",
+     "CARD_UID": [
+      4,
+      146,
+      254,
+      166,
+      141,
+      38,
+      129
+     ],
+     "COLOR_NUMS": 1,
+     "DIAMETER": 175,
+     "DRYING_TEMP": 0,
+     "DRYING_TIME": 0,
+     "FIRST_LAYER_TEMP": 200,
+     "HOTEND_MAX_TEMP": 220,
+     "HOTEND_MIN_TEMP": 200,
+     "LENGTH": 0,
+     "MAIN_TYPE": "TPU",
+     "MANUFACTURER": "TINMORRY",
+     "MF_DATE": "19700101",
+     "MULTI_MODE": 0,
+     "OFFICIAL": true,
+     "OTHER_LAYER_TEMP": 200,
+     "RGB_1": 14483456,
+     "RGB_2": 16777215,
+     "RGB_3": 16777215,
+     "RGB_4": 16777215,
+     "RGB_5": 16777215,
+     "RSA_KEY_VERSION": 0,
+     "SKU": 0,
+     "SUB_TYPE": "95A",
+     "TRAY": 0,
+     "VENDOR": "TINMORRY",
+     "VERSION": 1,
+     "WEIGHT": 1000
+    },
+    {
+     "ALPHA": 255,
+     "ARGB_COLOR": 4278190080,
+     "BED_TEMP": 30,
+     "BED_TYPE": 0,
+     "CARD_EVENT_TIME": 962964.043286343,
+     "CARD_TYPE": "NTAG",
+     "CARD_UID": [
+      4,
+      119,
+      254,
+      166,
+      141,
+      38,
+      129
+     ],
+     "COLOR_NUMS": 1,
+     "DIAMETER": 175,
+     "DRYING_TEMP": 0,
+     "DRYING_TIME": 0,
+     "FIRST_LAYER_TEMP": 210,
+     "HOTEND_MAX_TEMP": 230,
+     "HOTEND_MIN_TEMP": 210,
+     "LENGTH": 0,
+     "MAIN_TYPE": "TPU",
+     "MANUFACTURER": "amazon basics",
+     "MF_DATE": "19700101",
+     "MULTI_MODE": 0,
+     "OFFICIAL": true,
+     "OTHER_LAYER_TEMP": 210,
+     "RGB_1": 0,
+     "RGB_2": 16777215,
+     "RGB_3": 16777215,
+     "RGB_4": 16777215,
+     "RGB_5": 16777215,
+     "RSA_KEY_VERSION": 0,
+     "SKU": 0,
+     "SUB_TYPE": "95A",
+     "TRAY": 0,
+     "VENDOR": "amazon basics",
+     "VERSION": 1,
+     "WEIGHT": 1000
+    }
+   ],
+   "state": [
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  "gcode_move": {
+   "absolute_coordinates": true,
+   "absolute_extrude": false,
+   "extrude_factor": 1.0,
+   "gcode_position": [
+    122.602,
+    148.898,
+    8.84,
+    0.8731599999991886
+   ],
+   "homing_origin": [
+    0.08315146383145589,
+    0.04215259207748545,
+    -0.056499999995273775,
+    0.0
+   ],
+   "position": [
+    122.68515146383146,
+    148.94015259207748,
+    8.783500000004725,
+    14410.090179999745
+   ],
+   "speed": 2358.261,
+   "speed_factor": 1.0
+  },
+  "heater_bed": {
+   "power": 0.1013071740724303,
+   "target": 35.0,
+   "temperature": 35.0
+  },
+  "heater_fan e0_nozzle_fan": {
+   "rpm": 0.0,
+   "speed": 0.0
+  },
+  "heater_fan e1_nozzle_fan": {
+   "rpm": 0.0,
+   "speed": 0.0
+  },
+  "heater_fan e2_nozzle_fan": {
+   "rpm": 17286.38380906106,
+   "speed": 0.85
+  },
+  "heater_fan e3_nozzle_fan": {
+   "rpm": 0.0,
+   "speed": 0.0
+  },
+  "heater_fan power_fan": {
+   "rpm": null,
+   "speed": 0.6
+  },
+  "idle_timeout": {
+   "printing_time": 777.2805487040896,
+   "state": "Printing"
+  },
+  "led cavity_led": {
+   "color_data": [
+    [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ]
+   ]
+  },
+  "output_pin e0_heat_sw": {
+   "value": 1.0
+  },
+  "output_pin e1_heat_sw": {
+   "value": 1.0
+  },
+  "output_pin e2_heat_sw": {
+   "value": 1.0
+  },
+  "output_pin e3_heat_sw": {
+   "value": 1.0
+  },
+  "pause_resume": {
+   "is_paused": false
+  },
+  "print_stats": {
+   "exception": {},
+   "filament_used": 691.7592500000319,
+   "filename": "Cube_TPU_27m50s.gcode",
+   "info": {
+    "current_layer": 44,
+    "total_layer": 135
+   },
+   "message": "",
+   "print_duration": 567.1029349790188,
+   "state": "printing",
+   "total_duration": 777.4169973710086
+  },
+  "print_task_config": {
+   "auto_bed_leveling": false,
+   "auto_replenish_filament": true,
+   "end_led_turn_off": false,
+   "end_unload_filament": [
+    false,
+    false,
+    false,
+    false
+   ],
+   "extruder_map_table": [
+    0,
+    1,
+    2,
+    3,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "extruders_replenished": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "extruders_used": [
+    false,
+    false,
+    true,
+    false
+   ],
+   "filament_color": [
+    4290656499,
+    4293058267,
+    4292673536,
+    4278190080
+   ],
+   "filament_color_multi": [
+    {
+     "alpha": 255,
+     "colors": [
+      "BE38F3"
+     ],
+     "mode": 0,
+     "nums": 1
+    },
+    {
+     "alpha": 255,
+     "colors": [
+      "E2DEDB"
+     ],
+     "mode": 0,
+     "nums": 1
+    },
+    {
+     "alpha": 255,
+     "colors": [
+      "DD0000"
+     ],
+     "mode": 0,
+     "nums": 1
+    },
+    {
+     "alpha": 255,
+     "colors": [
+      "000000"
+     ],
+     "mode": 0,
+     "nums": 1
+    }
+   ],
+   "filament_color_rgba": [
+    "BE38F3FF",
+    "E2DEDBFF",
+    "DD0000FF",
+    "000000FF"
+   ],
+   "filament_edit": [
+    false,
+    false,
+    false,
+    false
+   ],
+   "filament_entangle_detect": true,
+   "filament_entangle_sen": "medium",
+   "filament_exist": [
+    true,
+    true,
+    true,
+    true
+   ],
+   "filament_official": [
+    true,
+    true,
+    true,
+    true
+   ],
+   "filament_sku": [
+    0,
+    900000,
+    0,
+    0
+   ],
+   "filament_soft": [
+    false,
+    false,
+    true,
+    true
+   ],
+   "filament_spool_id": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "filament_sub_type": [
+    "Basic",
+    "SnapSpeed",
+    "95A",
+    "95A"
+   ],
+   "filament_type": [
+    "PLA",
+    "PLA",
+    "TPU",
+    "TPU"
+   ],
+   "filament_vendor": [
+    "Polymaker",
+    "Snapmaker",
+    "TINMORRY",
+    "amazon basics"
+   ],
+   "flow_calib_extruders": [
+    true,
+    true,
+    true,
+    true
+   ],
+   "flow_calibrate": false,
+   "replenish_ignore_color": false,
+   "reprint_info": {
+    "auto_bed_leveling": false,
+    "end_unload_filament": [
+     false,
+     false,
+     false,
+     false
+    ],
+    "extruder_map_table": [
+     0,
+     1,
+     2,
+     3,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "extruders_used": [
+     false,
+     false,
+     true,
+     false
+    ],
+    "flow_calib_extruders": [
+     true,
+     true,
+     true,
+     true
+    ],
+    "flow_calibrate": false,
+    "time_lapse_camera": false
+   },
+   "shaper_calibrate": false,
+   "time_lapse_camera": false
+  },
+  "purifier": {
+   "critical_chamber_temp": 0,
+   "desired_chamber_temp": 0,
+   "exhaust_fan": {
+    "delay": 180,
+    "speed": 0.0,
+    "speed_threshold": 0
+   },
+   "inner_fan": {
+    "delay": 180,
+    "speed": 0.0,
+    "speed_threshold": 0
+   },
+   "inner_fan_rpm": 0.0,
+   "inner_fan_work_time": 0.0,
+   "mode": 0,
+   "power_det_value": 3.3,
+   "power_detected": false
+  },
+  "temperature_sensor cavity": {
+   "measured_max_temp": 45.0,
+   "measured_min_temp": 25.0,
+   "temperature": 32.0
+  },
+  "timelapse": {
+   "is_active": false
+  },
+  "toolhead": {
+   "axis_maximum": [
+    271.0,
+    335.0,
+    275.0,
+    0.0
+   ],
+   "axis_minimum": [
+    0.0,
+    0.0,
+    -6.0,
+    0.0
+   ],
+   "estimated_print_time": 633492.5153139334,
+   "extruder": "extruder2",
+   "homed_axes": "xyz",
+   "max_accel": 10000.0,
+   "max_velocity": 500.0,
+   "minimum_cruise_ratio": 0.5,
+   "position": [
+    142.48115146383145,
+    148.94015259207748,
+    8.896780984696091,
+    14409.420111951986
+   ],
+   "print_time": 633494.6158435269,
+   "square_corner_velocity": 8.0,
+   "stalls": 22
+  },
+  "virtual_sdcard": {
+   "file_path": "/home/lava/printer_data/gcodes/Cube_TPU_27m50s.gcode",
+   "file_position": 242538,
+   "file_size": 774730,
+   "is_active": true,
+   "pl_env_valid": false,
+   "progress": 0.3130613245905025
+  },
+  "webhooks": {
+   "state": "ready",
+   "state_message": "Printer is ready"
+  }
+ }
+}

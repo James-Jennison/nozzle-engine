@@ -1,16 +1,15 @@
 #include <cassert>
 
-#include "libslic3r/Flow.hpp"
-#include "libslic3r/Slicing.hpp"
-#include "libslic3r/libslic3r.h"
 
 #include "PresetHints.hpp"
 
+#include <string>
+#include "libslic3r/Config.hpp"
 #include <wx/intl.h> 
 
-#include "GUI.hpp"
-#include "format.hpp"
-#include "I18N.hpp"
+namespace Slic3r { class Preset; }
+namespace Slic3r { class PresetBundle; }
+
 
 namespace Slic3r {
 
@@ -97,18 +96,17 @@ std::string PresetHints::maximum_volumetric_flow_description(const PresetBundle 
     // Print config values
     double layer_height                     = print_config.opt_float("layer_height");
     double initial_layer_print_height               = print_config.opt_float("initial_layer_print_height");
-    double support_speed           = print_config.opt_float("support_speed", 0);
-    double support_interface_speed = print_config.opt_float("support_interface_speed", 0);
-    double bridge_speed                     = print_config.opt_float("bridge_speed", 0);
+    double support_speed           = print_config.opt_float("support_speed");
+    double support_interface_speed = print_config.get_abs_value("support_interface_speed");
+    double bridge_speed                     = print_config.opt_float("bridge_speed");
     double bridge_flow                = print_config.opt_float("bridge_flow");
-    double inner_wall_speed                  = print_config.opt_float("inner_wall_speed", 0);
-    double outer_wall_speed         = print_config.opt_float("outer_wall_speed", 0);
-    // double gap_infill_speed                   = print_config.opt_bool("filter_out_gap_fill") ? print_config.opt_float("gap_infill_speed", 0) : 0.;
-    double sparse_infill_speed                     = print_config.opt_float("sparse_infill_speed", 0);
-    const FloatOrPercent small_perimeter_speed_option = print_config.option<ConfigOptionFloatsOrPercents>("small_perimeter_speed")->get_at(0);
-    double small_perimeter_speed = small_perimeter_speed_option.get_abs_value(inner_wall_speed);
-    double internal_solid_infill_speed               = print_config.opt_float("internal_solid_infill_speed", 0);
-    double top_surface_speed           = print_config.opt_float("top_surface_speed", 0);
+    double inner_wall_speed                  = print_config.opt_float("inner_wall_speed");
+    double outer_wall_speed         = print_config.get_abs_value("outer_wall_speed", inner_wall_speed);
+    // double gap_infill_speed                   = print_config.opt_bool("filter_out_gap_fill") ? print_config.opt_float("gap_infill_speed") : 0.;
+    double sparse_infill_speed                     = print_config.opt_float("sparse_infill_speed");
+    double small_perimeter_speed            = print_config.get_abs_value("small_perimeter_speed", inner_wall_speed);
+    double internal_solid_infill_speed               = print_config.opt_float("internal_solid_infill_speed");
+    double top_surface_speed           = print_config.opt_float("top_surface_speed");
     // Maximum print speed when auto-speed is enabled by setting any of the above speed values to zero.
     double max_print_speed                  = print_config.opt_float("max_print_speed");
     // Maximum volumetric speed allowed for the print profile.
@@ -122,16 +120,19 @@ std::string PresetHints::maximum_volumetric_flow_description(const PresetBundle 
     const auto &internal_solid_infill_line_width        = *print_config.option<ConfigOptionFloatOrPercent>("internal_solid_infill_line_width");
     const auto& support_line_width    = *print_config.option<ConfigOptionFloatOrPercent>("support_line_width");
     const auto &top_surface_line_width          = *print_config.option<ConfigOptionFloatOrPercent>("top_surface_line_width");
-    const double initial_layer_speed = print_config.opt_float("initial_layer_speed", 0);
+    const auto &initial_layer_speed                   = *print_config.option<ConfigOptionFloatOrPercent>("initial_layer_speed");
 
     // Index of an extruder assigned to a feature. If set to 0, an active extruder will be used for a multi-material print.
     // If different from idx_extruder, it will not be taken into account for this hint.
     auto feature_extruder_active = [idx_extruder, num_extruders](int i) {
         return i <= 0 || i > num_extruders || idx_extruder == -1 || idx_extruder == i - 1;
     };
-    bool perimeter_extruder_active                  = feature_extruder_active(print_config.opt_int("wall_filament"));
-    bool infill_extruder_active                     = feature_extruder_active(print_config.opt_int("wall_filament"));
-    bool solid_infill_extruder_active               = feature_extruder_active(print_config.opt_int("solid_infill_filament"));
+    bool perimeter_extruder_active                  = feature_extruder_active(print_config.opt_int("outer_wall_filament_id"))
+                                                    && feature_extruder_active(print_config.opt_int("inner_wall_filament_id"));
+    bool infill_extruder_active                     = feature_extruder_active(print_config.opt_int("sparse_infill_filament_id"));
+    bool solid_infill_extruder_active               = feature_extruder_active(print_config.opt_int("internal_solid_filament_id"))
+                                                    && feature_extruder_active(print_config.opt_int("top_surface_filament_id"))
+                                                    && feature_extruder_active(print_config.opt_int("bottom_surface_filament_id"));
     bool support_material_extruder_active           = feature_extruder_active(print_config.opt_int("support_filament"));
     bool support_material_interface_extruder_active = feature_extruder_active(print_config.opt_int("support_interface_filament"));
 
@@ -150,9 +151,10 @@ std::string PresetHints::maximum_volumetric_flow_description(const PresetBundle 
         const float                       lh  = float(first_layer ? initial_layer_print_height : layer_height);
         double                            max_flow = 0.;
         std::string                       max_flow_extrusion_type;
-        auto                              limit_by_first_layer_speed = [initial_layer_speed, first_layer](double speed_normal, double speed_max) {
-            if (first_layer && initial_layer_speed > 0)
-                speed_normal = initial_layer_speed;
+        auto                              limit_by_first_layer_speed = [&initial_layer_speed, first_layer](double speed_normal, double speed_max) {
+            if (first_layer && initial_layer_speed.value > 0)
+                // Apply the first layer limit.
+                speed_normal = initial_layer_speed.get_abs_value(speed_normal);
             return (speed_normal > 0.) ? speed_normal : speed_max;
         };
         auto test_flow =
@@ -185,7 +187,7 @@ std::string PresetHints::maximum_volumetric_flow_description(const PresetBundle 
         //FIXME handle gap_infill_speed
         if (! out.empty())
             out += "\n";
-        out += (first_layer ? _utf8(L("Initial layer volumetric")) : (bridging ? _utf8(L("Bridge volumetric")) : _utf8(L("Volumetric"))));
+        out += (first_layer ? _utf8(L("First layer volumetric")) : (bridging ? _utf8(L("Bridge volumetric")) : _utf8(L("Volumetric"))));
         out += " " + _utf8(L("flow rate is maximized")) + " ";
         bool limited_by_max_volumetric_speed = max_volumetric_speed > 0 && max_volumetric_speed < max_flow;
         out += (limited_by_max_volumetric_speed ? 

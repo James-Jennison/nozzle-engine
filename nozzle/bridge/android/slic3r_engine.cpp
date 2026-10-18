@@ -22,9 +22,10 @@
 #include "libslic3r/AABBMesh.hpp"
 #include "libslic3r/BoundingBox.hpp"
 #include "libslic3r/Model.hpp"
+#include "libslic3r/Slicing.hpp"
 #include "libslic3r/Print.hpp"
 #include "libslic3r/PrintConfig.hpp"
-#include "libslic3r/ExtruderVariants.hpp"
+#include "libslic3r/Preset.hpp"
 #include "libslic3r/Config.hpp"
 #include "libslic3r/TriangleSelector.hpp"
 #include "libslic3r/Format/bbs_3mf.hpp"
@@ -114,13 +115,57 @@ void mark_bambu_printer(Slic3r::Print& print, const Slic3r::DynamicPrintConfig& 
 #endif
 }
 
-// Gives every filament of a multi-filament print its own copy of a Bambu filament profile's extruder-variant columns
-// (Slic3r::expand_filament_variant_columns); the keys the request overrides are the per-filament ones.
-void expand_filament_variants(Slic3r::DynamicPrintConfig& config, size_t profile_columns,
-                              const std::vector<std::pair<std::string, std::string>>& config_overrides) {
-    std::set<std::string> per_filament_keys;
-    for (const auto& override_entry : config_overrides) per_filament_keys.insert(override_entry.first);
-    Slic3r::expand_filament_variant_columns(config, profile_columns, per_filament_keys);
+// A mixed filament is a slot after the physical ones (filament_colour has an entry for it) that is not loaded into any
+// extruder. The profile's per-filament options only cover the physical filaments, so they are grown to the slot count
+// first (a new slot repeats the first filament's value, as Orca's GUI does when it appends a mixed filament).
+void grow_mixed_slots(Slic3r::DynamicPrintConfig& config) {
+    using namespace Slic3r;
+    const auto* colours = config.option<ConfigOptionStrings>("filament_colour");
+    const auto* diameters = config.option<ConfigOptionFloats>("filament_diameter");
+    if (colours == nullptr || diameters == nullptr) return;
+    const size_t slots = colours->values.size(), physical = diameters->values.size();
+    if (slots <= physical) return;
+    for (const std::string& key : Preset::filament_options()) {
+        auto* opt = dynamic_cast<ConfigOptionVectorBase*>(config.option(key));
+        if (opt != nullptr && opt->size() == physical) opt->resize(slots);
+    }
+}
+
+// A multi-filament config carries its filaments' identity the way Orca's full_config() writes it: filament_self_index 1..n and
+// one filament_extruder_variant per filament. Without them every filament resolves to the first one's values (the engine's
+// per-extruder lookup falls back to column 0), so the second filament of a profile pack that only lists the first one's
+// settings would print at the first one's temperature. Configs that already lay out their own variant columns (Bambu
+// profiles) are left as they are.
+void ensure_filament_identity(Slic3r::DynamicPrintConfig& config) {
+    using namespace Slic3r;
+    const auto* colours = config.option<ConfigOptionStrings>("filament_colour");
+    const size_t n = colours != nullptr ? colours->values.size() : 0;
+    if (n < 2) return;
+    auto* self_index = config.option<ConfigOptionInts>("filament_self_index", true);
+    if (self_index->values.size() < n) {
+        self_index->values.resize(n);
+        for (size_t i = 0; i < n; ++i) self_index->values[i] = int(i) + 1;
+    }
+    auto* variants = config.option<ConfigOptionStrings>("filament_extruder_variant", true);
+    if (variants->values.size() != self_index->values.size()) variants->values.assign(self_index->values.size(), "Direct Drive Standard");
+    // The lookup also reads the printer's extruder type and nozzle flow per extruder; a profile pack that lists neither has
+    // empty vectors there, so give every nozzle the plain direct-drive standard-flow default.
+    const auto* nozzles = config.option<ConfigOptionFloats>("nozzle_diameter");
+    const size_t extruders = nozzles != nullptr && !nozzles->values.empty() ? nozzles->values.size() : 1;
+    for (const char* key : {"extruder_type", "nozzle_volume_type"}) {
+        auto* opt = config.option<ConfigOptionEnumsGeneric>(key, true);
+        if (opt->values.empty()) opt->values.assign(extruders, 0);
+    }
+}
+
+// Gives every filament of a multi-filament print its own copy of a Bambu filament profile's extruder-variant columns,
+// then lays the per-filament overrides out one value per variant. Orca 2.5.0 does this natively
+// (normalize_filament_values_to_variants), keyed by filament_self_index; the profile's own column count is no longer needed.
+void expand_filament_variants(Slic3r::DynamicPrintConfig& config, size_t /*profile_columns*/,
+                              const std::vector<std::pair<std::string, std::string>>& /*config_overrides*/) {
+    grow_mixed_slots(config);
+    ensure_filament_identity(config);
+    Slic3r::normalize_filament_values_to_variants(config);
 }
 
 void drop_unset_feature_filaments(Slic3r::DynamicPrintConfig& profile) {
@@ -187,12 +232,21 @@ Slic3r::Model load_and_place_model(const std::string& input_model_path, Slic3r::
     // so a rotated/scaled model's on-screen position and its sliced position agree exactly.
     // ensure_on_bed() runs again afterward because scaling or rotating can change which point of
     // the mesh is lowest, and only ensure_on_bed() (not this function) knows how to find that.
-    if (transform.scale != 1.0 || transform.rotation_z_deg != 0.0 ||
+    const bool shaped = transform.scale_x != 1.0 || transform.scale_y != 1.0 || transform.scale_z != 1.0 ||
+                        transform.mirror_x || transform.mirror_y || transform.mirror_z;
+    if (shaped || transform.scale != 1.0 || transform.rotation_z_deg != 0.0 ||
         transform.offset_x_mm != 0.0 || transform.offset_y_mm != 0.0) {
         for (ModelObject* object : model.objects) {
             for (ModelInstance* instance : object->instances) {
                 if (transform.scale != 1.0) {
                     instance->set_scaling_factor(instance->get_scaling_factor() * transform.scale);
+                }
+                if (shaped) {
+                    instance->set_scaling_factor(Vec3d(instance->get_scaling_factor(X) * transform.scale_x, instance->get_scaling_factor(Y) * transform.scale_y,
+                                                       instance->get_scaling_factor(Z) * transform.scale_z));
+                    if (transform.mirror_x) instance->set_mirror(X, -1.0);
+                    if (transform.mirror_y) instance->set_mirror(Y, -1.0);
+                    if (transform.mirror_z) instance->set_mirror(Z, -1.0);
                 }
                 if (transform.rotation_z_deg != 0.0) {
                     instance->set_rotation(Z, instance->get_rotation(Z) + Geometry::deg2rad(transform.rotation_z_deg));
@@ -253,6 +307,10 @@ void apply_paint_strokes(Slic3r::ModelObject* object, const std::vector<PaintStr
     TriangleSelector seam_selector(volume->mesh());
     TriangleSelector material_selector(volume->mesh());
     Transform3d inv = volume->get_matrix().inverse(); // object frame -> the volume's own mesh frame
+    // Paint the model came with (a 3MF with per-face paint, such as AI auto-paint's) stays; the strokes add to it.
+    if (!volume->supported_facets.get_data().triangles_to_split.empty()) support_selector.deserialize(volume->supported_facets.get_data());
+    if (!volume->seam_facets.get_data().triangles_to_split.empty()) seam_selector.deserialize(volume->seam_facets.get_data());
+    if (!volume->mmu_segmentation_facets.get_data().triangles_to_split.empty()) material_selector.deserialize(volume->mmu_segmentation_facets.get_data());
     bool support_painted = false, seam_painted = false, material_painted = false;
     for (const PaintStrokeRec& s : strokes) {
         Vec3d local_origin = inv * s.origin;
@@ -287,6 +345,8 @@ void apply_volume_specs(Slic3r::ModelObject* object, const std::string& text) {
         if (size.minCoeff() <= 0.0) continue;
         ModelVolumeType type;
         if (p[0] == "modifier") type = ModelVolumeType::PARAMETER_MODIFIER;
+        else if (p[0] == "negative") type = ModelVolumeType::NEGATIVE_VOLUME;
+        else if (p[0] == "part") type = ModelVolumeType::MODEL_PART;
         else if (p[0] == "blocker") type = ModelVolumeType::SUPPORT_BLOCKER;
         else if (p[0] == "enforcer") type = ModelVolumeType::SUPPORT_ENFORCER;
         else continue;
@@ -297,7 +357,7 @@ void apply_volume_specs(Slic3r::ModelObject* object, const std::string& text) {
         else continue;
         ModelVolume* volume = object->add_volume(std::move(mesh), type);
         volume->set_offset(center); // already in the object's frame
-        if (type == ModelVolumeType::PARAMETER_MODIFIER && p.size() == 5 && !p[4].empty()) {
+        if ((type == ModelVolumeType::PARAMETER_MODIFIER || type == ModelVolumeType::MODEL_PART) && p.size() == 5 && !p[4].empty()) {
             ConfigSubstitutionContext substitutions(ForwardCompatibilitySubstitutionRule::Disable);
             for (const std::string& kv : split_text(p[4], '|')) {
                 size_t eq = kv.find('=');
@@ -311,10 +371,36 @@ void apply_volume_specs(Slic3r::ModelObject* object, const std::string& text) {
 // Applies one object's extras. Strokes and volumes arrive in the object's own frame - MeshGeometry coordinates
 // minus MeshGeometry.origin - which does not depend on the bed the model is later centred on (the preview loads
 // with a default bed, the real slice with the printer's own).
-void apply_object_extras(Slic3r::ModelObject* object, const ObjectExtras& extras) {
+void apply_object_extras(Slic3r::ModelObject* object, const ObjectExtras& extras, double first_layer_height = 0.0) {
     if (object == nullptr) return;
     apply_paint_strokes(object, parse_strokes(extras.paint_strokes));
     apply_volume_specs(object, extras.volume_specs);
+    for (const LayerRange& range : extras.layer_ranges) {
+        if (!(range.z1 > range.z0) || range.z0 < 0.0) throw std::runtime_error("A height range needs 0 <= from < to.");
+        static const Slic3r::PrintObjectConfig range_object_options;
+        static const Slic3r::PrintRegionConfig range_region_options;
+        Slic3r::ModelConfig& range_config = object->layer_config_ranges[{range.z0, range.z1}];
+        for (const auto& [key, value] : range.settings) {
+            if (range_object_options.option(key) == nullptr && range_region_options.option(key) == nullptr)
+                throw std::runtime_error("\"" + key + "\" can't be set for a height range.");
+            Slic3r::ConfigSubstitutionContext ctx(Slic3r::ForwardCompatibilitySubstitutionRule::Disable);
+            try { range_config.set_deserialize(key, value, ctx); }
+            catch (const std::exception& e) { throw std::runtime_error("Bad value for \"" + key + "\" in a height range: " + e.what()); }
+        }
+    }
+    if (!extras.layer_profile.empty()) {
+        if (extras.layer_profile.size() % 2 != 0) throw std::runtime_error("A layer height profile is z / height pairs.");
+        // A profile is used only when it starts with the first layer's height (PrintObject::update_layer_height_profile drops it
+        // otherwise), as the ones Orca makes do: [0, first, first, first, ...]. A caller's profile is brought to that form.
+        std::vector<double> profile = extras.layer_profile;
+        if (first_layer_height > 0.0 && std::abs(profile[1] - first_layer_height) > 1e-6) {
+            std::vector<double> fixed = { 0.0, first_layer_height, first_layer_height, first_layer_height };
+            for (size_t i = 0; i + 1 < profile.size(); i += 2)
+                if (profile[i] > first_layer_height + 1e-6) { fixed.push_back(profile[i]); fixed.push_back(profile[i + 1]); }
+            profile = fixed;
+        }
+        object->layer_height_profile.set(profile);
+    }
     // Per-object settings: the options Orca's object list offers for an object (region and object options).
     static const Slic3r::PrintObjectConfig object_options;
     static const Slic3r::PrintRegionConfig region_options;
@@ -521,8 +607,18 @@ void apply_and_validate(Slic3r::Print& print, Slic3r::Model& model, Slic3r::Dyna
 // depend on its position run twice). The moved tower is validated, as its real footprint may now meet an exclusion area.
 void process_with_tower_on_bed(Slic3r::Print& print, Slic3r::Model& model, Slic3r::DynamicPrintConfig& config) {
     using namespace Slic3r;
-    print.process();
-    const Vec2d move = prime_tower_overrun(print, model, config, true);
+    // Orca 2.5.0's process() re-tests the exact generated footprint and refuses a tower that reaches past the bed, which the
+    // estimate in place_prime_tower() can miss (a rib wall, a large flush volume). The tower data it built is still there,
+    // so the overrun is worked out from it and the tower moved back, as the GUI's drag would.
+    bool refused = false;
+    try {
+        print.process();
+    } catch (const SlicingError& error) {
+        if (std::string(error.what()).find("Prime tower is partially outside") == std::string::npos) throw;
+        refused = true;
+    }
+    Vec2d move = prime_tower_overrun(print, model, config, !refused);
+    if (refused && move == Vec2d::Zero()) throw SlicingError("Prime tower is partially outside the printable area, and it cannot be printed.");
     if (move == Vec2d::Zero()) return;
     move_prime_tower(config, config.option<ConfigOptionFloats>("wipe_tower_x")->get_at(0) + move.x(),
                      config.option<ConfigOptionFloats>("wipe_tower_y")->get_at(0) + move.y());
@@ -698,6 +794,35 @@ indexed_triangle_set soup_to_its(const std::vector<float>& soup) {
 }
 } // namespace
 
+std::vector<double> adaptive_layer_profile(const std::vector<float>& soup, const std::vector<std::string>& profile_paths,
+                                           const std::vector<std::pair<std::string, std::string>>& config_overrides,
+                                           const ModelTransform& transform, float quality) {
+    using namespace Slic3r;
+    DynamicPrintConfig config = DynamicPrintConfig::full_print_config();
+    for (const auto& profile_path : profile_paths) {
+        DynamicPrintConfig profile_config;
+        profile_config.load(profile_path, ForwardCompatibilitySubstitutionRule::Enable);
+        drop_unset_feature_filaments(profile_config);
+        config.apply(profile_config);
+    }
+    for (const auto& [key, value] : config_overrides) config.set_deserialize_strict(key, value);
+    expand_filament_variants(config, 0, config_overrides);
+
+    Model model;
+    ModelObject* object = model.add_object();
+    object->add_volume(TriangleMesh(soup_to_its(soup)));
+    ModelInstance* instance = object->add_instance();
+    instance->set_scaling_factor(Vec3d(transform.scale * transform.scale_x, transform.scale * transform.scale_y, transform.scale * transform.scale_z));
+    object->ensure_on_bed();
+    PrintObjectConfig object_config;
+    object_config.apply(config, true);
+    PrintConfig print_config;
+    print_config.apply(config, true);
+    const double height = object->bounding_box_exact().size().z();
+    const SlicingParameters params = SlicingParameters::create_from_config(print_config, object_config, height, std::vector<unsigned int>{1}, Vec3d::Ones());
+    return layer_height_profile_adaptive(params, *object, std::min(1.f, std::max(0.f, quality)));
+}
+
 std::vector<double> orient_mesh_soup(const std::vector<float>& soup) {
     using namespace Slic3r;
     Model model;
@@ -720,7 +845,7 @@ std::vector<ArrangeResult> arrange_models(const std::vector<ArrangeItem>& items,
         drop_unset_feature_filaments(profile_config);
         config.apply(profile_config);
     }
-    const size_t filament_columns = Slic3r::filament_variant_columns(config);
+    const size_t filament_columns = 0;
     for (const auto& [key, value] : config_overrides) config.set_deserialize_strict(key, value);
     expand_filament_variants(config, filament_columns, config_overrides);
 
@@ -801,7 +926,7 @@ void slice_file(const std::string& input_model_path,
         config.apply(profile_config);
     }
 
-    const size_t filament_columns = Slic3r::filament_variant_columns(config);
+    const size_t filament_columns = 0;
     for (const auto& [key, value] : config_overrides) {
         config.set_deserialize_strict(key, value);
     }
@@ -863,7 +988,7 @@ void slice_bambu_bundle(const std::string& input_model_path,
         drop_unset_feature_filaments(profile_config);
         config.apply(profile_config);
     }
-    const size_t filament_columns = Slic3r::filament_variant_columns(config);
+    const size_t filament_columns = 0;
     for (const auto& [key, value] : config_overrides) {
         config.set_deserialize_strict(key, value);
     }
@@ -916,7 +1041,7 @@ void slice_multi_object_bambu_bundle(const std::vector<std::tuple<std::string, M
         drop_unset_feature_filaments(profile_config);
         config.apply(profile_config);
     }
-    const size_t filament_columns = Slic3r::filament_variant_columns(config);
+    const size_t filament_columns = 0;
     for (const auto& [key, value] : config_overrides) {
         config.set_deserialize_strict(key, value);
     }
@@ -932,7 +1057,7 @@ void slice_multi_object_bambu_bundle(const std::vector<std::tuple<std::string, M
             combined.add_object(*object);
         }
         if (object_index < extras.size() && combined.objects.size() > first_object_of_file)
-            apply_object_extras(combined.objects[first_object_of_file], extras[object_index]);
+            apply_object_extras(combined.objects[first_object_of_file], extras[object_index], config.opt_float("initial_layer_print_height"));
         ++object_index;
     }
 
@@ -959,8 +1084,7 @@ void slice_multi_object(const std::vector<std::tuple<std::string, ModelTransform
                          const std::string& output_gcode_path,
                          const std::vector<std::string>& profile_paths,
                          const std::vector<std::pair<std::string, std::string>>& config_overrides,
-                         const std::vector<ObjectExtras>& extras,
-                         const std::string& virtual_extruders_json) {
+                         const std::vector<ObjectExtras>& extras) {
     using namespace Slic3r;
 
     if (objects.empty()) {
@@ -974,7 +1098,7 @@ void slice_multi_object(const std::vector<std::tuple<std::string, ModelTransform
         drop_unset_feature_filaments(profile_config);
         config.apply(profile_config);
     }
-    const size_t filament_columns = Slic3r::filament_variant_columns(config);
+    const size_t filament_columns = 0;
     for (const auto& [key, value] : config_overrides) {
         config.set_deserialize_strict(key, value);
     }
@@ -993,20 +1117,8 @@ void slice_multi_object(const std::vector<std::tuple<std::string, ModelTransform
         }
         // Applied to the copy inside `combined` (Model::add_object clones the object), which is what gets sliced.
         if (object_index < extras.size() && combined.objects.size() > first_object_of_file)
-            apply_object_extras(combined.objects[first_object_of_file], extras[object_index]);
+            apply_object_extras(combined.objects[first_object_of_file], extras[object_index], config.opt_float("initial_layer_print_height"));
         ++object_index;
-    }
-
-    // PrusaSlicer 2.9.6 virtual extruders go on the combined Model, as its 3MF reader puts them there
-    // (Format/3mf.cpp _extract_full_spectrum_from_archive: deserialize, then normalize). Print::apply() keeps the ones
-    // this printer's physical count can print (filter_virtual_extruders_for_physical_count).
-    if (!virtual_extruders_json.empty()) {
-#ifdef SLIC3R_PRUSA_VIRTUAL_EXTRUDERS
-        const FullSpectrum::FullSpectrumConfig fs_config = FullSpectrum::deserialize_virtual_extruders_from_json(virtual_extruders_json);
-        combined.virtual_extruders = FullSpectrum::normalize_virtual_extruders(fs_config.virtual_extruders);
-#else
-        throw std::runtime_error("This slicing engine does not support virtual extruders.");
-#endif
     }
 
     slice_model(combined, config, output_gcode_path);
@@ -1241,8 +1353,7 @@ std::vector<float> get_painted_facets(PaintSessionHandle handle) {
 
 void slice_paint_session(PaintSessionHandle handle, const std::string& output_gcode_path,
                           const std::vector<std::string>& profile_paths,
-                          const std::vector<std::pair<std::string, std::string>>& config_overrides,
-                          const std::string& virtual_extruders_json) {
+                          const std::vector<std::pair<std::string, std::string>>& config_overrides) {
     PaintSession& s = find_paint_session(handle);
     std::lock_guard<std::mutex> lock(s.mutex);
     for (const std::string& profile_path : profile_paths) {
@@ -1251,22 +1362,11 @@ void slice_paint_session(PaintSessionHandle handle, const std::string& output_gc
         drop_unset_feature_filaments(profile_config);
         s.config.apply(profile_config);
     }
-    const size_t filament_columns = Slic3r::filament_variant_columns(s.config);
+    const size_t filament_columns = 0;
     for (const auto& [key, value] : config_overrides) {
         s.config.set_deserialize_strict(key, value);
     }
     expand_filament_variants(s.config, filament_columns, config_overrides);
-
-    // Same mechanism slice_multi_object() uses (see its own comment): virtual extruders live on the Model, not the
-    // config, because the 3MF reader puts them there too (Format/3mf.cpp _extract_full_spectrum_from_archive).
-    if (!virtual_extruders_json.empty()) {
-#ifdef SLIC3R_PRUSA_VIRTUAL_EXTRUDERS
-        const FullSpectrum::FullSpectrumConfig fs_config = FullSpectrum::deserialize_virtual_extruders_from_json(virtual_extruders_json);
-        s.model.virtual_extruders = FullSpectrum::normalize_virtual_extruders(fs_config.virtual_extruders);
-#else
-        throw std::runtime_error("This slicing engine does not support virtual extruders.");
-#endif
-    }
 
     slice_model(s.model, s.config, output_gcode_path);
 }

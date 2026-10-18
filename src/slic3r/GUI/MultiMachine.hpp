@@ -3,7 +3,13 @@
 
 #include "GUI_Utils.hpp"
 #include "DeviceManager.hpp"
+#include <cstdint>
 #include <functional>
+#include <string>
+#include <wx/event.h>
+#include <wx/string.h>
+#include <vector>
+#include <unordered_map>
 
 namespace Slic3r {
 namespace GUI {
@@ -18,7 +24,7 @@ namespace GUI {
 #define CTRL_BUTTON_NORMAL_COLOUR   wxColour(255, 255, 255)
 #define CTRL_BUTTON_PRESSEN_COLOUR  wxColour(150, 150, 150)
 #define TABLE_HEAD_FONT             Label::Body_13
-#define ICON_SIZE                   FromDIP(16)
+
 
 class DeviceItem : public wxWindow
 {
@@ -59,7 +65,6 @@ public:
 
     void selected();
     void unselected();
-    bool is_blocking_printing(MachineObject* obj_);
     void update_item(const DeviceItem* item);
 };
 

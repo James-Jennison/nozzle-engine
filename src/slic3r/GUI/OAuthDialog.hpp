@@ -4,6 +4,11 @@
 #include "GUI_Utils.hpp"
 #include "Jobs/OAuthJob.hpp"
 #include "Jobs/Worker.hpp"
+#include <memory>
+#include <wx/event.h>
+
+class wxEvent;
+class wxWindow;
 
 namespace Slic3r {
 namespace GUI {
@@ -14,7 +19,6 @@ private:
     OAuthParams _params;
     std::shared_ptr<OAuthResult> _result;
 
-    wxButton*               btnCancel{nullptr};
     std::unique_ptr<Worker> m_worker;
 
     void on_cancel(wxEvent& event);

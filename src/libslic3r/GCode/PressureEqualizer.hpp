@@ -1,8 +1,14 @@
 #ifndef slic3r_GCode_PressureEqualizer_hpp_
 #define slic3r_GCode_PressureEqualizer_hpp_
 
-#include "../libslic3r.h"
+#include "../ExtrusionEntity.hpp"
 #include "../PrintConfig.hpp"
+#include <string>
+#include <cstddef>
+#include <vector>
+#include <cmath>
+#include <algorithm>
+#include <cassert>
 
 #include <queue>
 
@@ -136,7 +142,6 @@ private:
             assert(avg_correction <= 1.00000001f);
             return avg_correction;
         }
-        float       time_corrected()  const { return time() * volumetric_correction_avg(); }
 
         GCodeLineType type;
 

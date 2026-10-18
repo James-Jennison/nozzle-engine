@@ -1,13 +1,16 @@
 #ifndef slic3r_GUI_Calibration_hpp_
 #define slic3r_GUI_Calibration_hpp_
 
+#include <map>
+#include <string>
+#include <vector>
+#include <wx/event.h>
 #include <wx/wx.h>
 #include <wx/intl.h>
 #include <wx/collpane.h>
 #include <wx/dataview.h>
 #include <wx/artprov.h>
 #include <wx/xrc/xmlres.h>
-#include <wx/dataview.h>
 #include <wx/gdicmn.h>
 #include <wx/font.h>
 #include <wx/colour.h>
@@ -20,7 +23,6 @@
 #include <wx/dialog.h>
 #include <wx/popupwin.h>
 #include <wx/spinctrl.h>
-#include <wx/artprov.h>
 #include <wx/wrapsizer.h>
 
 #include "GUI_Utils.hpp"
@@ -43,7 +45,9 @@ private:
     wxWindow* select_bed_leveling { nullptr };
     wxWindow* select_vibration { nullptr };
     wxWindow* select_motor_noise { nullptr };
-
+    wxWindow* select_nozzle_cali{ nullptr };
+    wxWindow* select_heatbed_cali{ nullptr };
+    wxWindow* select_clumppos_cali{ nullptr };
     wxWindow* create_check_option(wxString title, wxWindow *parent, wxString tooltip, std::string param);
 
 public:
@@ -53,7 +57,7 @@ public:
 
     StepIndicator *m_calibration_flow;
     Button *       m_calibration_btn;
-    MachineObject *m_obj;
+    MachineObject *m_obj = nullptr;
 
     std::vector<int> last_stage_list_info; 
     int              m_state{0};

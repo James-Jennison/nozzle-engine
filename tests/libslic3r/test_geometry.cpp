@@ -1,5 +1,12 @@
-#include <catch2/catch_test_macros.hpp>
+#include <algorithm>
+#include <catch2/catch_all.hpp>
 
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_message.hpp>
+#include <catch2/generators/catch_generators.hpp>
+#include <catch2/generators/catch_generators_range.hpp>
+#include <catch2/matchers/catch_matchers.hpp>
+#include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include "libslic3r/Point.hpp"
 #include "libslic3r/BoundingBox.hpp"
 #include "libslic3r/Polygon.hpp"
@@ -17,7 +24,15 @@
 
 #include "../libnest2d/printer_parts.hpp"
 
+#include "libslic3r/libslic3r.h"
+#include <cstddef>
+#include <cstdlib>
+#include <math.h>
+#include <functional>
+#include <string>
 #include <unordered_set>
+#include <vector>
+#include "libnest2d/backends/libslic3r/geometries.hpp"
 
 using namespace Slic3r;
 
@@ -33,7 +48,7 @@ TEST_CASE("Line::parallel_to", "[Geometry]"){
 
     Line l4(l2);
     l4.rotate(1.1 * EPSILON, { 0, 0 });
-    REQUIRE(! l.parallel_to(l4));
+    REQUIRE_FALSE(l.parallel_to(l4));
 
     // The angle epsilon is so low that vectors shorter than 100um rotated by epsilon radians are not rotated at all.
     Line l5{ { 20000, 0 }, { 0, 0 } };
@@ -48,13 +63,13 @@ TEST_CASE("Line::parallel_to", "[Geometry]"){
     l4.rotate(1., { 0, 0 });
     l4.translate(offset);
     REQUIRE(l.parallel_to(l3));
-    REQUIRE(!l.parallel_to(l4));
+    REQUIRE_FALSE(l.parallel_to(l4));
 }
 
 TEST_CASE("Line::perpendicular_to", "[Geometry]") {
     Line l{ { 100000, 0 }, { 0, 0 } };
     Line l2{ { 0, 200000 }, { 0, 0 } };
-    REQUIRE(! l.perpendicular_to(l));
+    REQUIRE_FALSE(l.perpendicular_to(l));
     REQUIRE(l.perpendicular_to(l2));
 
     Line l3(l2);
@@ -63,7 +78,7 @@ TEST_CASE("Line::perpendicular_to", "[Geometry]") {
 
     Line l4(l2);
     l4.rotate(1.1 * EPSILON, { 0, 0 });
-    REQUIRE(! l.perpendicular_to(l4));
+    REQUIRE_FALSE(l.perpendicular_to(l4));
 
     // The angle epsilon is so low that vectors shorter than 100um rotated by epsilon radians are not rotated at all.
     Line l5{ { 0, 20000 }, { 0, 0 } };
@@ -78,7 +93,7 @@ TEST_CASE("Line::perpendicular_to", "[Geometry]") {
     l4.rotate(1., { 0, 0 });
     l4.translate(offset);
     REQUIRE(l.perpendicular_to(l3));
-    REQUIRE(! l.perpendicular_to(l4));
+    REQUIRE_FALSE(l.perpendicular_to(l4));
 }
 
 TEST_CASE("Polygon::contains works properly", "[Geometry]"){
@@ -125,7 +140,7 @@ SCENARIO("polygon_is_convex works") {
         WHEN("Polygon is convex clockwise") {
             Polygon cw_square  { { {0, 0}, {0,10}, {10,10}, {10,0} } };
             THEN("it is not convex") {
-                REQUIRE(! polygon_is_convex(cw_square));
+                REQUIRE_FALSE(polygon_is_convex(cw_square));
             }
         }
         WHEN("Polygon is convex counter-clockwise") {
@@ -138,7 +153,7 @@ SCENARIO("polygon_is_convex works") {
     GIVEN("A concave polygon") {
         Polygon concave = { {0,0}, {10,0}, {10,10}, {0,10}, {0,6}, {4,6}, {4,4}, {0,4} };
         THEN("It is not convex") {
-            REQUIRE(! polygon_is_convex(concave));
+            REQUIRE_FALSE(polygon_is_convex(concave));
         }
     }
 }
@@ -170,7 +185,7 @@ TEST_CASE("Bounding boxes are scaled appropriately", "[Geometry]"){
 }
 
 
-TEST_CASE("Offseting a line generates a polygon correctly", "[Geometry]"){
+TEST_CASE("Offsetting a line generates a polygon correctly", "[Geometry]"){
 	Slic3r::Polyline tmp = { Point(10,10), Point(20,10) };
     Slic3r::Polygon area = offset(tmp,5).at(0);
     REQUIRE(area.area() == Slic3r::Polygon(Points({Point(10,5),Point(20,5),Point(20,15),Point(10,15)})).area());
@@ -373,22 +388,84 @@ SCENARIO("Line distances", "[Geometry]"){
     }
 }
 
-SCENARIO("Polygon convex/concave detection", "[Geometry][!mayfail]"){
+SCENARIO("Polygon convex/concave detection", "[Geometry]"){
     GIVEN(("A Square with dimension 100")){
         auto square = Slic3r::Polygon /*new_scale*/(Points({
             Point(100,100),
             Point(200,100),
             Point(200,200),
             Point(100,200)}));
-        THEN("It has 4 convex points counterclockwise"){
-            REQUIRE(square.concave_points(PI*4/3).size() == 0);
-            REQUIRE(square.convex_points(PI*2/3).size() == 4);
-        }
-        THEN("It has 4 concave points clockwise"){
-            square.make_clockwise();
-            REQUIRE(square.concave_points(PI*4/3).size() == 4);
-            REQUIRE(square.convex_points(PI*2/3).size() == 0);
-        }
+
+		WHEN("Angle threshold is not set") {
+			THEN("It has 4 convex points counterclockwise"){
+				auto cave_pts = square.concave_points();
+				auto vex_pts = square.convex_points();
+				CAPTURE(cave_pts);
+				CAPTURE(vex_pts);
+				REQUIRE(cave_pts.size() == 0);
+				REQUIRE(vex_pts.size() == 4);
+			}
+			THEN("It has 4 concave points clockwise"){
+				square.make_clockwise();
+				auto cave_pts = square.concave_points();
+				auto vex_pts = square.convex_points();
+				CAPTURE(cave_pts);
+				CAPTURE(vex_pts);
+				REQUIRE(cave_pts.size() == 4);
+				REQUIRE(vex_pts.size() == 0);
+			}
+		}
+		WHEN("Angle threshold is greater than right angle") {
+			double angle_threshold = M_PI*4/3;
+			THEN("It has no convex points counterclockwise"){
+				auto cave_pts = square.concave_points(angle_threshold);
+				auto vex_pts = square.convex_points(angle_threshold);
+				CAPTURE(cave_pts);
+				CAPTURE(vex_pts);
+				REQUIRE(cave_pts.size() == 0);
+				REQUIRE(vex_pts.size() == 0);
+			}
+			THEN("It has no concave points clockwise"){
+				square.make_clockwise();
+				auto cave_pts = square.concave_points(angle_threshold);
+				auto vex_pts = square.convex_points(angle_threshold);
+				CAPTURE(cave_pts);
+				CAPTURE(vex_pts);
+				REQUIRE(cave_pts.size() == 0);
+				REQUIRE(vex_pts.size() == 0);
+			}
+		}
+		WHEN("Angle threshold is less than right angle") {
+			double angle_threshold = M_PI/3;
+			THEN("It has 4 convex points counterclockwise"){
+				auto cave_pts = square.concave_points(angle_threshold);
+				auto vex_pts = square.convex_points(angle_threshold);
+				CAPTURE(cave_pts);
+				CAPTURE(vex_pts);
+				REQUIRE(cave_pts.size() == 0);
+				REQUIRE(vex_pts.size() == 4);
+			}
+			THEN("It has 4 concave points clockwise"){
+				square.make_clockwise();
+				auto cave_pts = square.concave_points(angle_threshold);
+				auto vex_pts = square.convex_points(angle_threshold);
+				CAPTURE(cave_pts);
+				CAPTURE(vex_pts);
+				REQUIRE(cave_pts.size() == 4);
+				REQUIRE(vex_pts.size() == 0);
+			}
+		}
+		WHEN("Angle threshold is equal to right angle") {
+			double angle_threshold = M_PI/2;
+			THEN("It has no convex points counterclockwise"){
+				auto cave_pts = square.concave_points(angle_threshold);
+				auto vex_pts = square.convex_points(angle_threshold);
+				CAPTURE(cave_pts);
+				CAPTURE(vex_pts);
+				REQUIRE(cave_pts.size() == 0);
+				REQUIRE(vex_pts.size() == 0);
+			}
+		}
     }
     GIVEN("A Square with an extra colinearvertex"){
         auto square = Slic3r::Polygon /*new_scale*/(Points({
@@ -398,8 +475,8 @@ SCENARIO("Polygon convex/concave detection", "[Geometry][!mayfail]"){
             Point(100,200),
             Point(100,100)}));
         THEN("It has 4 convex points counterclockwise"){
-            REQUIRE(square.concave_points(PI*4/3).size() == 0);
-            REQUIRE(square.convex_points(PI*2/3).size() == 4);
+            REQUIRE(square.concave_points().size() == 0);
+            REQUIRE(square.convex_points().size() == 4);
         }
     }
     GIVEN("A Square with an extra collinear vertex in different order"){
@@ -410,8 +487,8 @@ SCENARIO("Polygon convex/concave detection", "[Geometry][!mayfail]"){
             Point(150,100),
             Point(200,100)}));
         THEN("It has 4 convex points counterclockwise"){
-            REQUIRE(square.concave_points(PI*4/3).size() == 0);
-            REQUIRE(square.convex_points(PI*2/3).size() == 4);
+            REQUIRE(square.concave_points().size() == 0);
+            REQUIRE(square.convex_points().size() == 4);
         }
     }
 
@@ -422,8 +499,8 @@ SCENARIO("Polygon convex/concave detection", "[Geometry][!mayfail]"){
             Point(31286371,461008)
         }));
         THEN("it has three convex vertices"){
-            REQUIRE(triangle.concave_points(PI*4/3).size() == 0);
-            REQUIRE(triangle.convex_points(PI*2/3).size() == 3);
+            REQUIRE(triangle.concave_points().size() == 0);
+            REQUIRE(triangle.convex_points().size() == 3);
         }
     }
 
@@ -435,26 +512,8 @@ SCENARIO("Polygon convex/concave detection", "[Geometry][!mayfail]"){
             Point(31286371,461012)
         }));
         THEN("it has three convex vertices"){
-            REQUIRE(triangle.concave_points(PI*4/3).size() == 0);
-            REQUIRE(triangle.convex_points(PI*2/3).size() == 3);
-        }
-    }
-    GIVEN("A polygon with concave vertices with angles of specifically 4/3pi"){
-        // Two concave vertices of this polygon have angle = PI*4/3, so this test fails
-        // if epsilon is not used.
-        auto polygon = Slic3r::Polygon(Points({
-            Point(60246458,14802768),Point(64477191,12360001),
-            Point(63727343,11060995),Point(64086449,10853608),
-            Point(66393722,14850069),Point(66034704,15057334),
-            Point(65284646,13758387),Point(61053864,16200839),
-            Point(69200258,30310849),Point(62172547,42483120),
-            Point(61137680,41850279),Point(67799985,30310848),
-            Point(51399866,1905506),Point(38092663,1905506),
-            Point(38092663,692699),Point(52100125,692699)
-        }));
-        THEN("the correct number of points are detected"){
-            REQUIRE(polygon.concave_points(PI*4/3).size() == 6);
-            REQUIRE(polygon.convex_points(PI*2/3).size() == 10);
+            REQUIRE(triangle.concave_points().size() == 0);
+            REQUIRE(triangle.convex_points().size() == 3);
         }
     }
 }
@@ -482,8 +541,8 @@ SCENARIO("Ported from xs/t/14_geometry.t", "[Geometry]"){
     	REQUIRE(Slic3r::Geometry::directions_parallel(0, M_PI, 0)); 
     	REQUIRE(Slic3r::Geometry::directions_parallel(0, 0, M_PI / 180));
     	REQUIRE(Slic3r::Geometry::directions_parallel(0, M_PI, M_PI / 180));
-    	REQUIRE(! Slic3r::Geometry::directions_parallel(M_PI /2, M_PI, 0));
-    	REQUIRE(! Slic3r::Geometry::directions_parallel(M_PI /2, PI, M_PI /180));
+    	REQUIRE_FALSE(Slic3r::Geometry::directions_parallel(M_PI /2, M_PI, 0));
+    	REQUIRE_FALSE(Slic3r::Geometry::directions_parallel(M_PI /2, PI, M_PI /180));
     }
 }
 
@@ -529,11 +588,6 @@ TEST_CASE("Convex polygon intersection on two squares touching one vertex", "[Ge
 
     Polygon B = A;
     B.translate(10 / SCALING_FACTOR, 10 / SCALING_FACTOR);
-
-    SVG svg{std::string("one_vertex_touch") + ".svg"};
-    svg.draw(A, "blue");
-    svg.draw(B, "green");
-    svg.Close();
 
     bool is_inters = Geometry::convex_polygons_intersect(A, B);
 
@@ -707,4 +761,119 @@ TEST_CASE("Convex polygon intersection test prusa polygons", "[Geometry][Rotcali
 
         REQUIRE(res == ref);
     }
+}
+
+namespace {
+// Scale on the local axes, with a mirror on `mirror_axis`, then rotation.
+Transform3d mirrored_transform(const Matrix3d &rotation, const Vec3d &scale, int mirror_axis)
+{
+    Vec3d signed_scale = scale;
+    signed_scale[mirror_axis] = -signed_scale[mirror_axis];
+    Transform3d trafo = Transform3d::Identity();
+    trafo.linear() = rotation * signed_scale.asDiagonal();
+    return trafo;
+}
+
+const std::vector<Matrix3d> &test_rotations()
+{
+    static const std::vector<Matrix3d> rotations = {
+        Matrix3d::Identity(),
+        Eigen::AngleAxisd(0.5 * PI, Vec3d::UnitZ()).toRotationMatrix(),
+        Eigen::AngleAxisd(0.7, Vec3d(1., 2., 3.).normalized()).toRotationMatrix(),
+        Eigen::AngleAxisd(2.5, Vec3d(-1., 0.5, 2.).normalized()).toRotationMatrix(),
+    };
+    return rotations;
+}
+} // namespace
+
+TEST_CASE("Mirrored transformations decompose into a rotation and a diagonal scale", "[Geometry]")
+{
+    const size_t rotation_idx = GENERATE(range(size_t(0), test_rotations().size()));
+    const int    mirror_axis  = GENERATE(0, 1, 2);
+    const Vec3d  scale        = GENERATE(Vec3d(1., 1., 1.), Vec3d(2., 2., 2.), Vec3d(1., 1., 3.), Vec3d(1., 2., 3.));
+    CAPTURE(rotation_idx, mirror_axis, scale.transpose());
+    const Geometry::Transformation trafo(mirrored_transform(test_rotations()[rotation_idx], scale, mirror_axis));
+
+    const Vec3d scaling = trafo.get_scaling_factor();
+    const Vec3d mirror  = trafo.get_mirror();
+    for (int i = 0; i < 3; ++i) {
+        CHECK_THAT(scaling[i], Catch::Matchers::WithinAbs(scale[i], 1e-9));
+        CHECK_THAT(std::abs(mirror[i]), Catch::Matchers::WithinAbs(1., 1e-12));
+    }
+    CHECK_THAT(mirror.prod(), Catch::Matchers::WithinAbs(-1., 1e-12));
+    CHECK_FALSE(trafo.has_skew());
+    const bool uniform = scale.x() == scale.y() && scale.y() == scale.z();
+    CHECK(trafo.is_scaling_uniform() == uniform);
+    const Matrix3d rotation = trafo.get_rotation_matrix().linear();
+    CHECK_THAT(rotation.determinant(), Catch::Matchers::WithinAbs(1., 1e-9));
+    const Matrix3d rebuilt = rotation * trafo.get_scaling_factor_matrix().linear() * trafo.get_mirror_matrix().linear();
+    CHECK(rebuilt.isApprox(trafo.get_matrix().linear(), 1e-9));
+}
+
+TEST_CASE("An unrotated mirror keeps its axis and needs no rotation", "[Geometry]")
+{
+    const int   mirror_axis = GENERATE(0, 1, 2);
+    const Vec3d scale       = GENERATE(Vec3d(1., 1., 1.), Vec3d(1., 2., 3.));
+    CAPTURE(mirror_axis, scale.transpose());
+    const Geometry::Transformation trafo(mirrored_transform(Matrix3d::Identity(), scale, mirror_axis));
+    const Vec3d mirror = trafo.get_mirror();
+    for (int i = 0; i < 3; ++i)
+        CHECK_THAT(mirror[i], Catch::Matchers::WithinAbs(i == mirror_axis ? -1. : 1., 1e-12));
+    CHECK(trafo.get_rotation().isZero(1e-9));
+}
+
+TEST_CASE("A mirrored and rotated transformation at unit scale reports unit scales", "[Geometry]")
+{
+    // Valid mirrored instance transform as stored in a 3MF project.
+    Transform3d matrix = Transform3d::Identity();
+    matrix.linear() << 4.4408921e-16,   0.819152044,    0.573576436,
+                       1.0,            -4.4408921e-16, -1.11022302e-16,
+                      -5.55111512e-17, -0.573576436,    0.819152044;
+    const Geometry::Transformation trafo(matrix);
+    CHECK(trafo.get_scaling_factor().isApprox(Vec3d::Ones(), 1e-8));
+    CHECK(trafo.get_mirror().allFinite());
+    CHECK(trafo.is_scaling_uniform());
+}
+
+TEST_CASE("Scaling one axis of a mirrored transformation keeps the mirror and adds no skew", "[Geometry]")
+{
+    const size_t rotation_idx = GENERATE(range(size_t(0), test_rotations().size()));
+    const int    mirror_axis  = GENERATE(0, 1, 2);
+    const int    scaled_axis  = GENERATE(0, 1, 2);
+    CAPTURE(rotation_idx, mirror_axis, scaled_axis);
+    const Matrix3d &rotation = test_rotations()[rotation_idx];
+    Geometry::Transformation trafo(mirrored_transform(rotation, Vec3d::Ones(), mirror_axis));
+    trafo.set_scaling_factor(Axis(scaled_axis), 2.);
+    Vec3d expected_scale = Vec3d::Ones();
+    expected_scale[scaled_axis] = 2.;
+    CHECK(trafo.get_matrix().linear().isApprox(mirrored_transform(rotation, expected_scale, mirror_axis).linear(), 1e-9));
+    CHECK(trafo.is_left_handed());
+    CHECK_FALSE(trafo.has_skew());
+}
+
+TEST_CASE("Transformations without a mirror decompose as computeRotationScaling() does", "[Geometry]")
+{
+    Transform3d skewed = Transform3d::Identity();
+    skewed.linear() << 1., 0.3, 0.,
+                       0., 1.,  0.,
+                       0., 0.,  2.;
+    const Transform3d matrix = GENERATE_COPY(Transform3d(test_rotations()[2]) * Geometry::scale_transform(Vec3d(1., 2., 3.)),
+                                             Transform3d(test_rotations()[3]) * skewed);
+    Matrix3d rotation;
+    Matrix3d scale;
+    matrix.computeRotationScaling(&rotation, &scale);
+    const Geometry::Transformation trafo(matrix);
+    CHECK(trafo.get_rotation_matrix().linear() == rotation);
+    CHECK(trafo.has_skew() == !scale.isDiagonal());
+}
+
+TEST_CASE("Skew is detected with and without a mirror", "[Geometry]")
+{
+    Transform3d skewed = Transform3d::Identity();
+    skewed.linear() << 1., 0.3, 0.,
+                       0., 1.,  0.,
+                       0., 0.,  1.;
+    const bool mirrored = GENERATE(false, true);
+    const Transform3d matrix = Transform3d(test_rotations()[2]) * skewed * Geometry::scale_transform(Vec3d(mirrored ? -1. : 1., 1., 1.));
+    CHECK(Geometry::Transformation(matrix).has_skew());
 }
